@@ -1,0 +1,34 @@
+# Inclusions are primarily controlled by "files" in package.json.
+# This file prevents npm from falling back to .gitignore which ignores web/dist/.
+
+# Tests & benchmarks
+*.test.ts
+test-*
+*.tsbuildinfo
+
+# Repository docs & cloud configs
+.github/
+.railway/
+.do/
+deploy/
+docs/
+scratch/
+
+# Local databases & run artifacts
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/
+storage/
+.smoke-monkey/
+
+# Web source files (web/dist is shipped, web/src is not needed in package)
+web/src/
+web/node_modules/
+web/index.html
+web/vite.config.ts
+web/tsconfig*.json
+web/package.json

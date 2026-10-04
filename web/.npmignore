@@ -1,0 +1,5 @@
+# Ensure web/dist is NOT ignored by npm pack
+node_modules/
+dist-ssr/
+*.local
+src/
