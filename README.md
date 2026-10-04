@@ -12,6 +12,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![npm](https://img.shields.io/badge/smoke--monkey--harness-1.3.1-red.svg)](https://www.npmjs.com/package/smoke-monkey-harness)
+[![Docker Hub](https://img.shields.io/docker/pulls/rajdeepsadhu/smoke-monkey-canvas?logo=docker&label=Docker%20Hub)](https://hub.docker.com/r/rajdeepsadhu/smoke-monkey-canvas)
 
 ---
 
@@ -108,9 +109,25 @@ npx smoke-monkey-canvas --port 8080
 
 ---
 
-### 🐳 Option 2: Docker & Docker Compose (Isolated & Containerized)
+### 🐳 Option 2: Docker — Official Image (All Platforms)
 
-#### Using Docker Compose (Recommended)
+Pre-built multi-arch image available on Docker Hub. Works on **Mac (Intel & Apple Silicon), Linux, and Windows** — no build step needed.
+
+> 🐳 **[hub.docker.com/r/rajdeepsadhu/smoke-monkey-canvas](https://hub.docker.com/r/rajdeepsadhu/smoke-monkey-canvas)**
+
+#### Quickest way — one command:
+
+```bash
+docker run -d \
+  --name smoke-monkey-canvas \
+  -p 3333:3333 \
+  -v smoke_canvas_data:/app/data \
+  rajdeepsadhu/smoke-monkey-canvas:latest
+```
+
+Then open **http://localhost:3333** 🚀
+
+#### Using Docker Compose (Canvas + PostgreSQL)
 
 Includes the Canvas server and an optional dedicated PostgreSQL instance running on a **unique port (`15432`)** to ensure zero conflicts with existing local databases:
 
@@ -130,21 +147,27 @@ docker compose down
 
 The Web UI is accessible at **http://localhost:3333**, and SQLite database data is persisted automatically in the `smoke_canvas_data` volume.
 
-#### Using Standalone Docker
+#### Useful Docker commands
 
 ```bash
-# Build the production image
-docker build -t smoke-monkey-canvas:latest .
+# Pull the latest image manually
+docker pull rajdeepsadhu/smoke-monkey-canvas:latest
 
-# Run container with persistent data volume
-docker run -d \
-  --name smoke-monkey-canvas \
-  -p 3333:3333 \
-  -v smoke_canvas_data:/app/data \
-  smoke-monkey-canvas:latest
+# Run with a custom port
+docker run -d -p 8080:3333 -v smoke_canvas_data:/app/data rajdeepsadhu/smoke-monkey-canvas:latest
 
-# Open http://localhost:3333
+# View logs
+docker logs -f smoke-monkey-canvas
+
+# Stop & remove
+docker stop smoke-monkey-canvas && docker rm smoke-monkey-canvas
+
+# Available tags
+# latest  — always the most recent stable build
+# 1.0.0   — pinned release
 ```
+
+> **Supported platforms:** `linux/amd64` · `linux/arm64` (Apple Silicon native)
 
 ---
 
