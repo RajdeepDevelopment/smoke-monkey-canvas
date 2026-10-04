@@ -1,0 +1,56 @@
+{
+  "name": "smoke-monkey-canvas",
+  "version": "1.3.1",
+  "description": "Visual multi-agent spatial workspace for Smoke Monkey Harness",
+  "type": "module",
+  "main": "./server/app.server.ts",
+  "bin": {
+    "smoke-monkey-canvas": "./bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "server",
+    "web/dist",
+    "web/public",
+    "README.md",
+    "LICENSE.md",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "prepack": "npm run build",
+    "dev:web": "npm --prefix web run dev",
+    "build:web": "npm --prefix web run build",
+    "build": "npm --prefix web run build",
+    "start": "node ./bin/cli.js",
+    "dev": "node ./bin/cli.js"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "canvas",
+    "spatial",
+    "mcp",
+    "smoke-monkey",
+    "visual-workspace"
+  ],
+  "author": "RajdeepDevelopment",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RajdeepDevelopment/smoke-monkey-canvas.git"
+  },
+  "dependencies": {
+    "smoke-monkey-harness": "^1.3.1",
+    "@smoke-monkey/ui": "^0.1.3",
+    "express": "^4.21.2",
+    "ws": "^8.18.0",
+    "cron-parser": "^4.9.0",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/express": "^5.0.0",
+    "@types/ws": "^8.5.14",
+    "typescript": "^5.7.0"
+  }
+}

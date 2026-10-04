@@ -1,0 +1,62 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# 🐒 Smoke Monkey Canvas — Docker Compose
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Main Canvas Server & Web UI ─────────────────────────────────────────────
+  canvas:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smoke-monkey-canvas
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3333}:3333"
+    environment:
+      - PORT=3333
+      - SMOKE_CANVAS_DB=/app/data/canvas.db
+      - NODE_ENV=production
+    volumes:
+      - canvas-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3333/api/space"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - smoke-network
+
+  # ── Dedicated SQL Service for MCP Tools (Runs on Unique Port 15432) ─────────
+  # Uses a unique non-standard host port (15432) to prevent any port clashes with
+  # any existing local PostgreSQL instances running on 5432.
+  postgres-mcp:
+    image: postgres:16-alpine
+    container_name: smoke-monkey-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-15432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smoke_monkey}
+      POSTGRES_USER: ${POSTGRES_USER:-canvas_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-canvas_dev_secret_mcp}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-canvas_user} -d ${POSTGRES_DB:-smoke_monkey}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smoke-network
+
+networks:
+  smoke-network:
+    name: smoke-monkey-network
+    driver: bridge
+
+volumes:
+  canvas-data:
+    name: smoke_canvas_data
+  postgres-data:
+    name: smoke_postgres_data

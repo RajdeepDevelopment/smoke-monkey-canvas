@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules
+web/node_modules
+
+# Build artifacts
+dist
+web/dist
+*.tsbuildinfo
+
+# Sensitive files & environments
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+secrets
+credentials.json
+token.json
+
+# Databases & local user state
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+smoke_canvas.db
+.smoke-monkey
+data
+storage
+
+# Logs & PIDs
+*.log
+*.pid
+logs
+
+# OS & Editor files
+.DS_Store
+.vscode
+.idea
+Thumbs.db
+
+# Documentation / Markdown not needed for container runtime
+*.md
+!README.md
+!LICENSE.md

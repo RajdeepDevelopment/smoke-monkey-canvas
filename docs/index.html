@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smoke Monkey Canvas | Autonomous Spatial Multi-Agent AI Workspace</title>
+  
+  <!-- SEO Primary Meta Tags -->
+  <meta name="title" content="Smoke Monkey Canvas | Autonomous Spatial Multi-Agent AI Workspace" />
+  <meta name="description" content="Deploy, orchestrate, and chat with autonomous AI agents on an infinite spatial canvas. Built on Smoke Monkey Harness with local SQLite persistence, MCP server integrations, and zero cloud lock-in." />
+  <meta name="keywords" content="smoke monkey canvas, ai agents, multi-agent workspace, spatial canvas, smoke monkey harness, model context protocol, mcp servers, autonomous agents, local llm workspace, npx smoke-monkey-canvas" />
+  <meta name="author" content="RajdeepDevelopment" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="theme-color" content="#0b0f19" />
+  <link rel="canonical" href="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/" />
+  <meta property="og:title" content="Smoke Monkey Canvas | Autonomous Spatial Multi-Agent AI Workspace" />
+  <meta property="og:description" content="Deploy, orchestrate, and chat with autonomous AI agents on an infinite spatial canvas. Built on Smoke Monkey Harness with local SQLite persistence and MCP servers." />
+  <meta property="og:image" content="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/assets/smoke-monkey-banner.png" />
+  <meta property="og:image:width" content="1280" />
+  <meta property="og:image:height" content="720" />
+  <meta property="og:site_name" content="Smoke Monkey Canvas" />
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/" />
+  <meta name="twitter:title" content="Smoke Monkey Canvas | Autonomous Spatial Multi-Agent AI Workspace" />
+  <meta name="twitter:description" content="Deploy, orchestrate, and chat with autonomous AI agents on an infinite spatial canvas. 100% local SQLite persistence, MCP servers, and instant NPX launch." />
+  <meta name="twitter:image" content="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/assets/smoke-monkey-banner.png" />
+  <meta name="twitter:creator" content="@RajdeepDevelopment" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/smoke-monkey-banner.png" />
+
+  <!-- Schema.org SoftwareApplication JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Smoke Monkey Canvas",
+    "operatingSystem": "Cross-platform (macOS, Linux, Windows)",
+    "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "Artificial Intelligence & Multi-Agent Workspace",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "description": "Visual multi-agent spatial workspace for Smoke Monkey Harness. Deploy, schedule, and chat with autonomous AI agents on an infinite canvas with local SQLite persistence and MCP server integrations.",
+    "screenshot": "https://rajdeepdevelopment.github.io/smoke-monkey-canvas/assets/smoke-monkey-banner.png",
+    "softwareVersion": "1.3.1",
+    "author": {
+      "@type": "Person",
+      "name": "Rajdeep Sadhu",
+      "url": "https://github.com/RajdeepDevelopment"
+    }
+  }
+  </script>
+
+  <!-- Schema.org FAQPage JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do I run Smoke Monkey Canvas instantly with NPX?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Simply execute 'npx smoke-monkey-canvas' in your terminal. It will start the server and automatically launch the web interface in your browser at http://localhost:3333. You can also run it continuously as a background daemon using 'npx smoke-monkey-canvas --daemon'."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Smoke Monkey Canvas run locally?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! Smoke Monkey Canvas runs 100% locally with zero cloud lock-in. Agent states, chat conversations, and node coordinates are persisted locally in SQLite (~/.smoke-monkey/canvas.db)."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I deploy Smoke Monkey Canvas via Docker?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! A multi-stage production Dockerfile and Docker Compose configuration are included. Running 'docker compose up -d' launches the canvas web application and an isolated PostgreSQL MCP database on port 15432."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What AI model providers and MCP servers are supported?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "It supports NVIDIA NIM, OpenAI, Anthropic Claude, Google Gemini, Groq, DeepSeek, OpenRouter, and local Ollama models. Any stdio or SSE Model Context Protocol (MCP) server can be attached directly to agents."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #07090e;
+      --card-bg: rgba(15, 23, 42, 0.7);
+      --border: rgba(56, 189, 248, 0.15);
+      --primary: #06b6d4;
+      --primary-glow: #22d3ee;
+      --accent: #10b981;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    .hero {
+      position: relative;
+      padding: 60px 20px 40px;
+      text-align: center;
+      background: radial-gradient(circle at 50% 20%, rgba(6, 182, 212, 0.12) 0%, transparent 60%);
+    }
+    .banner-img {
+      max-width: 1000px;
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(6, 182, 212, 0.2);
+      margin: 30px auto;
+      display: block;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      color: var(--primary-glow);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #ffffff 40%, var(--primary-glow) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: clamp(1.05rem, 2vw, 1.25rem);
+      color: var(--text-muted);
+      max-width: 780px;
+      margin: 0 auto 30px;
+    }
+    .cta-row {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #0891b2, #06b6d4);
+      color: #0b0f19;
+      box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 6px 25px rgba(6, 182, 212, 0.6);
+      transform: translateY(-2px);
+    }
+    .btn-secondary {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:hover {
+      background: rgba(51, 65, 85, 0.8);
+      border-color: var(--primary);
+    }
+    .terminal-box {
+      max-width: 680px;
+      margin: 0 auto 50px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      text-align: left;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 14px;
+      color: #38bdf8;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .terminal-box span.prompt { color: #64748b; user-select: none; }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      max-width: 1100px;
+      margin: 40px auto 60px;
+      padding: 0 20px;
+    }
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      backdrop-filter: blur(8px);
+      text-align: left;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .feature-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-4px);
+    }
+    .feature-icon { font-size: 28px; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 18px; margin-bottom: 8px; color: #fff; }
+    .feature-card p { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+    footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 40px 20px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--primary-glow); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="badge">🐒 Smoke Monkey Canvas v1.3.1</div>
+    <h1>Autonomous Spatial Multi-Agent Workspace</h1>
+    <p class="subtitle">
+      Deploy, schedule, and orchestrate unlimited autonomous AI agents on an infinite visual canvas.
+      Powered by Smoke Monkey Harness with local SQLite persistence, MCP servers, and instant NPX execution.
+    </p>
+
+    <div class="terminal-box">
+      <span class="prompt">$</span> npx smoke-monkey-canvas --daemon<br>
+      <span style="color:#10b981;">✔ Smoke Monkey Canvas active at http://localhost:3333</span>
+    </div>
+
+    <div class="cta-row">
+      <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas" class="btn btn-primary">
+        ★ View on GitHub
+      </a>
+      <a href="#quickstart" class="btn btn-secondary">
+        Docker &amp; CLI Docs
+      </a>
+    </div>
+
+    <img src="assets/smoke-monkey-banner.png" alt="Smoke Monkey Canvas Interface — Spatial Multi-Agent Workspace" class="banner-img" />
+  </header>
+
+  <main>
+    <section class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <h3>Infinite Spatial Canvas</h3>
+        <p>Pan, zoom, drag, and connect AI agents spatially with real-time multi-agent orchestration and status badges.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Instant NPX &amp; Daemon Mode</h3>
+        <p>Run directly via <code>npx smoke-monkey-canvas</code> or fork into background daemon mode with automatic browser pop.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🐳</div>
+        <h3>Production Docker &amp; Compose</h3>
+        <p>Deploy in seconds with Docker Compose. Includes isolated SQLite data volumes and dedicated PostgreSQL MCP services on port 15432.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <h3>Model Context Protocol (MCP)</h3>
+        <p>Integrate any custom stdio or SSE MCP server. Paste Claude Desktop or Cursor configurations directly to import instantly.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">⏰</div>
+        <h3>Autonomous Cron Scheduling</h3>
+        <p>Set custom cron expressions for background agent tasks without polluting interactive multi-turn chat threads.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>100% Local &amp; Private</h3>
+        <p>Zero cloud lock-in. All agent definitions, settings, encrypted API keys, and chat sessions are stored locally in SQLite.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Smoke Monkey Canvas is built with ❤️ by <a href="https://github.com/RajdeepDevelopment">Rajdeep Sadhu (RajdeepDevelopment)</a>.</p>
+    <p style="margin-top:8px;">Released under the Sustainable Use License · Multi-Agent Spatial Workspace</p>
+  </footer>
+</body>
+</html>

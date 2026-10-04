@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://rajdeepdevelopment.github.io/smoke-monkey-canvas/sitemap.xml

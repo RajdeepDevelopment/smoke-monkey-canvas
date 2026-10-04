@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    // The server is executed directly via `tsx` (see `npm start` / `npm run dev`).
+    // Emitting .js next to the .ts sources would shadow them at runtime: edit a
+    // .ts file, skip a rebuild, restart, and tsx would happily run the stale
+    // emitted .js instead of your change.
+    "noEmit": true
+  },
+  "include": [
+    "server/app.server.ts",
+    "server/index.ts",
+    "server/features/**/*"
+  ]
+}
