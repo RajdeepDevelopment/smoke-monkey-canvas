@@ -44,11 +44,11 @@ let isStatus = false;
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
-  if (arg === '--help' || arg === '-h') {
+  if (arg === '--help' || arg === '-h' || arg === 'help') {
     printHelp();
     process.exit(0);
-  } else if (arg === '--version' || arg === '-v') {
-    console.log(`smoke-monkey-canvas v${pkg.version}`);
+  } else if (arg === '--version' || arg === '-v' || arg === 'version') {
+    console.log(`@smoke-monkey/canvas v${pkg.version}`);
     process.exit(0);
   } else if (arg === '--port' || arg === '-p') {
     const p = Number(args[++i]);
@@ -57,11 +57,11 @@ for (let i = 0; i < args.length; i++) {
     dbPath = resolve(args[++i]);
   } else if (arg === '--no-open' || arg === '-n') {
     openBrowser = false;
-  } else if (arg === '--daemon' || arg === '-d' || arg === '--background') {
+  } else if (arg === 'connect' || arg === 'start' || arg === '--daemon' || arg === '-d' || arg === '--background') {
     isDaemon = true;
-  } else if (arg === '--stop') {
+  } else if (arg === 'disconnect' || arg === 'stop' || arg === '--stop') {
     isStop = true;
-  } else if (arg === '--status') {
+  } else if (arg === 'status' || arg === '--status') {
     isStatus = true;
   }
 }
@@ -158,7 +158,7 @@ if (isDaemon && !process.env.SMOKE_CANVAS_DAEMON_CHILD) {
   }
 
   const logFd = openSync(LOG_FILE, 'a');
-  const forwardedArgs = args.filter((a) => a !== '--daemon' && a !== '-d' && a !== '--background');
+  const forwardedArgs = args.filter((a) => !['--daemon', '-d', '--background', 'connect', 'start'].includes(a));
 
   const child = spawn(process.execPath, [__filename, ...forwardedArgs], {
     detached: true,
@@ -263,24 +263,28 @@ function printHelp() {
 Visual Multi-Agent Spatial Workspace for Smoke Monkey Harness
 
 Usage:
-  npx smoke-monkey-canvas [options]
-  smoke-monkey-canvas [options]
+  npx @smoke-monkey/canvas [command] [options]
+  smoke-monkey [command] [options]
+  smoke-monkey-canvas [command] [options]
+
+Commands:
+  connect, start            Launch Smoke Monkey in background (daemon mode)
+  disconnect, stop          Stop running background instance
+  status                    Check status of running background instance
 
 Options:
   -p, --port <number>       Port to run the Canvas server on (default: 3333)
   --db <path>               SQLite database file path (default: ~/.smoke-monkey/canvas.db)
   -d, --daemon              Run server continuously in background (daemon mode)
-  --status                  Check if background server is currently running
-  --stop                    Stop the running background server
   -n, --no-open             Do not automatically open the browser on start
   -v, --version             Show version number
   -h, --help                Show this help message
 
 Examples:
-  npx smoke-monkey-canvas                    # Start foreground and open browser
-  npx smoke-monkey-canvas --port 8080        # Start on port 8080
-  npx smoke-monkey-canvas --daemon           # Run continuously in background
-  npx smoke-monkey-canvas --status           # Check background status
-  npx smoke-monkey-canvas --stop             # Stop background instance
+  npx @smoke-monkey/canvas                   # Start foreground and open canvas
+  npx @smoke-monkey/canvas connect           # Start background daemon (like warp-cli connect)
+  npx @smoke-monkey/canvas status            # Check if running and print URL / PID
+  npx @smoke-monkey/canvas stop              # Stop background daemon
+  smoke-monkey connect                       # When installed globally
 `);
 }
