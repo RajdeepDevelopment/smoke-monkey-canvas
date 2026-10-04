@@ -8,10 +8,7 @@ on:
 
 env:
   GHCR_REGISTRY: ghcr.io
-  DOCKERHUB_REGISTRY: docker.io
   IMAGE_NAME: ${{ github.repository }}
-  # DOCKERHUB_USERNAME must be set as a repo Variable (Settings → Variables → Actions)
-  DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/smoke-monkey-canvas
 
 jobs:
   build-and-push:
@@ -40,12 +37,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Docker Hub Login ─────────────────────────────────────────────────────
+      # ── Docker Hub Login (only if DOCKERHUB_USERNAME variable is set) ────────
       - name: Log in to Docker Hub
         if: github.event_name != 'pull_request' && vars.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.DOCKERHUB_REGISTRY }}
+          registry: docker.io
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -61,39 +58,55 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
-      # ── Docker Hub Metadata ───────────────────────────────────────────────────
+      # ── Docker Hub Metadata (only when username is set) ───────────────────────
       - name: Extract Docker metadata (Docker Hub)
         id: meta_dockerhub
+        if: vars.DOCKERHUB_USERNAME != ''
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.DOCKERHUB_IMAGE }}
+          images: ${{ vars.DOCKERHUB_USERNAME }}/smoke-monkey-canvas
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
-      # ── Build & Push to Both Registries (multi-arch) ──────────────────────────
+      # ── Combine tags: GHCR always + Docker Hub only when configured ───────────
+      - name: Build combined tag list
+        id: tags
+        run: |
+          TAGS="${{ steps.meta_ghcr.outputs.tags }}"
+          if [ -n "${{ vars.DOCKERHUB_USERNAME }}" ]; then
+            TAGS="$TAGS
+          ${{ steps.meta_dockerhub.outputs.tags }}"
+          fi
+          echo "tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$TAGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # ── Build & Push multi-arch ───────────────────────────────────────────────
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ steps.meta_ghcr.outputs.tags }}
-            ${{ steps.meta_dockerhub.outputs.tags }}
+          tags: ${{ steps.tags.outputs.tags }}
           labels: ${{ steps.meta_ghcr.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ── Update Docker Hub Description ────────────────────────────────────────
+      # ── Update Docker Hub Description (only when both creds are configured) ───
       - name: Update Docker Hub Description
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: >
+          github.event_name != 'pull_request' &&
+          github.ref == 'refs/heads/main' &&
+          vars.DOCKERHUB_USERNAME != '' &&
+          secrets.DOCKERHUB_TOKEN != ''
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ env.DOCKERHUB_IMAGE }}
+          repository: ${{ vars.DOCKERHUB_USERNAME }}/smoke-monkey-canvas
           readme-filepath: ./README.md
           short-description: "Smoke Monkey Canvas — visual AI agent workspace built on smoke-monkey-harness"
