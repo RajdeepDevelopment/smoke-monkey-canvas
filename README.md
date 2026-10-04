@@ -1,7 +1,7 @@
 # Smoke Monkey Canvas 🐒
 
 <p align="center">
-  <img src="docs/assets/smoke-monkey-banner.png" alt="Smoke Monkey Canvas — Spatial Multi-Agent Workspace" width="100%" />
+  <img src="https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/docs/assets/smoke-monkey-banner.png" alt="Smoke Monkey Canvas — Spatial Multi-Agent Workspace" width="100%" />
 </p>
 
 > **The visual, spatial multi-agent workspace for [Smoke Monkey Harness](https://github.com/RajdeepDevelopment/smoke-monkey-harness).**
