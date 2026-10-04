@@ -14,6 +14,16 @@
 [![npm](https://img.shields.io/badge/smoke--monkey--harness-1.3.1-red.svg)](https://www.npmjs.com/package/smoke-monkey-harness)
 [![Docker Hub](https://img.shields.io/docker/pulls/rajdeepsadhu/smoke-monkey-canvas?logo=docker&label=Docker%20Hub)](https://hub.docker.com/r/rajdeepsadhu/smoke-monkey-canvas)
 
+<p align="center">
+  <a href="https://cloud.digitalocean.com/apps/new?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas/tree/main" target="_blank" rel="noopener noreferrer">
+    <img src="https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/assets/deploy-digitalocean.svg" alt="Deploy to DigitalOcean" height="38" />
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas" target="_blank" rel="noopener noreferrer">
+    <img src="https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/assets/deploy-render.svg" alt="Deploy to Render" height="38" />
+  </a>
+</p>
+
 ---
 
 ## What is Smoke Monkey Canvas?
@@ -211,19 +221,23 @@ Frontend dev server runs at `http://localhost:5173` and proxies API/WS calls to 
 
 ---
 
-## ☁️ Cloud Deployment
+## ☁️ 1-Click Cloud Deployment
 
-Full guide with per-provider walkthroughs: **[docs/deploy.html](https://rajdeepdevelopment.github.io/smoke-monkey-canvas/deploy.html)**
+Deploy your personal, persistent multi-agent canvas to the cloud in under 60 seconds with verified 1-click templates:
 
-| Provider | Type | 1-Click Link | Artifact |
-|----------|------|:---:|----------|
-| **Render** | Managed Cloud | [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas) | [`render.yaml`](render.yaml) |
-| **DigitalOcean** | App Platform | [![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas/tree/main) | [`.do/deploy.template.yaml`](.do/deploy.template.yaml) |
-| **Koyeb** | Serverless Containers | [![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=docker&name=smoke-monkey-canvas&docker=docker.io/rajdeepsadhu/smoke-monkey-canvas:latest&ports=3333;http;/) | Docker Hub Official Image |
-| **Railway** | Cloud Infrastructure | [Deploy on Railway](https://railway.com/new) | [`.railway/railway.ts`](.railway/railway.ts) |
-| **Fly.io** | Global Edge | `fly launch` | [`fly.toml`](fly.toml) |
-| **Northflank** | Container Cloud | Template Ready | [`northflank.template.json`](northflank.template.json) |
-| **Any Docker host** | Self-Hosted VM | Compose 1-Liner | [`deploy/docker-compose.vps.yml`](deploy/docker-compose.vps.yml) |
+<div align="center">
+
+| Cloud Provider | 1-Click Deployment Button | Configuration Blueprint | Database Persistence |
+| :--- | :---: | :---: | :---: |
+| **DigitalOcean App Platform**<br><sub>Container runtime with zero-ops management</sub> | <a href="https://cloud.digitalocean.com/apps/new?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas/tree/main" target="_blank" rel="noopener noreferrer"><img src="https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/assets/deploy-digitalocean.svg" alt="Deploy to DigitalOcean" height="36" /></a> | [`.do/deploy.template.yaml`](.do/deploy.template.yaml) | Official Docker Hub Image |
+| **Render**<br><sub>Managed web service with attached persistent SSD</sub> | <a href="https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas" target="_blank" rel="noopener noreferrer"><img src="https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/assets/deploy-render.svg" alt="Deploy to Render" height="36" /></a> | [`render.yaml`](render.yaml) | Persistent Disk (`/app/data`) |
+| **Koyeb**<br><sub>Serverless containers with worldwide edge routing</sub> | <a href="https://app.koyeb.com/deploy?type=docker&name=smoke-monkey-canvas&docker=docker.io/rajdeepsadhu/smoke-monkey-canvas:latest&ports=3333;http;/" target="_blank" rel="noopener noreferrer"><img src="https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/assets/deploy-koyeb.svg" alt="Deploy to Koyeb" height="36" /></a> | Docker Hub Official | Port 3333 HTTP |
+| **Railway**<br><sub>Full infrastructure canvas with unmetered WebSockets</sub> | <a href="https://railway.com/new" target="_blank" rel="noopener noreferrer"><img src="https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/assets/deploy-railway.svg" alt="Deploy on Railway" height="36" /></a> | [`.railway/railway.ts`](.railway/railway.ts) | 5 GB Persistent Volume |
+
+</div>
+
+> 📖 **Need a complete walkthrough or custom VPS deployment?**  
+> Check our full interactive guide: **[docs/deploy.html](https://rajdeepdevelopment.github.io/smoke-monkey-canvas/deploy.html)**
 
 Production stack on any Linux VM with Docker (Caddy handles automatic TLS and the WebSocket upgrade):
 
