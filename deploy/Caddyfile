@@ -1,0 +1,31 @@
+# 🐒 Smoke Monkey Canvas — Caddy Configuration
+#
+# Automatic TLS via Let's Encrypt: point an A/AAAA record for SMOKE_DOMAIN at
+# this server's public IP and Caddy obtains and renews the certificate itself.
+# WebSocket upgrades for /ws are handled natively by Caddy's reverse_proxy.
+
+{$SMOKE_DOMAIN} {
+	encode zstd gzip
+
+	# Agent runs stream over WebSocket. Caddy proxies the upgrade transparently.
+	reverse_proxy canvas:3333 {
+		# Caddy's HTTP transport has no read/write timeout by default, so long
+		# agent streams are not cut off mid-run.
+
+		# By default Caddy force-closes WebSocket connections when its config is
+		# reloaded. Delay that so a `caddy reload` does not kill a running agent.
+		stream_close_delay 5m
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

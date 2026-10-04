@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deploy Smoke Monkey Canvas | One-Click Cloud Deployment</title>
+
+  <!-- SEO Primary Meta Tags -->
+  <meta name="title" content="Deploy Smoke Monkey Canvas | One-Click Cloud Deployment" />
+  <meta name="description" content="Self-host your own AI workspace. Deploy Smoke Monkey Canvas to Render, Railway, DigitalOcean, or Northflank — or to any Docker server. Real one-click links, honest provider status, no lock-in." />
+  <meta name="keywords" content="smoke monkey canvas deploy, self-host smoke monkey, one click deploy ai agents, railway template, render blueprint, digitalocean droplet, northflank template, docker deploy ai workspace, multi-agent canvas hosting" />
+  <meta name="author" content="RajdeepDevelopment" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="canonical" href="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/deploy.html" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/deploy.html" />
+  <meta property="og:title" content="Deploy Smoke Monkey Canvas | One-Click Cloud Deployment" />
+  <meta property="og:description" content="Self-host your own AI workspace on Render, Railway, DigitalOcean, or Northflank — or to any Docker server. Real one-click links and honest provider status." />
+  <meta property="og:image" content="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/assets/smoke-monkey-banner.png" />
+  <meta property="og:image:width" content="1280" />
+  <meta property="og:image:height" content="720" />
+  <meta property="og:site_name" content="Smoke Monkey Canvas" />
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Deploy Smoke Monkey Canvas | One-Click Cloud Deployment" />
+  <meta name="twitter:description" content="Self-host your own AI workspace on your preferred cloud. Real one-click links, honest provider status, zero lock-in." />
+  <meta name="twitter:image" content="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/assets/smoke-monkey-banner.png" />
+  <meta name="twitter:creator" content="@RajdeepDevelopment" />
+
+  <link rel="icon" type="image/png" href="assets/smoke-monkey-banner.png" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "Deploy Smoke Monkey Canvas to the cloud",
+    "description": "Deploy the Smoke Monkey Canvas multi-agent AI workspace to a cloud provider using Docker, a provider blueprint, or a self-managed server.",
+    "image": "https://rajdeepdevelopment.github.io/smoke-monkey-canvas/assets/smoke-monkey-banner.png",
+    "totalTime": "PT10M",
+    "step": [
+      { "@type": "HowToStep", "name": "Deploy to Render", "text": "Open the Render deploy button, review the Blueprint, and deploy. Render provisions a web service with a persistent disk at /app/data." },
+      { "@type": "HowToStep", "name": "Deploy to Railway", "text": "Create a Railway project from the public repository, attach a volume at /app/data, and deploy. An official one-click template URL is published once the template is submitted to the Railway marketplace." },
+      { "@type": "HowToStep", "name": "Deploy to a DigitalOcean Droplet", "text": "Create an Ubuntu Droplet, point a domain at it, then run the production docker-compose stack with Caddy for automatic TLS." },
+      { "@type": "HowToStep", "name": "Deploy to Northflank", "text": "Create the project from northflank.template.json, which provisions a deployment service with a persistent volume and a public port." },
+      { "@type": "HowToStep", "name": "Deploy with Docker", "text": "Run the published Docker image with a named volume, or use deploy/docker-compose.vps.yml for a TLS-terminated production stack." }
+    ]
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Which Smoke Monkey Canvas deployment option is a real one-click deploy today?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Render is the only provider with a working one-click deploy link today. It uses Render's official Blueprint deploy URL and reads the render.yaml file at the root of this repository. Railway and Northflank require a template to be published to a provider marketplace before a one-click URL exists, and DigitalOcean 1-Click Apps require Marketplace vendor approval. Those options are shown with their real status and full setup instructions rather than a button that would not work."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Why is my agent data stored in SQLite, and does it survive a redeploy?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Smoke Monkey Canvas stores agents, chat sessions, canvas positions, and encrypted API keys in a single SQLite database at /app/data/canvas.db. It survives redeploys only if a persistent disk or volume is mounted at /app/data. Every deployment option on this page configures that mount. On a platform with no volume support the database would be destroyed on each deploy."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do I need to bring my own LLM API key?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Smoke Monkey Canvas orchestrates agents, it does not host models. Add a key for NVIDIA, OpenAI, Anthropic, Gemini, Groq, DeepSeek, or OpenRouter in the agent settings UI, where it is encrypted at rest, or supply it as an environment variable such as OPENAI_API_KEY. Ollama can be used with no key."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do I need Redis or PostgreSQL to run Smoke Monkey Canvas?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. The scheduler, WebSocket broadcast server, and all persistence run inside the single Node.js process, backed by SQLite. PostgreSQL is optional and only useful if you attach SQL-based MCP servers to your agents. Redis is never required."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I deploy Smoke Monkey Canvas on my own server?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Run the published Docker image on any machine with Docker, use deploy/docker-compose.vps.yml for a production stack with automatic TLS via Caddy, or install from source with Node.js 22 and npm. The project is released under the Sustainable Use License and is designed to be fully self-hosted."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Smoke Monkey Canvas free to deploy?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The software is free to self-host for personal projects, research, and internal business tooling under the Sustainable Use License. The cloud provider charges separately for the compute, disk, and bandwidth you consume, and you need your own LLM provider account."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #07090e;
+      --bg-elev: #0b0f19;
+      --card-bg: rgba(15, 23, 42, 0.7);
+      --card-solid: #0d1424;
+      --border: rgba(56, 189, 248, 0.15);
+      --border-strong: rgba(56, 189, 248, 0.35);
+      --primary: #06b6d4;
+      --primary-glow: #22d3ee;
+      --accent: #10b981;
+      --warn: #f59e0b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --radius: 14px;
+      --radius-sm: 10px;
+      --maxw: 1140px;
+      --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--primary-glow); }
+    a:focus-visible,
+    button:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid var(--primary-glow);
+      outline-offset: 3px;
+      border-radius: 6px;
+    }
+
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+
+    /* ── Skip link ─────────────────────────────────────────────────────── */
+    .skip {
+      position: absolute; left: -9999px; top: 0; z-index: 100;
+      background: var(--primary); color: #04121a; padding: 12px 20px;
+      font-weight: 700; border-radius: 0 0 8px 0;
+    }
+    .skip:focus { left: 0; }
+
+    /* ── Top nav ───────────────────────────────────────────────────────── */
+    .nav {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(7, 9, 14, 0.82);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: var(--maxw); margin: 0 auto; padding: 14px 20px;
+      display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-weight: 800; letter-spacing: -0.02em; color: var(--text);
+      text-decoration: none; font-size: 16px;
+    }
+    .brand-mark {
+      width: 30px; height: 30px; border-radius: 9px; flex: none;
+      background: linear-gradient(135deg, #0891b2, #06b6d4);
+      display: grid; place-items: center; font-size: 16px;
+      box-shadow: 0 0 18px rgba(6, 182, 212, 0.45);
+    }
+    .nav-links { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+    .nav-links a {
+      color: var(--text-muted); text-decoration: none; font-size: 14px;
+      font-weight: 600; padding: 7px 12px; border-radius: 8px;
+      transition: color .18s ease, background .18s ease;
+    }
+    .nav-links a:hover { color: var(--text); background: rgba(56, 189, 248, 0.1); }
+
+    /* ── Hero ──────────────────────────────────────────────────────────── */
+    .hero {
+      position: relative;
+      padding: 68px 20px 44px;
+      text-align: center;
+      background:
+        radial-gradient(ellipse 70% 60% at 50% 0%, rgba(6, 182, 212, 0.16) 0%, transparent 62%),
+        radial-gradient(ellipse 50% 50% at 85% 20%, rgba(16, 185, 129, 0.09) 0%, transparent 60%);
+      border-bottom: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 15px; border-radius: 999px;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.32);
+      color: var(--primary-glow); font-size: 13px; font-weight: 700;
+      margin-bottom: 20px;
+    }
+    .badge .pulse {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+      animation: pulse 2.4s infinite;
+    }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.65); }
+      70%  { box-shadow: 0 0 0 9px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    h1 {
+      font-size: clamp(2.1rem, 5.4vw, 3.7rem);
+      font-weight: 800; letter-spacing: -0.03em; line-height: 1.08;
+      margin: 0 0 18px;
+      background: linear-gradient(135deg, #ffffff 42%, var(--primary-glow) 100%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: clamp(1.02rem, 2.1vw, 1.22rem);
+      color: var(--text-muted); max-width: 720px; margin: 0 auto 26px;
+    }
+    .hero-meta {
+      display: flex; gap: 10px 26px; justify-content: center; flex-wrap: wrap;
+      color: var(--text-dim); font-size: 13.5px; font-weight: 500;
+    }
+    .hero-meta span { display: inline-flex; align-items: center; gap: 7px; }
+    .hero-meta .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--primary); flex: none; }
+
+    /* ── Sections ──────────────────────────────────────────────────────── */
+    section { padding: 56px 0; }
+    .section-head { text-align: center; margin-bottom: 34px; }
+    .eyebrow {
+      display: inline-block; font-size: 12px; font-weight: 800;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--primary); margin-bottom: 12px;
+    }
+    h2 {
+      font-size: clamp(1.6rem, 3.4vw, 2.3rem); font-weight: 800;
+      letter-spacing: -0.025em; line-height: 1.2; margin: 0 0 12px;
+    }
+    .section-sub { color: var(--text-muted); max-width: 660px; margin: 0 auto; font-size: 15.5px; }
+
+    /* ── Readiness notice ──────────────────────────────────────────────── */
+    .notice {
+      display: flex; gap: 16px; align-items: flex-start;
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.03));
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: var(--radius); padding: 20px 22px; margin-bottom: 30px;
+    }
+    .notice-icon { font-size: 22px; line-height: 1.2; flex: none; }
+    .notice h3 { margin: 0 0 6px; font-size: 15.5px; font-weight: 700; color: #fbbf24; }
+    .notice p { margin: 0; font-size: 14.5px; color: var(--text-muted); }
+    .notice code { color: #fcd34d; }
+
+    /* ── Provider grid ─────────────────────────────────────────────────── */
+    .providers {
+      display: grid; gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
+    .provider {
+      position: relative; display: flex; flex-direction: column;
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px;
+      backdrop-filter: blur(8px);
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+      overflow: hidden;
+    }
+    .provider::before {
+      content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+      background: var(--tint, var(--primary)); opacity: .85;
+    }
+    .provider:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-strong);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+    }
+    .provider-top { display: flex; align-items: center; gap: 13px; margin-bottom: 15px; }
+    .provider-logo {
+      width: 44px; height: 44px; border-radius: 12px; flex: none;
+      display: grid; place-items: center;
+      font-size: 19px; font-weight: 800; color: #fff;
+      background: var(--tint, var(--primary));
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+    .provider-name { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+    .provider-kind { font-size: 12.5px; color: var(--text-dim); font-weight: 600; }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      align-self: flex-start; margin-bottom: 13px;
+      padding: 5px 11px; border-radius: 999px;
+      font-size: 11.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .pill-live    { background: rgba(16,185,129,.14); border: 1px solid rgba(16,185,129,.4); color: #34d399; }
+    .pill-pending { background: rgba(245,158,11,.13); border: 1px solid rgba(245,158,11,.38); color: #fbbf24; }
+    .pill-ready   { background: rgba(6,182,212,.13);  border: 1px solid rgba(6,182,212,.38);  color: var(--primary-glow); }
+
+    .provider-desc { font-size: 14.5px; color: var(--text-muted); margin: 0 0 16px; flex: 1; }
+    .provider-desc strong { color: var(--text); font-weight: 700; }
+
+    .provider-facts { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 7px; }
+    .provider-facts li {
+      display: flex; gap: 9px; align-items: flex-start;
+      font-size: 13.5px; color: var(--text-muted);
+    }
+    .provider-facts .tick { color: var(--accent); flex: none; font-weight: 800; }
+    .provider-facts .warn { color: var(--warn); flex: none; font-weight: 800; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+      width: 100%; padding: 13px 22px; border-radius: var(--radius-sm);
+      font-size: 14.5px; font-weight: 700; text-decoration: none;
+      border: 1px solid transparent; cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary {
+      background: linear-gradient(135deg, #0891b2, #06b6d4); color: #04121a;
+      box-shadow: 0 6px 22px rgba(6, 182, 212, 0.35);
+    }
+    .btn-primary:hover { box-shadow: 0 10px 30px rgba(6, 182, 212, 0.5); }
+    .btn-secondary {
+      background: rgba(30, 41, 59, 0.72); border-color: var(--border); color: var(--text);
+    }
+    .btn-secondary:hover { background: rgba(51, 65, 85, 0.8); border-color: var(--primary); }
+    .btn-note {
+      display: block; text-align: center; margin-top: 9px;
+      font-size: 12px; color: var(--text-dim); font-weight: 600;
+    }
+
+    /* ── Split: Docker banner ──────────────────────────────────────────── */
+    .docker-banner {
+      margin-top: 22px;
+      display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px;
+      backdrop-filter: blur(8px);
+    }
+    .docker-banner .txt { flex: 1 1 320px; }
+    .docker-banner h3 { margin: 0 0 6px; font-size: 17px; font-weight: 800; }
+    .docker-banner p { margin: 0; font-size: 14px; color: var(--text-muted); }
+    .docker-banner .btn { width: auto; flex: none; }
+
+    /* ── Detail sections ───────────────────────────────────────────────── */
+    .detail {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 30px; margin-bottom: 22px;
+      backdrop-filter: blur(8px);
+    }
+    .detail-head { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; flex-wrap: wrap; }
+    .detail-head h3 {
+      margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .detail-lede { color: var(--text-muted); font-size: 15px; margin: 0 0 22px; }
+
+    .callout {
+      border-radius: var(--radius-sm); padding: 15px 18px; margin: 0 0 20px;
+      font-size: 14px; line-height: 1.6;
+      border: 1px solid var(--border); background: rgba(2, 6, 23, 0.5);
+    }
+    .callout-title { font-weight: 800; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+    .callout-info   { border-color: rgba(6,182,212,.3); }
+    .callout-info .callout-title { color: var(--primary-glow); }
+    .callout-warn   { border-color: rgba(245,158,11,.32); }
+    .callout-warn .callout-title { color: #fbbf24; }
+    .callout p:last-child { margin-bottom: 0; }
+    .callout ul { margin: 8px 0 0; padding-left: 20px; }
+    .callout li { margin-bottom: 5px; }
+
+    .steps { counter-reset: step; list-style: none; margin: 0 0 22px; padding: 0; }
+    .steps li {
+      counter-increment: step; position: relative;
+      padding: 0 0 18px 44px; margin: 0;
+    }
+    .steps li::before {
+      content: counter(step); position: absolute; left: 0; top: 0;
+      width: 28px; height: 28px; border-radius: 9px;
+      background: rgba(6, 182, 212, 0.14); border: 1px solid rgba(6, 182, 212, 0.4);
+      color: var(--primary-glow); font-size: 13.5px; font-weight: 800;
+      display: grid; place-items: center;
+    }
+    .steps li::after {
+      content: ""; position: absolute; left: 13.5px; top: 32px; bottom: 4px;
+      width: 1px; background: linear-gradient(180deg, rgba(56,189,248,.32), transparent);
+    }
+    .steps li:last-child { padding-bottom: 0; }
+    .steps li:last-child::after { display: none; }
+    .steps strong { color: var(--text); font-weight: 700; }
+    .steps p { margin: 3px 0 0; font-size: 14px; color: var(--text-muted); }
+
+    /* ── Code blocks ───────────────────────────────────────────────────── */
+    .code {
+      position: relative; margin: 0 0 18px;
+      background: #0a0f1a; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); overflow: hidden;
+    }
+    .code-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 14px; background: rgba(15, 23, 42, 0.7);
+      border-bottom: 1px solid var(--border);
+    }
+    .code-dots { display: flex; gap: 5px; }
+    .code-dots i { width: 10px; height: 10px; border-radius: 50%; background: #1e293b; }
+    .code-file { font-size: 12px; color: var(--text-dim); font-family: var(--mono); font-weight: 600; }
+    .copy {
+      margin-left: auto; background: transparent; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: 4px 11px; font-size: 11.5px; font-weight: 700;
+      font-family: inherit; cursor: pointer; transition: all .18s ease;
+    }
+    .copy:hover { color: var(--text); border-color: var(--primary); background: rgba(6,182,212,.1); }
+    .copy.done { color: #34d399; border-color: rgba(16,185,129,.45); }
+    pre {
+      margin: 0; padding: 16px; overflow-x: auto;
+      font-family: var(--mono); font-size: 13px; line-height: 1.65; color: #cbd5e1;
+    }
+    pre .c { color: var(--text-dim); font-style: italic; }
+    pre .p { color: #7dd3fc; }
+    pre .g { color: #6ee7b7; }
+    pre .y { color: #fcd34d; }
+
+    /* ── Spec table ────────────────────────────────────────────────────── */
+    .table-scroll { overflow-x: auto; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 520px; }
+    th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid rgba(148,163,184,.12); }
+    th { color: var(--text-dim); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; }
+    td { color: var(--text-muted); }
+    td:first-child { color: var(--text); font-weight: 600; }
+    tbody tr:last-child td { border-bottom: none; }
+    code:not(pre code) {
+      font-family: var(--mono); font-size: 12.5px;
+      background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.2);
+      color: var(--primary-glow); padding: 1.5px 6px; border-radius: 5px;
+      white-space: nowrap;
+    }
+
+    /* ── Checklist ─────────────────────────────────────────────────────── */
+    .checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+    .checklist li {
+      display: flex; gap: 13px; align-items: flex-start;
+      background: rgba(2, 6, 23, 0.45); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 15px 17px;
+      font-size: 14.5px; color: var(--text-muted);
+    }
+    .checklist .num {
+      width: 24px; height: 24px; border-radius: 7px; flex: none;
+      background: rgba(16,185,129,.14); border: 1px solid rgba(16,185,129,.35);
+      color: #34d399; font-size: 12.5px; font-weight: 800;
+      display: grid; place-items: center;
+    }
+    .checklist strong { color: var(--text); display: block; margin-bottom: 2px; font-weight: 700; }
+
+    /* ── FAQ ───────────────────────────────────────────────────────────── */
+    .faq { max-width: 820px; margin: 0 auto; display: grid; gap: 11px; }
+    details {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); overflow: hidden;
+      transition: border-color .2s ease;
+    }
+    details[open] { border-color: var(--border-strong); }
+    summary {
+      cursor: pointer; padding: 16px 20px; font-size: 15px; font-weight: 700;
+      list-style: none; display: flex; align-items: center; gap: 12px;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after {
+      content: "+"; margin-left: auto; color: var(--primary);
+      font-size: 21px; font-weight: 400; line-height: 1; flex: none;
+    }
+    details[open] summary::after { content: "\2212"; }
+    .faq-body { padding: 0 20px 18px; font-size: 14.5px; color: var(--text-muted); }
+    .faq-body p { margin: 0 0 10px; }
+    .faq-body p:last-child { margin-bottom: 0; }
+
+    /* ── CTA strip ─────────────────────────────────────────────────────── */
+    .cta-strip {
+      text-align: center;
+      background: radial-gradient(ellipse 60% 100% at 50% 0%, rgba(6,182,212,.14) 0%, transparent 65%);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    }
+    .cta-strip h2 { margin-bottom: 10px; }
+    .cta-actions { display: flex; gap: 13px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+    .cta-actions .btn { width: auto; }
+
+    footer {
+      padding: 42px 20px; text-align: center;
+      font-size: 13.5px; color: var(--text-dim);
+      border-top: 1px solid rgba(255,255,255,.07);
+    }
+    footer a { color: var(--primary-glow); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    footer .sep { margin: 0 10px; color: rgba(148,163,184,.3); }
+
+    @media (max-width: 640px) {
+      .hero { padding: 48px 20px 34px; }
+      section { padding: 44px 0; }
+      .detail { padding: 22px 18px; }
+      .nav-links { width: 100%; margin-left: 0; justify-content: flex-start; }
+      .btn { font-size: 14px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+      .provider:hover, .btn:hover { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to main content</a>
+
+  <nav class="nav" aria-label="Primary">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">
+        <span class="brand-mark" aria-hidden="true">🐒</span>
+        <span>Smoke Monkey</span>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="deploy.html" aria-current="page">Deploy</a>
+        <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas">GitHub</a>
+        <a href="https://hub.docker.com/r/rajdeepsadhu/smoke-monkey-canvas">Docker Hub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="badge"><span class="pulse" aria-hidden="true"></span> Self-hosted. Your keys. Your cloud.</div>
+    <h1>Self-host your own AI workspace</h1>
+    <p class="subtitle">
+      Deploy Smoke Monkey to your preferred cloud. You keep billing, networking, and
+      infrastructure &mdash; we ship the Docker image and the deployment config for each provider.
+    </p>
+    <div class="hero-meta">
+      <span><span class="dot" aria-hidden="true"></span>Official image <code style="font-size:12.5px">rajdeepsadhu/smoke-monkey-canvas</code></span>
+      <span><span class="dot" aria-hidden="true"></span>Zero cloud lock-in</span>
+      <span><span class="dot" aria-hidden="true"></span>Bring your own LLM key</span>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ── Providers ─────────────────────────────────────────────────── -->
+    <section id="providers">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">One-click deploy</span>
+          <h2>Deploy Smoke Monkey to your preferred cloud</h2>
+          <p class="section-sub">
+            Pick a provider below. Every option runs the same official image, persists your
+            agents in SQLite on a mounted volume, and exposes the live WebSocket stream.
+          </p>
+        </div>
+
+        <div class="notice" role="note">
+          <div class="notice-icon" aria-hidden="true">🔎</div>
+          <div>
+            <h3>Real deployment status &mdash; read this first</h3>
+            <p>
+              A one-click button only exists once a provider has published a template on their
+              platform. <strong style="color:#f8fafc">Render is live today.</strong>
+              Railway and Northflank need a template published to their marketplace, and a
+              DigitalOcean 1-Click App needs Marketplace vendor approval &mdash; none of which
+              Smoke Monkey controls. Rather than ship buttons that go nowhere, each option below
+              states its exact status and gives you the working path today.
+            </p>
+          </div>
+        </div>
+
+        <div class="providers">
+
+          <!-- Render — LIVE -->
+          <article class="provider" style="--tint:#46e3b3">
+            <div class="provider-top">
+              <div class="provider-logo" aria-hidden="true">R</div>
+              <div>
+                <div class="provider-name">Render</div>
+                <div class="provider-kind">Managed web service</div>
+              </div>
+            </div>
+            <span class="pill pill-live">● One-click ready</span>
+            <p class="provider-desc">
+              A working one-click deploy. Render's official Blueprint deploy URL reads the
+              <code>render.yaml</code> at the root of this repo and provisions the web service,
+              the persistent disk, and the health check for you.
+            </p>
+            <ul class="provider-facts">
+              <li><span class="tick" aria-hidden="true">✓</span><span>5&nbsp;GB persistent disk mounted at <code>/app/data</code></span></li>
+              <li><span class="tick" aria-hidden="true">✓</span><span>WebSockets on <code>/ws</code> &mdash; required for live agent streaming</span></li>
+              <li><span class="tick" aria-hidden="true">✓</span><span>No extra services &mdash; SQLite only</span></li>
+              <li><span class="warn" aria-hidden="true">!</span><span>Paid plan required &mdash; free tier cannot hold a disk</span></li>
+            </ul>
+            <a class="btn btn-primary"
+               href="https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas"
+               target="_blank" rel="noopener noreferrer">
+              Deploy to Render
+              <span aria-hidden="true">↗</span>
+            </a>
+            <span class="btn-note">Opens Render&rsquo;s Blueprint form &middot; official Render deploy URL</span>
+          </article>
+
+          <!-- Railway -->
+          <article class="provider" id="railway-card" style="--tint:#c3cbd6">
+            <div class="provider-top">
+              <div class="provider-logo" aria-hidden="true">RW</div>
+              <div>
+                <div class="provider-name">Railway</div>
+                <div class="provider-kind">Managed container platform</div>
+              </div>
+            </div>
+            <span class="pill pill-pending">◷ Template ready &middot; not published</span>
+            <p class="provider-desc">
+              Best fit for always-on agents: Railway exempts WebSocket connections from its idle
+              and duration limits. The deployment config is ready &mdash; no template has been
+              published to the Railway marketplace, so there is no one-click URL to link to.
+            </p>
+            <ul class="provider-facts">
+              <li><span class="tick" aria-hidden="true">✓</span><span><code>.railway/railway.ts</code> IaC shipped &mdash; image + 5&nbsp;GB volume + health check</span></li>
+              <li><span class="tick" aria-hidden="true">✓</span><span>WebSockets stay open indefinitely, even while idle</span></li>
+              <li><span class="warn" aria-hidden="true">!</span><span>One-click URL appears only after <code>railway templates publish</code></span></li>
+              <li><span class="warn" aria-hidden="true">!</span><span>Hobby+ recommended &mdash; Free is 0.5&nbsp;GB RAM / 0.5&nbsp;GB volume</span></li>
+            </ul>
+            <a class="btn btn-secondary" href="#railway">Deploy to Railway</a>
+            <span class="btn-note">Working setup path &middot; ~4 minutes</span>
+          </article>
+
+          <!-- DigitalOcean -->
+          <article class="provider" id="digitalocean-card" style="--tint:#0080ff">
+            <div class="provider-top">
+              <div class="provider-logo" aria-hidden="true">DO</div>
+              <div>
+                <div class="provider-name">DigitalOcean</div>
+                <div class="provider-kind">Your own VM / Droplet</div>
+              </div>
+            </div>
+            <span class="pill pill-pending">◷ Requires vendor approval</span>
+            <p class="provider-desc">
+              For users who want their <strong>own server</strong> and full root access. There is
+              no 1-Click listing on DigitalOcean yet &mdash; publishing one requires Marketplace
+              vendor approval &mdash; so this is a Droplet you create yourself and run the
+              production Docker stack on.
+            </p>
+            <ul class="provider-facts">
+              <li><span class="tick" aria-hidden="true">✓</span><span>Full root access &mdash; run any MCP server you like</span></li>
+              <li><span class="tick" aria-hidden="true">✓</span><span>Caddy gives automatic Let's Encrypt TLS</span></li>
+              <li><span class="warn" aria-hidden="true">!</span><span>1-Click Apps need DigitalOcean vendor approval, not just an image</span></li>
+              <li><span class="warn" aria-hidden="true">!</span><span>Not App Platform &mdash; that has no persistent volumes</span></li>
+            </ul>
+            <a class="btn btn-secondary" href="#digitalocean">Deploy to DigitalOcean</a>
+            <span class="btn-note">Your own Droplet from ~$6/mo</span>
+          </article>
+
+          <!-- Northflank -->
+          <article class="provider" id="northflank-card" style="--tint:#4f7df3">
+            <div class="provider-top">
+              <div class="provider-logo" aria-hidden="true">N</div>
+              <div>
+                <div class="provider-name">Northflank</div>
+                <div class="provider-kind">Managed container platform</div>
+              </div>
+            </div>
+            <span class="pill pill-ready">◷ Template ready &middot; not published</span>
+            <p class="provider-desc">
+              The full stack is expressed as a Northflank Template &mdash; service, persistent
+              volume, port, and health probe &mdash; and it is committed to this repo. Northflank
+              mints share links inside a user account, so no public URL can be pre-written.
+            </p>
+            <ul class="provider-facts">
+              <li><span class="tick" aria-hidden="true">✓</span><span><code>northflank.template.json</code> committed &amp; schema-validated</span></li>
+              <li><span class="tick" aria-hidden="true">✓</span><span>No sleep &mdash; genuinely always-on, ideal for cron agents</span></li>
+              <li><span class="warn" aria-hidden="true">!</span><span>Share link is generated in your account, not a public URL</span></li>
+              <li><span class="warn" aria-hidden="true">!</span><span>Payment method required even on the free Sandbox tier</span></li>
+            </ul>
+            <a class="btn btn-secondary" href="#northflank">Deploy to Northflank</a>
+            <span class="btn-note">Run the committed template &middot; ~5 minutes</span>
+          </article>
+
+        </div>
+
+        <!-- Docker / manual -->
+        <div class="docker-banner">
+          <div class="txt">
+            <h3>🐳 Or bring your own server &mdash; Docker / Manual Setup</h3>
+            <p>
+              Any Linux VM, NAS, homelab box, or bare-metal server with Docker.
+              Works today, no provider approval, no vendor lock-in.
+            </p>
+          </div>
+          <a class="btn btn-secondary" href="#docker">Docker / Manual Setup</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Render detail ──────────────────────────────────────────────── -->
+    <section id="render">
+      <div class="wrap">
+        <div class="detail">
+          <div class="detail-head">
+            <h3><span aria-hidden="true">R</span> Deploy to Render</h3>
+            <span class="pill pill-live">● One-click ready</span>
+          </div>
+          <p class="detail-lede">
+            The fastest route to a hosted workspace. Render's Blueprint deploy URL is an official,
+            documented Render feature and reads <code>render.yaml</code> from this repository.
+          </p>
+
+          <ol class="steps">
+            <li>
+              <strong>Click &ldquo;Deploy to Render&rdquo;</strong>
+              <p>Render opens its Blueprint form pre-filled from <code>render.yaml</code>. No configuration needed &mdash; the disk, health check, and environment are already declared.</p>
+            </li>
+            <li>
+              <strong>Pick a paid plan</strong>
+              <p>A persistent disk is required, and free web services cannot have one. Choose the smallest paid web service (Starter, 512&nbsp;MB).</p>
+            </li>
+            <li>
+              <strong>Deploy and open your URL</strong>
+              <p>Render builds the repository Dockerfile, then gives you an <code>*.onrender.com</code> address. The first build takes a few minutes.</p>
+            </li>
+            <li>
+              <strong>Add an LLM API key</strong>
+              <p>Open any agent &rarr; Settings &rarr; Provider and paste a key. It is encrypted at rest in the SQLite database on the disk.</p>
+            </li>
+          </ol>
+
+          <div class="code">
+            <div class="code-head">
+              <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="code-file">Official Render deploy URL</span>
+              <button class="copy" type="button" data-copy-target="render-url">Copy</button>
+            </div>
+            <pre id="render-url"><code>https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas</code></pre>
+          </div>
+
+          <div class="callout callout-warn">
+            <div class="callout-title">⚠️ What the paid plan buys you</div>
+            <p>
+              Free web services spin down after 15 minutes and have an ephemeral filesystem, so
+              SQLite would be destroyed on every spin-down and redeploy. The disk also pins the
+              service to a single instance and means a brief pause on each deploy while the new
+              instance starts. Both are the correct trade for keeping your agents.
+            </p>
+          </div>
+
+          <div class="callout callout-info">
+            <div class="callout-title">ℹ️ Prefer the prebuilt image?</div>
+            <p>
+              The Blueprint builds the repository Dockerfile. To deploy the published image
+              instead, swap the service for <code>runtime: image</code> with
+              <code>image.url: docker.io/rajdeepsadhu/smoke-monkey-canvas:latest</code>.
+              Note that image-backed services cannot auto-deploy when a new tag is pushed.
+              See <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/blob/main/render.yaml">render.yaml</a>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Railway detail ─────────────────────────────────────────────── -->
+    <section id="railway">
+      <div class="wrap">
+        <div class="detail">
+          <div class="detail-head">
+            <h3><span aria-hidden="true">RW</span> Deploy to Railway</h3>
+            <span class="pill pill-pending">◷ Template ready &middot; not published</span>
+          </div>
+          <p class="detail-lede">
+            Railway is arguably the best fit for this app: WebSocket connections are exempt from
+            its idle and duration limits, so an agent stream can stay open indefinitely.
+          </p>
+
+          <div class="callout callout-warn">
+            <div class="callout-title">◷ Why there is no one-click button yet</div>
+            <p>
+              Railway has no template <em>file</em> format. Templates are built in the Railway
+              dashboard, or from a live project via <code>railway templates create</code>, and only
+              then published with <code>railway templates publish</code>. Publishing assigns the
+              template a code, and <code>railway.com/new/template/&lt;CODE&gt;</code> becomes the
+              one-click URL. Until that publish happens there is no URL to link to, so this page
+              will not invent one.
+            </p>
+          </div>
+
+          <h4 style="margin:24px 0 12px;font-size:15px;font-weight:800;color:#f8fafc;">Option A — connect this public repo (fastest)</h4>
+          <ol class="steps">
+            <li>
+              <strong>In Railway, choose <em>New Project &rarr; Deploy from GitHub repo</em></strong>
+              <p>Authorise the GitHub App and pick <code>RajdeepDevelopment/smoke-monkey-canvas</code>. Railway builds the included Dockerfile.</p>
+            </li>
+            <li>
+              <strong>Attach a volume at <code>/app/data</code></strong>
+              <p>Right-click the service &rarr; <em>Attach Volume</em> &rarr; mount path <code>/app/data</code>, 5&nbsp;GB. Without this, agents and chat history are lost on every deploy.</p>
+            </li>
+            <li>
+              <strong>Set <code>RAILWAY_RUN_UID=0</code></strong>
+              <p>Railway mounts volumes as <code>root</code> and this image runs as the non-root <code>node</code> user, so SQLite cannot write without this. Railway injects <code>PORT</code> automatically.</p>
+            </li>
+          </ol>
+
+          <h4 style="margin:26px 0 12px;font-size:15px;font-weight:800;color:#f8fafc;">Option B — apply the shipped IaC file</h4>
+          <p style="margin:0 0 12px;font-size:14.5px;color:var(--text-muted);">
+            The repo contains <code>.railway/railway.ts</code>, which declares the image source,
+            the volume, the mount path, the health check, and the environment in one place.
+          </p>
+          <div class="code">
+            <div class="code-head">
+              <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="code-file">terminal</span>
+              <button class="copy" type="button" data-copy-target="railway-cmd">Copy</button>
+            </div>
+            <pre id="railway-cmd"><code><span class="c"># Install the official CLI, then authenticate</span>
+npm i -g @railway/cli
+railway login
+railway link        <span class="c"># or: railway init</span>
+
+<span class="c"># Preview the plan, then provision image + volume + service</span>
+railway config plan
+railway config apply</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── DigitalOcean detail ────────────────────────────────────────── -->
+    <section id="digitalocean">
+      <div class="wrap">
+        <div class="detail">
+          <div class="detail-head">
+            <h3><span aria-hidden="true">DO</span> Deploy to DigitalOcean</h3>
+            <span class="pill pill-pending">◷ Requires vendor approval</span>
+          </div>
+          <p class="detail-lede">
+            This option is for users who want <strong>their own VM / server</strong> &mdash; full root
+            access, your own firewall, your own backups. Create a Droplet and run the production
+            Docker stack on it.
+          </p>
+
+          <div class="callout callout-warn">
+            <div class="callout-title">◷ Why there is no DigitalOcean 1-Click button</div>
+            <p>
+              A DigitalOcean 1-Click App is not a Docker image &mdash; it is a pre-baked Ubuntu
+              snapshot built with Packer, and publishing one requires approval from DigitalOcean's
+              Marketplace team. No such listing has been submitted, and that review is human-gated
+              with no published timeline. Until it exists, the honest options are a Droplet you
+              create yourself, or <code>doctl</code> with the same stack.
+            </p>
+            <ul>
+              <li>Submission requires a vendor application, an approved image snapshot, and marketplace review.</li>
+              <li>The official deploy button scheme <code>cloud.digitalocean.com/droplets/new?image=&lt;slug&gt;</code> only resolves for slugs DigitalOcean has already published.</li>
+              <li>DigitalOcean <strong>App Platform is not a substitute</strong> &mdash; it has no volume support and an ephemeral filesystem, so SQLite would be wiped on every deploy.</li>
+            </ul>
+          </div>
+
+          <h4 style="margin:24px 0 12px;font-size:15px;font-weight:800;color:#f8fafc;">Create the Droplet</h4>
+          <ol class="steps">
+            <li>
+              <strong>Create an Ubuntu 24.04 Droplet</strong>
+              <p>Any size works; 1&nbsp;GB RAM is a comfortable minimum. Note the public IP.</p>
+            </li>
+            <li>
+              <strong>Point a domain at it</strong>
+              <p>Add an A record for your hostname to the Droplet IP. Caddy needs this to obtain a Let&rsquo;s Encrypt certificate.</p>
+            </li>
+            <li>
+              <strong>Open ports 80 and 443</strong>
+              <p>In DigitalOcean&rsquo;s firewall (and the Droplet&rsquo;s own <code>ufw</code>). Caddy handles both HTTP and HTTPS, including the <code>/ws</code> WebSocket upgrade.</p>
+            </li>
+            <li>
+              <strong>Run the production stack</strong>
+              <p>SSH in and bring up the compose file. It pulls the official image, mounts the data volume, and starts Caddy in front of it.</p>
+            </li>
+          </ol>
+
+          <div class="code">
+            <div class="code-head">
+              <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="code-file">terminal</span>
+              <button class="copy" type="button" data-copy-target="do-cmd">Copy</button>
+            </div>
+            <pre id="do-cmd">git clone https://github.com/RajdeepDevelopment/smoke-monkey-canvas.git
+cd smoke-monkey-canvas/deploy
+
+<span class="c"># Set SMOKE_DOMAIN to your hostname, then start</span>
+cp .env.example .env
+nano .env
+docker compose -f docker-compose.vps.yml up -d</code></pre>
+          </div>
+
+          <div class="callout callout-info">
+            <div class="callout-title">ℹ️ Optional PostgreSQL for SQL MCP tools</div>
+            <p>
+              Canvas itself needs no database server. If you attach SQL-based MCP servers to your
+              agents, start the bundled PostgreSQL with the <code>postgres</code> profile and set
+              <code>POSTGRES_PASSWORD</code> in <code>.env</code> first &mdash; the stack is pinned to
+              <code>scram-sha-256</code>, so Postgres fails loudly rather than starting passwordless.
+              It stays on the private Docker network and is never published to the internet.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Northflank detail ──────────────────────────────────────────── -->
+    <section id="northflank">
+      <div class="wrap">
+        <div class="detail">
+          <div class="detail-head">
+            <h3><span aria-hidden="true">N</span> Deploy to Northflank</h3>
+            <span class="pill pill-ready">◷ Template ready &middot; not published</span>
+          </div>
+          <p class="detail-lede">
+            The entire stack is representable as a single Northflank Template, and that file is
+            committed to this repository &mdash; a deployment service, a persistent volume mounted
+            at <code>/app/data</code>, a public HTTP port, and a readiness probe.
+          </p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">ℹ️ Why no public one-click link</div>
+            <p>
+              Northflank generates template share links inside your own team after you create the
+              template, and that URL format is not documented publicly. Committing the template to
+              the repo and letting Northflank&rsquo;s GitOps pick it up is the supported route,
+              so this page links to the file rather than a URL we cannot verify.
+            </p>
+          </div>
+
+          <ol class="steps">
+            <li>
+              <strong>Commit / fork the template</strong>
+              <p><code>northflank.template.json</code> lives at the repository root and validates against Northflank&rsquo;s published template schema.</p>
+            </li>
+            <li>
+              <strong>Create the template from it</strong>
+              <p>Run it once in the Northflank UI, or use the official CLI. The project, volume, and service are created together. <code>northflank login</code> opens a browser to pick an API token, so create one in <em>Account settings &rarr; API tokens</em> first.</p>
+            </li>
+            <li>
+              <strong>Copy the share link</strong>
+              <p>Northflank generates it after creation. Anyone with a Northflank account can open it, add the template to their team, and run it.</p>
+            </li>
+          </ol>
+
+          <div class="code">
+            <div class="code-head">
+              <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="code-file">terminal</span>
+              <button class="copy" type="button" data-copy-target="nf-cmd">Copy</button>
+            </div>
+            <pre id="nf-cmd"><span class="c"># Create the Northflank template from the committed file</span>
+npm i -g @northflank/cli
+northflank login
+northflank create template -f northflank.template.json</code></pre>
+          </div>
+
+          <div class="callout callout-warn">
+            <div class="callout-title">⚠️ Cost notes before you deploy</div>
+            <ul>
+              <li>A payment method is required to create resources, even on the free Sandbox tier.</li>
+              <li>The template uses <code>nf-compute-50</code> (1&nbsp;GB). The 256&nbsp;MB minimum is too tight for Node plus SQLite.</li>
+              <li>Storage is billed separately (~$0.15/GB/month) and network egress at ~$0.06/GB. Calls to OpenAI or Anthropic count as egress, so set a billing alert.</li>
+              <li>Northflank never sleeps services, which makes it a good fit for cron-scheduled agents.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Docker detail ──────────────────────────────────────────────── -->
+    <section id="docker">
+      <div class="wrap">
+        <div class="detail">
+          <div class="detail-head">
+            <h3><span aria-hidden="true">🐳</span> Docker / Manual Setup</h3>
+            <span class="pill pill-live">● Available now</span>
+          </div>
+          <p class="detail-lede">
+            No provider approval, no marketplace, no waiting. Works on any machine with Docker
+            &mdash; a VPS, a NAS, a homelab box, or your laptop.
+          </p>
+
+          <h4 style="margin:24px 0 12px;font-size:15px;font-weight:800;color:#f8fafc;">Quickest &mdash; single container</h4>
+          <div class="code">
+            <div class="code-head">
+              <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="code-file">terminal</span>
+              <button class="copy" type="button" data-copy-target="docker-run">Copy</button>
+            </div>
+            <pre id="docker-run">docker run -d \
+  --name smoke-monkey-canvas \
+  --restart unless-stopped \
+  -p 3333:3333 \
+  -v smoke_canvas_data:/app/data \
+  rajdeepsadhu/smoke-monkey-canvas:latest</code></pre>
+          </div>
+          <p style="margin:-6px 0 22px;font-size:14px;color:var(--text-muted);">
+            Then open <code>http://localhost:3333</code>. The named volume is what keeps your agents
+            across restarts &mdash; do not skip <code>-v</code>.
+          </p>
+
+          <h4 style="margin:26px 0 12px;font-size:15px;font-weight:800;color:#f8fafc;">Production &mdash; TLS + optional PostgreSQL</h4>
+          <p style="margin:0 0 12px;font-size:14.5px;color:var(--text-muted);">
+            <code>deploy/docker-compose.vps.yml</code> runs the canvas image behind Caddy, which
+            obtains a certificate automatically and proxies the WebSocket stream.
+          </p>
+          <div class="code">
+            <div class="code-head">
+              <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="code-file">terminal</span>
+              <button class="copy" type="button" data-copy-target="docker-prod">Copy</button>
+            </div>
+            <pre id="docker-prod"><span class="c"># Production stack: canvas + Caddy with automatic TLS</span>
+cd deploy
+cp .env.example .env      <span class="c"># set SMOKE_DOMAIN</span>
+docker compose -f docker-compose.vps.yml up -d
+
+<span class="c"># Add PostgreSQL for SQL-based MCP servers</span>
+docker compose -f docker-compose.vps.yml --profile postgres up -d
+
+<span class="c"># Logs and shutdown</span>
+docker compose -f docker-compose.vps.yml logs -f canvas
+docker compose -f docker-compose.vps.yml down</code></pre>
+          </div>
+
+          <h4 style="margin:26px 0 12px;font-size:15px;font-weight:800;color:#f8fafc;">From source &mdash; no Docker</h4>
+          <p style="margin:0 0 12px;font-size:14.5px;color:var(--text-muted);">
+            Requires Node.js 22 or newer (for the built-in <code>node:sqlite</code> module).
+          </p>
+          <div class="code">
+            <div class="code-head">
+              <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="code-file">terminal</span>
+              <button class="copy" type="button" data-copy-target="npx-cmd">Copy</button>
+            </div>
+            <pre id="npx-cmd"><span class="c"># Run instantly, no install</span>
+npx smoke-monkey-canvas
+
+<span class="c"># Or install from source</span>
+git clone https://github.com/RajdeepDevelopment/smoke-monkey-canvas.git
+cd smoke-monkey-canvas
+npm install && npm run build
+npm start</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Spec table ─────────────────────────────────────────────────── -->
+    <section id="spec">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Under the hood</span>
+          <h2>What every deployment includes</h2>
+          <p class="section-sub">
+            No matter which provider you pick, the runtime contract is identical. That is the
+            point of shipping one image and one health endpoint.
+          </p>
+        </div>
+        <div class="detail">
+          <div class="table-scroll">
+            <table>
+              <caption class="sr-only" style="position:absolute;left:-9999px;">Deployment requirements for Smoke Monkey Canvas</caption>
+              <thead>
+                <tr><th scope="col">Requirement</th><th scope="col">Value</th><th scope="col">Why it matters</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Docker image</td><td><code>rajdeepsadhu/smoke-monkey-canvas</code></td><td>Multi-arch: <code>linux/amd64</code> and <code>linux/arm64</code></td></tr>
+                <tr><td>Listen port</td><td><code>PORT</code> (default <code>3333</code>)</td><td>Railway, Render, and DigitalOcean inject this automatically</td></tr>
+                <tr><td>Persistence</td><td><code>/app/data</code></td><td>SQLite database &mdash; <strong>must</strong> be a mounted volume/disk</td></tr>
+                <tr><td>Database path</td><td><code>SMOKE_CANVAS_DB</code></td><td>Set to <code>/app/data/canvas.db</code> on every provider here</td></tr>
+                <tr><td>Health check</td><td><code>GET /api/space</code></td><td>Readiness endpoint used by every platform</td></tr>
+                <tr><td>WebSocket</td><td><code>/ws</code></td><td>Live agent streaming &mdash; supported on all four providers</td></tr>
+                <tr><td>REST API</td><td><code>/api/*</code></td><td>Agents, sessions, skills, MCP, settings</td></tr>
+                <tr><td>Redis</td><td>Not required</td><td>No queue or cache dependency</td></tr>
+                <tr><td>PostgreSQL</td><td>Optional</td><td>Only if you attach SQL-based MCP servers to agents</td></tr>
+                <tr><td>Secrets</td><td>Encrypted in SQLite</td><td>API keys added via the UI are encrypted at rest</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Checklist ──────────────────────────────────────────────────── -->
+    <section id="after-deploy">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">After you deploy</span>
+          <h2>Four steps to your first agent</h2>
+          <p class="section-sub">Identical on every provider. Takes about two minutes.</p>
+        </div>
+        <ol class="checklist">
+          <li><span class="num">1</span><span><strong>Open your deployment URL</strong>Render, Railway, and Northflank give you a hostname on deploy. For a VPS it is the domain you pointed at the server.</span></li>
+          <li><span class="num">2</span><span><strong>Add an LLM API key</strong>Open any agent &rarr; Settings &rarr; Provider and paste a key for NVIDIA, OpenAI, Anthropic, Gemini, Groq, DeepSeek, or OpenRouter. It is encrypted at rest. Ollama needs no key.</span></li>
+          <li><span class="num">3</span><span><strong>Create your first agent</strong>Click <em>+ New Agent</em> on the canvas toolbar, pick a model, write a system prompt, then Run or just start chatting.</span></li>
+          <li><span class="num">4</span><span><strong>Back up your volume</strong>Your agents and chat history live in one SQLite file on the mounted volume. Enable provider snapshots or schedule <code>sqlite3 canvas.db &quot;.backup&quot;</code> so a bad deploy cannot cost you your workspace.</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ── FAQ ───────────────────────────────────────────────────────── -->
+    <section id="faq">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">FAQ</span>
+          <h2>Questions before you deploy</h2>
+        </div>
+        <div class="faq">
+          <details open>
+            <summary>Which provider is a real one-click deploy right now?</summary>
+            <div class="faq-body">
+              <p><strong>Render.</strong> It uses Render&rsquo;s official Blueprint deploy URL and reads the <code>render.yaml</code> at the root of this repository, so the whole stack is provisioned from one click.</p>
+              <p>Railway and Northflank both need a template published to their platform before a one-click URL exists, and DigitalOcean 1-Click Apps require Marketplace vendor approval. Each of those is shown with its true status and a working setup path instead of a button that would not work.</p>
+            </div>
+          </details>
+          <details>
+            <summary>Why is DigitalOcean not a one-click option when the others are?</summary>
+            <div class="faq-body">
+              <p>Distribution models differ. Railway and Northflank let a maintainer publish a template to a self-serve marketplace in minutes. DigitalOcean 1-Click Apps are pre-baked Ubuntu snapshots built with Packer, and becoming a Marketplace vendor requires DigitalOcean&rsquo;s approval. That is a separate application with no published SLA, and no listing has been submitted, so this page does not claim otherwise.</p>
+              <p>In the meantime a plain Ubuntu Droplet gives you the same result with more control, which is what the DigitalOcean section walks you through.</p>
+            </div>
+          </details>
+          <details>
+            <summary>Will my agents survive a redeploy?</summary>
+            <div class="faq-body">
+              <p>Yes, as long as a persistent volume or disk is mounted at <code>/app/data</code>. Every option on this page configures that mount. Your agents, chat sessions, canvas positions, and encrypted API keys live in a single SQLite file there.</p>
+              <p>The one environment where this cannot work is a platform without volume support &mdash; which is why DigitalOcean App Platform is explicitly not recommended here: its filesystem is ephemeral and is wiped on every deploy.</p>
+            </div>
+          </details>
+          <details>
+            <summary>Do I need my own LLM API key?</summary>
+            <div class="faq-body">
+              <p>Yes. Smoke Monkey Canvas orchestrates agents, it does not host models. Bring a key for NVIDIA, OpenAI, Anthropic, Gemini, Groq, DeepSeek, or OpenRouter &mdash; entered in the agent settings UI (encrypted at rest) or supplied as an environment variable such as <code>OPENAI_API_KEY</code>. If you run Ollama locally, no key is needed.</p>
+            </div>
+          </details>
+          <details>
+            <summary>Do I need Redis or PostgreSQL?</summary>
+            <div class="faq-body">
+              <p>No. The cron scheduler, the WebSocket broadcast server, and all persistence run inside the single Node.js process backed by SQLite. PostgreSQL is optional and only useful if you attach SQL-based MCP servers to your agents; the Docker stack includes it behind a profile you can switch on.</p>
+            </div>
+          </details>
+          <details>
+            <summary>Is there a hosted version I can just sign up for?</summary>
+            <div class="faq-body">
+              <p>No, deliberately. Smoke Monkey is built to be self-hosted, and the license does not permit offering it as a commercial hosted service. Deploy it to your own account on any of the providers above and you own the data, the keys, and the bill.</p>
+            </div>
+          </details>
+          <details>
+            <summary>Can I move between providers later?</summary>
+            <div class="faq-body">
+              <p>Yes. Everything is in one SQLite file. Stop the service, copy <code>/app/data/canvas.db</code> off the volume, start it on another provider, and place the file at the same path. The deployment configs differ, but your workspace is portable.</p>
+            </div>
+          </details>
+          <details>
+            <summary>What license is this under?</summary>
+            <div class="faq-body">
+              <p>The <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/blob/main/LICENSE.md">Sustainable Use License</a>. It is free for personal projects, research, and internal business tooling, and you may modify and redistribute it non-commercially. You may not offer Canvas as a commercial hosted service or SaaS product without a commercial license.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CTA ────────────────────────────────────────────────────────── -->
+    <section class="cta-strip">
+      <div class="wrap">
+        <h2>Ready when you are</h2>
+        <p class="section-sub">
+          One command locally, or one click to Render. Everything else is your own server.
+        </p>
+        <div class="cta-actions">
+          <a class="btn btn-primary"
+             href="https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas"
+             target="_blank" rel="noopener noreferrer">Deploy to Render <span aria-hidden="true">↗</span></a>
+          <a class="btn btn-secondary" href="#docker">Docker / Manual Setup</a>
+          <a class="btn btn-secondary" href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>
+      Smoke Monkey Canvas &middot; built with ❤️ by
+      <a href="https://github.com/RajdeepDevelopment" target="_blank" rel="noopener noreferrer">Rajdeep Sadhu</a>
+    </p>
+    <p style="margin-top:8px;">
+      <a href="index.html">Home</a><span class="sep">·</span>
+      <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas" target="_blank" rel="noopener noreferrer">Source</a><span class="sep">·</span>
+      <a href="https://hub.docker.com/r/rajdeepsadhu/smoke-monkey-canvas" target="_blank" rel="noopener noreferrer">Docker Hub</a><span class="sep">·</span>
+      <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer">License</a>
+    </p>
+  </footer>
+
+  <script>
+    (function () {
+      // Copy-to-clipboard for code blocks. Uses the existing <pre> text so the
+      // highlighted markup never leaks into the clipboard.
+      document.querySelectorAll('.copy').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var target = document.getElementById(btn.dataset.copyTarget);
+          if (!target) return;
+          var text = target.innerText.replace(/^\$ /gm, '');
+
+          var done = function () {
+            var original = btn.textContent;
+            btn.textContent = 'Copied';
+            btn.classList.add('done');
+            setTimeout(function () {
+              btn.textContent = original;
+              btn.classList.remove('done');
+            }, 1800);
+          };
+
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(done).catch(function () {});
+            return;
+          }
+          // Fallback for file:// and older browsers.
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); done(); } catch (e) {}
+          document.body.removeChild(ta);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

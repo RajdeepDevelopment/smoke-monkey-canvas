@@ -1,0 +1,118 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# 🐒 Smoke Monkey Canvas — Production VPS Stack
+# ──────────────────────────────────────────────────────────────────────────────
+# For any Linux VM you control: DigitalOcean, Hetzner, Vultr, Linode, AWS EC2,
+# a homelab box, or a bare-metal server.
+#
+#   git clone https://github.com/RajdeepDevelopment/smoke-monkey-canvas.git
+#   cd smoke-monkey-canvas/deploy
+#   cp .env.example .env      # set SMOKE_DOMAIN to your hostname
+#   docker compose up -d
+#
+# Caddy terminates TLS with an automatic Let's Encrypt certificate and proxies
+# to Canvas. It handles the WebSocket upgrade for /ws with no extra config.
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── TLS Reverse Proxy ───────────────────────────────────────────────────────
+  # Terminates HTTPS on 443 and forwards to the Canvas service on the private
+  # network. Port 3333 is never published to the internet.
+  caddy:
+    image: caddy:2-alpine
+    container_name: smoke-monkey-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      SMOKE_DOMAIN: ${SMOKE_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - smoke-network
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Main Canvas Server & Web UI ─────────────────────────────────────────────
+  canvas:
+    image: rajdeepsadhu/smoke-monkey-canvas:latest
+    container_name: smoke-monkey-canvas
+    restart: unless-stopped
+    depends_on:
+      caddy:
+        condition: service_started
+    environment:
+      PORT: 3333
+      SMOKE_CANVAS_DB: /app/data/canvas.db
+      NODE_ENV: production
+      # Model provider keys are optional here — keys can also be entered in the
+      # Canvas UI, where they are encrypted at rest in SQLite.
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    volumes:
+      - canvas-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3333/api/space"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - smoke-network
+
+  # ── Optional SQL Service for MCP Tools ──────────────────────────────────────
+  # Only needed if you attach SQL-based MCP servers to your agents.
+  # Internal port 5432 only — never published. Override with:
+  #   docker compose --profile postgres up -d
+  #
+  # NOTE: Compose interpolates every service in the file, even ones behind a
+  # profile, so this must NOT use a `:?` required-variable check — that would
+  # break the plain `docker compose up -d` flow for users who never enable the
+  # profile. Instead the value is optional here and `scram-sha-256` below makes
+  # Postgres refuse to start passwordless if you enable the profile without
+  # setting POSTGRES_PASSWORD in .env first.
+  postgres-mcp:
+    image: postgres:16-alpine
+    container_name: smoke-monkey-postgres
+    restart: unless-stopped
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smoke_monkey}
+      POSTGRES_USER: ${POSTGRES_USER:-canvas_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-canvas_user} -d ${POSTGRES_DB:-smoke_monkey}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smoke-network
+
+networks:
+  smoke-network:
+    name: smoke-monkey-network
+    driver: bridge
+
+volumes:
+  canvas-data:
+    name: smoke_canvas_data
+  postgres-data:
+    name: smoke_postgres_data
+  caddy-data:
+    name: smoke_caddy_data
+  caddy-config:
+    name: smoke_caddy_config

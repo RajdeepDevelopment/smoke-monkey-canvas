@@ -1265,6 +1265,24 @@ body, html, #root {
     background: rgba(2, 132, 199, 0.12) !important;
     box-shadow: 0 0 0 1px #0284c7;
   }
+
+  .mcp-stock-connect {
+    margin-top: 8px;
+    align-self: flex-start;
+    padding: 4px 12px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #fff;
+    background: #2563eb;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: #1d4ed8;
+    }
+  }
 }
 
 .mcp-stock-name {

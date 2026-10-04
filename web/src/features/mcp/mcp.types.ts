@@ -11,5 +11,7 @@ export interface StockMcp {
   oauthProvider?: string;
   keyGetUrl?: string;
   keyGetLabel?: string;
+  /** Per-env-var "get this key" link; an entry can need keys from several vendors. */
+  keyLinks?: Record<string, { url: string; label: string }>;
   isCustom?: boolean;
 }

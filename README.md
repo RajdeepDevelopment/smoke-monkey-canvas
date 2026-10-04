@@ -211,6 +211,37 @@ Frontend dev server runs at `http://localhost:5173` and proxies API/WS calls to 
 
 ---
 
+## ☁️ Cloud Deployment
+
+Full guide with per-provider walkthroughs: **[docs/deploy.html](https://rajdeepdevelopment.github.io/smoke-monkey-canvas/deploy.html)**
+
+| Provider | Status | Artifact |
+|----------|--------|----------|
+| **Render** | ✅ Working one-click deploy | [`render.yaml`](render.yaml) |
+| **Railway** | Config ready, template not published | [`.railway/railway.ts`](.railway/railway.ts) |
+| **DigitalOcean** | Requires Marketplace vendor approval | [`deploy/`](deploy/) |
+| **Northflank** | Template ready, not published | [`northflank.template.json`](northflank.template.json) |
+| **Any Docker host** | ✅ Works now | [`deploy/docker-compose.vps.yml`](deploy/docker-compose.vps.yml) |
+
+Render's one-click deploy reads `render.yaml` from this repo:
+
+```bash
+# Deploy to Render
+# https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas
+```
+
+Production stack on any Linux VM with Docker (Caddy handles automatic TLS and the WebSocket upgrade):
+
+```bash
+cd deploy
+cp .env.example .env      # set SMOKE_DOMAIN to your hostname
+docker compose -f docker-compose.vps.yml up -d
+```
+
+Every provider mounts a persistent volume at `/app/data`, which is where the SQLite database lives. Without it, agents and chat history are lost on every deploy.
+
+---
+
 ## Configuration
 
 ### Setting API Keys

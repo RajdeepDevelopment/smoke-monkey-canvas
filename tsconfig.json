@@ -17,6 +17,9 @@
   "include": [
     "server/app.server.ts",
     "server/index.ts",
-    "server/features/**/*"
+    "server/features/**/*",
+    // Railway IaC. Typechecked so a bad DSL call fails in CI instead of
+    // `railway config plan`. Needs the `railway` devDependency (npm i -D railway).
+    ".railway/railway.ts"
   ]
 }

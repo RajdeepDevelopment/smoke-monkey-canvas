@@ -1,0 +1,53 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# 🐒 Smoke Monkey Canvas — Render Blueprint
+# ──────────────────────────────────────────────────────────────────────────────
+# One-click deploy: https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas
+#
+# Render reads this file at the repository root when the Blueprint is created.
+# Canonical spec: https://render.com/docs/blueprint-spec
+# JSON Schema:    https://render.com/schema/render.yaml.json
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Canvas Server, Web UI & API ─────────────────────────────────────────────
+  # Built from the repository Dockerfile (multi-stage: web build + Node runtime).
+  # The equivalent prebuilt image is rajdeepsadhu/smoke-monkey-canvas:latest —
+  # see deploy/README.md for the `runtime: image` variant.
+  - type: web
+    name: smoke-monkey-canvas
+    runtime: docker
+    repo: https://github.com/RajdeepDevelopment/smoke-monkey-canvas
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+
+    # Persistent disks require a paid plan, so this blueprint targets the paid
+    # Starter tier. The free tier cannot hold a disk and would lose the SQLite
+    # database on every spin-down.
+    plan: starter
+    region: oregon
+
+    # Deploy-button services should not auto-deploy on push.
+    # NOTE: this value MUST stay quoted — bare `off` parses as YAML boolean false.
+    autoDeployTrigger: 'off'
+
+    # Must answer 2xx within 5s or Render restarts the instance. Keep this route cheap.
+    healthCheckPath: /api/space
+
+    # Allow in-flight agent runs to finish and close WebSockets on SIGTERM.
+    maxShutdownDelaySeconds: 120
+
+    # SQLite lives here. Losing this disk loses agents, chat history and API keys.
+    disk:
+      name: canvas-data
+      mountPath: /app/data
+      sizeGB: 5
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SMOKE_CANVAS_DB
+        value: /app/data/canvas.db
+
+      # Render injects PORT automatically and the server honours it
+      # (`process.env.PORT || 3333`), so PORT is intentionally not set here.

@@ -77,6 +77,7 @@ export const McpModal: React.FC<McpModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [serverKeys, setServerKeys] = useState<Record<string, { isSet: boolean }>>({});
   const [oauthSuccess, setOauthSuccess] = useState<string | null>(null);
+  const [oauthViaToken, setOauthViaToken] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
@@ -119,6 +120,14 @@ export const McpModal: React.FC<McpModalProps> = ({
     loadServerKeys();
 
     const handleWindowMessage = (e: MessageEvent) => {
+      if (e.data && e.data.type === 'MCP_OAUTH_ERROR') {
+        setTestResult({
+          success: false,
+          message: `Authorization failed: ${e.data.message || 'the provider rejected the request'}`,
+        });
+        setTimeout(() => setTestResult(null), 12000);
+        return;
+      }
       if (e.data && e.data.type === 'MCP_OAUTH_SUCCESS') {
         const { key, token, secondaryKeys, mcpName } = e.data;
         if (key && token) {
@@ -142,6 +151,7 @@ export const McpModal: React.FC<McpModalProps> = ({
         }
         loadServerKeys();
         setOauthSuccess(mcpName || 'Connected');
+        setOauthViaToken(!!e.data.viaToken);
         setTimeout(() => setOauthSuccess(null), 4000);
       }
     };
@@ -252,12 +262,28 @@ export const McpModal: React.FC<McpModalProps> = ({
   };
 
   const handleOAuthConnect = (mcp: StockMcp) => {
+    if (!mcp?.name) {
+      console.error('handleOAuthConnect called without a server name');
+      return;
+    }
     const popupWidth = 500;
     const popupHeight = 650;
     const left = window.screenX + (window.outerWidth - popupWidth) / 2;
     const top = window.screenY + (window.outerHeight - popupHeight) / 2;
-    const authUrl = `/api/mcp/oauth/${mcp.name}/authorize`;
-    window.open(authUrl, `Connect_${mcp.name}`, `width=${popupWidth},height=${popupHeight},left=${left},top=${top}`);
+    const authUrl = `/api/mcp/oauth/${encodeURIComponent(mcp.name)}/start`;
+    // A unique window name per attempt, so a second Connect never reuses (and
+    // re-navigates) the popup left over from a previous server.
+    const popup = window.open(
+      authUrl,
+      `Connect_${mcp.name}_${Date.now()}`,
+      `width=${popupWidth},height=${popupHeight},left=${left},top=${top}`
+    );
+    if (!popup) {
+      setTestResult({
+        success: false,
+        message: 'The connect window was blocked. Allow popups for this site and try again.',
+      });
+    }
   };
 
   const isMcpConfigured = (mcp: StockMcp) => {
@@ -281,8 +307,21 @@ export const McpModal: React.FC<McpModalProps> = ({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Connection test failed');
-      setTestResult({ success: true, message: `${data.message} (${data.latencyMs}ms latency)` });
-      setTimeout(() => setTestResult(null), 5000);
+      // The endpoint reports real handshake failures with HTTP 200 + success:false,
+      // so success must be read from the payload rather than the status code.
+      if (!data.success) {
+        setTestResult({ success: false, message: data.error || 'Connection test failed' });
+        setTimeout(() => setTestResult(null), 12000);
+        return;
+      }
+      const toolNote = data.tools?.length
+        ? ` Tools: ${data.tools.slice(0, 6).join(', ')}${data.tools.length > 6 ? ', …' : ''}`
+        : '';
+      setTestResult({
+        success: true,
+        message: `${data.message} (${data.latencyMs}ms)${toolNote}`,
+      });
+      setTimeout(() => setTestResult(null), 12000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Connection test failed';
       setTestResult({ success: false, message: msg });
@@ -407,7 +446,10 @@ export const McpModal: React.FC<McpModalProps> = ({
           {oauthSuccess && (
             <div style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', padding: '8px 12px', borderRadius: 8, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
               <CheckCircle2 size={15} />
-              <span>Successfully linked {oauthSuccess} account via OAuth!</span>
+              <span>
+                Successfully linked {oauthSuccess} account{' '}
+                {oauthViaToken ? 'with the credentials you saved.' : 'via OAuth.'}
+              </span>
             </div>
           )}
 
@@ -605,6 +647,20 @@ export const McpModal: React.FC<McpModalProps> = ({
                         </div>
                       </div>
                       <div className="mcp-stock-desc" style={{ fontSize: 11, marginTop: 4 }}>{s.description}</div>
+                      {isOAuth && !isAttached && (
+                        <button
+                          type="button"
+                          className="mcp-stock-connect"
+                          title={`Connect ${s.label}`}
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            setSelectedStock(s);
+                            handleOAuthConnect(s);
+                          }}
+                        >
+                          Connect
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -828,6 +884,13 @@ export const McpModal: React.FC<McpModalProps> = ({
                       </div>
                       {selectedStock.envKeys.map((envKey) => {
                         const isSet = serverKeys[envKey]?.isSet;
+                        // Prefer this exact key's own vendor console; fall back to
+                        // the entry-level link. Self-hosted config (DB_HOST,
+                        // *_PATH, *_MAX_RESULTS ...) has no key to fetch, so say so
+                        // instead of showing a dead link.
+                        const perKey = selectedStock.keyLinks?.[envKey];
+                        const getUrl = perKey?.url || selectedStock.keyGetUrl;
+                        const getLabel = perKey?.label || selectedStock.keyGetLabel || 'Get Key';
                         return (
                           <div key={envKey} className="form-group" style={{ marginBottom: 8 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
@@ -835,16 +898,23 @@ export const McpModal: React.FC<McpModalProps> = ({
                                 <span>{envKey}</span>
                                 {isSet && <span style={{ color: '#10b981', fontSize: 10, fontWeight: 600 }}>✓ Saved in Settings</span>}
                               </label>
-                              {selectedStock.keyGetUrl && (
+                              {getUrl ? (
                                 <a
-                                  href={selectedStock.keyGetUrl}
+                                  href={getUrl}
                                   target="_blank"
                                   rel="noreferrer"
                                   style={{ fontSize: 10.5, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}
                                 >
-                                  <span>{selectedStock.keyGetLabel || 'Get Key'}</span>
+                                  <span>{getLabel}</span>
                                   <ExternalLink size={10} />
                                 </a>
+                              ) : (
+                                <span
+                                  title="This is your own deployment value, not a vendor API key"
+                                  style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))', fontWeight: 500 }}
+                                >
+                                  Your own value
+                                </span>
                               )}
                             </div>
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
