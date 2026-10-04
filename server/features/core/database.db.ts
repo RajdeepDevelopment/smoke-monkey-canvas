@@ -219,10 +219,10 @@ export class CoreDatabase {
   // ── Settings ───────────────────────────────────────────────────────────────
 
   private seedDefaultSettings(): void {
-    // Seed user's provided NVIDIA API key if not already set
-    const userNvidiaKey = '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';
-    this.setSetting('NVIDIA_API_KEY', userNvidiaKey);
-    process.env.NVIDIA_API_KEY = userNvidiaKey;
+    // Seed from process.env if provided at boot
+    if (process.env.NVIDIA_API_KEY && !this.getSetting('NVIDIA_API_KEY')) {
+      this.setSetting('NVIDIA_API_KEY', process.env.NVIDIA_API_KEY);
+    }
   }
 
   getSetting(key: string): string | null {
