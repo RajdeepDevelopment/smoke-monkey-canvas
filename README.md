@@ -218,7 +218,7 @@ Full guide with per-provider walkthroughs: **[docs/deploy.html](https://rajdeepd
 | Provider | Type | 1-Click Link | Artifact |
 |----------|------|:---:|----------|
 | **Render** | Managed Cloud | [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas) | [`render.yaml`](render.yaml) |
-| **DigitalOcean** | App Platform | [![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas) | [`.do/deploy.template.yaml`](.do/deploy.template.yaml) |
+| **DigitalOcean** | App Platform | [![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas/tree/main) | [`.do/deploy.template.yaml`](.do/deploy.template.yaml) |
 | **Koyeb** | Serverless Containers | [![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=docker&name=smoke-monkey-canvas&docker=docker.io/rajdeepsadhu/smoke-monkey-canvas:latest&ports=3333;http;/) | Docker Hub Official Image |
 | **Railway** | Cloud Infrastructure | [Deploy on Railway](https://railway.com/new) | [`.railway/railway.ts`](.railway/railway.ts) |
 | **Fly.io** | Global Edge | `fly launch` | [`fly.toml`](fly.toml) |
