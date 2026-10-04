@@ -1,0 +1,27 @@
+spec:
+  name: smoke-monkey-canvas
+  region: nyc
+  services:
+    - name: web
+      image:
+        registry_type: DOCKER_HUB
+        registry: rajdeepsadhu
+        repository: smoke-monkey-canvas
+        tag: latest
+      instance_size_slug: apps-s-1vcpu-1gb
+      instance_count: 1
+      http_port: 3333
+      routes:
+        - path: /
+      health_check:
+        http_path: /api/space
+        initial_delay_seconds: 15
+        period_seconds: 10
+        timeout_seconds: 5
+        success_threshold: 1
+        failure_threshold: 3
+      envs:
+        - key: NODE_ENV
+          value: production
+        - key: SMOKE_CANVAS_DB
+          value: /app/data/canvas.db

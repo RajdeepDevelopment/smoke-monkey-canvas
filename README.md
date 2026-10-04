@@ -215,20 +215,15 @@ Frontend dev server runs at `http://localhost:5173` and proxies API/WS calls to 
 
 Full guide with per-provider walkthroughs: **[docs/deploy.html](https://rajdeepdevelopment.github.io/smoke-monkey-canvas/deploy.html)**
 
-| Provider | Status | Artifact |
-|----------|--------|----------|
-| **Render** | ✅ Working one-click deploy | [`render.yaml`](render.yaml) |
-| **Railway** | Config ready, template not published | [`.railway/railway.ts`](.railway/railway.ts) |
-| **DigitalOcean** | Requires Marketplace vendor approval | [`deploy/`](deploy/) |
-| **Northflank** | Template ready, not published | [`northflank.template.json`](northflank.template.json) |
-| **Any Docker host** | ✅ Works now | [`deploy/docker-compose.vps.yml`](deploy/docker-compose.vps.yml) |
-
-Render's one-click deploy reads `render.yaml` from this repo:
-
-```bash
-# Deploy to Render
-# https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas
-```
+| Provider | Type | 1-Click Link | Artifact |
+|----------|------|:---:|----------|
+| **Render** | Managed Cloud | [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas) | [`render.yaml`](render.yaml) |
+| **DigitalOcean** | App Platform | [![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas) | [`.do/deploy.template.yaml`](.do/deploy.template.yaml) |
+| **Koyeb** | Serverless Containers | [![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=docker&name=smoke-monkey-canvas&docker=docker.io/rajdeepsadhu/smoke-monkey-canvas:latest&ports=3333;http;/) | Docker Hub Official Image |
+| **Railway** | Cloud Infrastructure | [Deploy on Railway](https://railway.com/new) | [`.railway/railway.ts`](.railway/railway.ts) |
+| **Fly.io** | Global Edge | `fly launch` | [`fly.toml`](fly.toml) |
+| **Northflank** | Container Cloud | Template Ready | [`northflank.template.json`](northflank.template.json) |
+| **Any Docker host** | Self-Hosted VM | Compose 1-Liner | [`deploy/docker-compose.vps.yml`](deploy/docker-compose.vps.yml) |
 
 Production stack on any Linux VM with Docker (Caddy handles automatic TLS and the WebSocket upgrade):
 

@@ -34,9 +34,6 @@ services:
     # Must answer 2xx within 5s or Render restarts the instance. Keep this route cheap.
     healthCheckPath: /api/space
 
-    # Allow in-flight agent runs to finish and close WebSockets on SIGTERM.
-    maxShutdownDelaySeconds: 120
-
     # SQLite lives here. Losing this disk loses agents, chat history and API keys.
     disk:
       name: canvas-data

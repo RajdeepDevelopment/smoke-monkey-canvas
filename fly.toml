@@ -1,0 +1,28 @@
+# 🐒 Smoke Monkey Canvas — Fly.io Configuration
+app = "smoke-monkey-canvas"
+primary_region = "iad"
+
+[build]
+  image = "rajdeepsadhu/smoke-monkey-canvas:latest"
+
+[http_service]
+  internal_port = 3333
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  grace_period = "15s"
+  interval = "15s"
+  method = "GET"
+  timeout = "5s"
+  path = "/api/space"
+
+[env]
+  NODE_ENV = "production"
+  SMOKE_CANVAS_DB = "/app/data/canvas.db"
+
+[mounts]
+  source = "canvas_data"
+  destination = "/app/data"

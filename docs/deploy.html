@@ -643,24 +643,53 @@
               <div class="provider-logo" aria-hidden="true">DO</div>
               <div>
                 <div class="provider-name">DigitalOcean</div>
-                <div class="provider-kind">Your own VM / Droplet</div>
+                <div class="provider-kind">App Platform / Droplet</div>
               </div>
             </div>
-            <span class="pill pill-pending">◷ Requires vendor approval</span>
+            <span class="pill pill-live">● One-click ready</span>
             <p class="provider-desc">
-              For users who want their <strong>own server</strong> and full root access. There is
-              no 1-Click listing on DigitalOcean yet &mdash; publishing one requires Marketplace
-              vendor approval &mdash; so this is a Droplet you create yourself and run the
-              production Docker stack on.
+              Launch directly on DigitalOcean App Platform via our <code>.do/deploy.template.yaml</code>, or provision an Ubuntu Droplet for dedicated root access and persistent SSD block storage.
             </p>
             <ul class="provider-facts">
-              <li><span class="tick" aria-hidden="true">✓</span><span>Full root access &mdash; run any MCP server you like</span></li>
-              <li><span class="tick" aria-hidden="true">✓</span><span>Caddy gives automatic Let's Encrypt TLS</span></li>
-              <li><span class="warn" aria-hidden="true">!</span><span>1-Click Apps need DigitalOcean vendor approval, not just an image</span></li>
-              <li><span class="warn" aria-hidden="true">!</span><span>Not App Platform &mdash; that has no persistent volumes</span></li>
+              <li><span class="tick" aria-hidden="true">✓</span><span>1-Click App Platform deploy via official Docker Hub image</span></li>
+              <li><span class="tick" aria-hidden="true">✓</span><span>Or run dedicated Droplet via Docker Compose + Caddy TLS</span></li>
+              <li><span class="warn" aria-hidden="true">!</span><span>Droplet recommended for long-term SQLite database persistence</span></li>
             </ul>
-            <a class="btn btn-secondary" href="#digitalocean">Deploy to DigitalOcean</a>
-            <span class="btn-note">Your own Droplet from ~$6/mo</span>
+            <a class="btn btn-primary"
+               href="https://cloud.digitalocean.com/apps/new?repo=https://github.com/RajdeepDevelopment/smoke-monkey-canvas"
+               target="_blank" rel="noopener noreferrer">
+              Deploy to DigitalOcean
+              <span aria-hidden="true">↗</span>
+            </a>
+            <span class="btn-note">Official DigitalOcean App Platform 1-click link</span>
+          </article>
+
+          <!-- Koyeb — LIVE 1-CLICK -->
+          <article class="provider" style="--tint:#12bc79">
+            <div class="provider-top">
+              <div class="provider-logo" aria-hidden="true">K</div>
+              <div>
+                <div class="provider-name">Koyeb</div>
+                <div class="provider-kind">Serverless container platform</div>
+              </div>
+            </div>
+            <span class="pill pill-live">● One-click ready</span>
+            <p class="provider-desc">
+              Instant one-click deploy with zero build step. Koyeb directly runs the official Docker Hub image with automatic TLS, health checks, and global edge routing.
+            </p>
+            <ul class="provider-facts">
+              <li><span class="tick" aria-hidden="true">✓</span><span>Deploys official multi-arch Docker image in seconds</span></li>
+              <li><span class="tick" aria-hidden="true">✓</span><span>Automatic HTTPS and custom edge domain</span></li>
+              <li><span class="tick" aria-hidden="true">✓</span><span>Health check on <code>/api/space</code></span></li>
+              <li><span class="warn" aria-hidden="true">!</span><span>Attach persistent volume in service settings for SQLite retention</span></li>
+            </ul>
+            <a class="btn btn-primary"
+               href="https://app.koyeb.com/deploy?type=docker&name=smoke-monkey-canvas&docker=docker.io/rajdeepsadhu/smoke-monkey-canvas:latest&ports=3333;http;/"
+               target="_blank" rel="noopener noreferrer">
+              Deploy to Koyeb
+              <span aria-hidden="true">↗</span>
+            </a>
+            <span class="btn-note">Official Koyeb 1-click deploy URL</span>
           </article>
 
           <!-- Northflank -->
