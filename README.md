@@ -96,25 +96,47 @@ smoke-monkey-canvas/
 
 ## Quick Start
 
-### ⚡ Option 1: Instant Launch with NPX (No Install Needed)
+### 🚀 Option 1: Global CLI & Background Daemon (Recommended)
 
-Run the Canvas immediately on any machine with Node.js ≥ 22:
+Install globally once, then control your background Canvas from any terminal directory:
 
 ```bash
-# Start in foreground and automatically open browser
-npx smoke-monkey-canvas
+# 1. Install globally
+npm install -g @smoke-monkey/canvas
 
-# Run continuously in background (daemon mode)
-npx smoke-monkey-canvas --daemon
+# 2. Start Canvas as a background daemon (warp-cli style)
+smoke-monkey start
 
-# Check background daemon status
-npx smoke-monkey-canvas --status
+# 3. Check status, port, and PID
+smoke-monkey status
+
+# 4. View live logs anytime
+smoke-monkey logs -f
+
+# 5. Open Web UI in browser
+smoke-monkey open
+
+# 6. Stop the background daemon
+smoke-monkey stop
+```
+
+*(You can also use `canvas` or `smoke-monkey-canvas` as command aliases).*
+
+---
+
+### ⚡ Option 2: Instant Zero-Install with NPX
+
+Run directly without installing:
+
+```bash
+# Start background daemon
+npx @smoke-monkey/canvas start
+
+# Check status
+npx @smoke-monkey/canvas status
 
 # Stop background daemon
-npx smoke-monkey-canvas --stop
-
-# Run on a custom port
-npx smoke-monkey-canvas --port 8080
+npx @smoke-monkey/canvas stop
 ```
 
 ---
