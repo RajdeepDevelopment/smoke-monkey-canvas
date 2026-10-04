@@ -101,8 +101,7 @@ jobs:
         if: >
           github.event_name != 'pull_request' &&
           github.ref == 'refs/heads/main' &&
-          vars.DOCKERHUB_USERNAME != '' &&
-          secrets.DOCKERHUB_TOKEN != ''
+          vars.DOCKERHUB_USERNAME != ''
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
