@@ -7,6 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, State, WindowEvent};
 
 // ── Backend Handle & Port Configuration ─────────────────────────────────
@@ -1001,6 +1002,204 @@ fn open_system_link(app: tauri::AppHandle, url: String) -> Result<(), String> {
     app.shell().open(&url, None).map_err(|e| e.to_string())
 }
 
+fn setup_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let handle = app.handle();
+
+    // ── 1. App Submenu (macOS native application menu) ──
+    let app_about = PredefinedMenuItem::about(handle, Some("About Smoke Monkey Canvas"), None)?;
+    let app_sep1 = PredefinedMenuItem::separator(handle)?;
+    let app_updates = MenuItem::with_id(handle, "check_updates", "Check for Updates…", true, None::<&str>)?;
+    let app_settings = MenuItem::with_id(handle, "api_keys", "Preferences: API Keys…", true, Some("CmdOrCtrl+,"))?;
+    let app_sep2 = PredefinedMenuItem::separator(handle)?;
+    let app_services = PredefinedMenuItem::services(handle, None)?;
+    let app_sep3 = PredefinedMenuItem::separator(handle)?;
+    let app_hide = PredefinedMenuItem::hide(handle, None)?;
+    let app_hide_others = PredefinedMenuItem::hide_others(handle, None)?;
+    let app_show_all = PredefinedMenuItem::show_all(handle, None)?;
+    let app_sep4 = PredefinedMenuItem::separator(handle)?;
+    let app_quit = PredefinedMenuItem::quit(handle, None)?;
+
+    let app_menu = Submenu::with_items(
+        handle,
+        "Smoke Monkey Canvas",
+        true,
+        &[
+            &app_about,
+            &app_sep1,
+            &app_updates,
+            &app_settings,
+            &app_sep2,
+            &app_services,
+            &app_sep3,
+            &app_hide,
+            &app_hide_others,
+            &app_show_all,
+            &app_sep4,
+            &app_quit,
+        ],
+    )?;
+
+    // ── 2. File Submenu ──
+    let file_new_agent = MenuItem::with_id(handle, "new_agent", "New Agent…", true, Some("CmdOrCtrl+N"))?;
+    let file_quick_agent = MenuItem::with_id(handle, "quick_blank_agent", "Quick Blank Agent", true, Some("CmdOrCtrl+Shift+N"))?;
+    let file_sep1 = PredefinedMenuItem::separator(handle)?;
+    let file_browser = MenuItem::with_id(handle, "open_web_canvas", "Open Canvas in Browser", true, Some("CmdOrCtrl+Shift+B"))?;
+    let file_agents_dir = MenuItem::with_id(handle, "open_agents_dir", "Reveal Agents Directory in Finder", true, Some("CmdOrCtrl+Shift+O"))?;
+    let file_db_dir = MenuItem::with_id(handle, "open_db_dir", "Reveal Runtime Data (~/.smoke-monkey)", true, None::<&str>)?;
+    let file_sep2 = PredefinedMenuItem::separator(handle)?;
+    let file_close = PredefinedMenuItem::close_window(handle, None)?;
+
+    let file_menu = Submenu::with_items(
+        handle,
+        "File",
+        true,
+        &[
+            &file_new_agent,
+            &file_quick_agent,
+            &file_sep1,
+            &file_browser,
+            &file_agents_dir,
+            &file_db_dir,
+            &file_sep2,
+            &file_close,
+        ],
+    )?;
+
+    // ── 3. Edit Submenu ──
+    let edit_undo = PredefinedMenuItem::undo(handle, None)?;
+    let edit_redo = PredefinedMenuItem::redo(handle, None)?;
+    let edit_sep1 = PredefinedMenuItem::separator(handle)?;
+    let edit_cut = PredefinedMenuItem::cut(handle, None)?;
+    let edit_copy = PredefinedMenuItem::copy(handle, None)?;
+    let edit_paste = PredefinedMenuItem::paste(handle, None)?;
+    let edit_select_all = PredefinedMenuItem::select_all(handle, None)?;
+
+    let edit_menu = Submenu::with_items(
+        handle,
+        "Edit",
+        true,
+        &[
+            &edit_undo,
+            &edit_redo,
+            &edit_sep1,
+            &edit_cut,
+            &edit_copy,
+            &edit_paste,
+            &edit_select_all,
+        ],
+    )?;
+
+    // ── 4. View Submenu ──
+    let view_fit = MenuItem::with_id(handle, "fit_view", "Fit Canvas to View", true, Some("Space"))?;
+    let view_reset_zoom = MenuItem::with_id(handle, "reset_zoom", "Actual Size (100%)", true, Some("CmdOrCtrl+0"))?;
+    let view_zoom_in = MenuItem::with_id(handle, "zoom_in", "Zoom In", true, Some("CmdOrCtrl+="))?;
+    let view_zoom_out = MenuItem::with_id(handle, "zoom_out", "Zoom Out", true, Some("CmdOrCtrl+-"))?;
+    let view_sep1 = PredefinedMenuItem::separator(handle)?;
+
+    let tab_mcp = MenuItem::with_id(handle, "tab_mcp", "MCP Servers", true, Some("CmdOrCtrl+1"))?;
+    let tab_skills = MenuItem::with_id(handle, "tab_skills", "Agent Skills", true, Some("CmdOrCtrl+2"))?;
+    let tab_agents = MenuItem::with_id(handle, "tab_agents", "Agent Templates", true, Some("CmdOrCtrl+3"))?;
+    let tab_tools = MenuItem::with_id(handle, "tab_tools", "Toolkits & Directives", true, Some("CmdOrCtrl+4"))?;
+    let tab_persona = MenuItem::with_id(handle, "tab_persona", "Personas & Voices", true, Some("CmdOrCtrl+5"))?;
+    let tab_output = MenuItem::with_id(handle, "tab_output", "Output Styles", true, Some("CmdOrCtrl+6"))?;
+    let sub_library = Submenu::with_items(
+        handle,
+        "Library Panels",
+        true,
+        &[&tab_mcp, &tab_skills, &tab_agents, &tab_tools, &tab_persona, &tab_output],
+    )?;
+
+    let view_sidebar = MenuItem::with_id(handle, "toggle_sidebar", "Toggle Library Dock", true, Some("CmdOrCtrl+B"))?;
+    let view_sep2 = PredefinedMenuItem::separator(handle)?;
+    let view_theme = MenuItem::with_id(handle, "toggle_theme", "Cycle Color Theme", true, Some("CmdOrCtrl+T"))?;
+    let view_sep3 = PredefinedMenuItem::separator(handle)?;
+    let view_fullscreen = PredefinedMenuItem::fullscreen(handle, None)?;
+
+    let view_menu = Submenu::with_items(
+        handle,
+        "View",
+        true,
+        &[
+            &view_fit,
+            &view_reset_zoom,
+            &view_zoom_in,
+            &view_zoom_out,
+            &view_sep1,
+            &view_sidebar,
+            &sub_library,
+            &view_sep2,
+            &view_theme,
+            &view_sep3,
+            &view_fullscreen,
+        ],
+    )?;
+
+    // ── 5. Agents Submenu ──
+    let agent_new = MenuItem::with_id(handle, "new_agent", "Add Agent…", true, Some("CmdOrCtrl+Alt+A"))?;
+    let agent_fit = MenuItem::with_id(handle, "fit_view", "Focus All Agents", true, None::<&str>)?;
+    let agent_sep1 = PredefinedMenuItem::separator(handle)?;
+    let agent_drawer = MenuItem::with_id(handle, "open_drawer", "Toggle Live Execution Drawer", true, Some("CmdOrCtrl+J"))?;
+    let agent_keys = MenuItem::with_id(handle, "api_keys", "Configure Provider Keys…", true, None::<&str>)?;
+
+    let agents_menu = Submenu::with_items(
+        handle,
+        "Agents",
+        true,
+        &[&agent_new, &agent_fit, &agent_sep1, &agent_drawer, &agent_keys],
+    )?;
+
+    // ── 6. Window Submenu ──
+    let win_min = PredefinedMenuItem::minimize(handle, None)?;
+    let win_max = PredefinedMenuItem::maximize(handle, None)?;
+    let win_sep = PredefinedMenuItem::separator(handle)?;
+    let win_close = PredefinedMenuItem::close_window(handle, None)?;
+
+    let window_menu = Submenu::with_items(
+        handle,
+        "Window",
+        true,
+        &[&win_min, &win_max, &win_sep, &win_close],
+    )?;
+
+    // ── 7. Help Submenu ──
+    let help_docs = MenuItem::with_id(handle, "docs", "Smoke Monkey Documentation", true, None::<&str>)?;
+    let help_harness = MenuItem::with_id(handle, "harness_guide", "Smoke Monkey Harness Architecture", true, None::<&str>)?;
+    let help_repo = MenuItem::with_id(handle, "canvas_repo", "Smoke Monkey Canvas GitHub", true, None::<&str>)?;
+    let help_notes = MenuItem::with_id(handle, "release_notes", "Release Notes & Changelog", true, None::<&str>)?;
+    let help_sep = PredefinedMenuItem::separator(handle)?;
+    let help_updates = MenuItem::with_id(handle, "check_updates", "Check for Updates…", true, None::<&str>)?;
+
+    let help_menu = Submenu::with_items(
+        handle,
+        "Help",
+        true,
+        &[
+            &help_docs,
+            &help_harness,
+            &help_repo,
+            &help_notes,
+            &help_sep,
+            &help_updates,
+        ],
+    )?;
+
+    let menu = Menu::with_items(
+        handle,
+        &[
+            &app_menu,
+            &file_menu,
+            &edit_menu,
+            &view_menu,
+            &agents_menu,
+            &window_menu,
+            &help_menu,
+        ],
+    )?;
+
+    app.set_menu(menu)?;
+    Ok(())
+}
+
 // ── Entry Point ──────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1010,6 +1209,63 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_shell::init())
         .manage(TerminalManager::new())
+        .on_menu_event(|app, event| {
+            let id = event.id().as_ref();
+            eprintln!("[Menu] Clicked item: {id}");
+
+            let home_dir = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .unwrap_or_else(|_| ".".to_string());
+
+            match id {
+                "open_agents_dir" => {
+                    let dir = std::path::Path::new(&home_dir).join(".smoke-agents");
+                    let _ = std::fs::create_dir_all(&dir);
+                    #[cfg(target_os = "macos")]
+                    let _ = Command::new("open").arg(&dir).spawn();
+                    #[cfg(target_os = "windows")]
+                    let _ = Command::new("explorer").arg(&dir).spawn();
+                    #[cfg(target_os = "linux")]
+                    let _ = Command::new("xdg-open").arg(&dir).spawn();
+                }
+                "open_db_dir" => {
+                    let dir = std::path::Path::new(&home_dir).join(".smoke-monkey");
+                    let _ = std::fs::create_dir_all(&dir);
+                    #[cfg(target_os = "macos")]
+                    let _ = Command::new("open").arg(&dir).spawn();
+                    #[cfg(target_os = "windows")]
+                    let _ = Command::new("explorer").arg(&dir).spawn();
+                    #[cfg(target_os = "linux")]
+                    let _ = Command::new("xdg-open").arg(&dir).spawn();
+                }
+                "open_web_canvas" => {
+                    use tauri_plugin_shell::ShellExt;
+                    let port = get_canvas_port();
+                    let url = format!("http://localhost:{port}");
+                    let _ = app.shell().open(&url, None);
+                }
+                "docs" => {
+                    use tauri_plugin_shell::ShellExt;
+                    let _ = app.shell().open("https://github.com/smoke-monkey/smoke-monkey-canvas#readme", None);
+                }
+                "harness_guide" => {
+                    use tauri_plugin_shell::ShellExt;
+                    let _ = app.shell().open("https://github.com/smoke-monkey/smoke-monkey-harness#readme", None);
+                }
+                "canvas_repo" => {
+                    use tauri_plugin_shell::ShellExt;
+                    let _ = app.shell().open("https://github.com/smoke-monkey/smoke-monkey-canvas", None);
+                }
+                "release_notes" => {
+                    use tauri_plugin_shell::ShellExt;
+                    let _ = app.shell().open("https://github.com/smoke-monkey/smoke-monkey-canvas/releases", None);
+                }
+                _ => {
+                    // Forward UI actions to webview
+                    let _ = app.emit("menu-action", id);
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             proxy_fetch,
             proxy_fetch_streaming,
@@ -1026,6 +1282,7 @@ pub fn run() {
             open_system_link,
         ])
         .setup(|app| {
+            let _ = setup_menu(app);
             // Build the main canvas window with strict navigation interceptor
             // so any external links automatically open in default system browser
             let app_handle = app.handle().clone();

@@ -357,3 +357,40 @@ export async function pickNativeDirectory(title: string = 'Select Working Direct
 
   return null;
 }
+
+/**
+ * Register a listener for Tauri desktop native menu actions.
+ * Returns an unlisten cleanup function.
+ */
+export function onMenuAction(callback: (actionId: string) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const windowHandler = (e: Event) => {
+    const customEvent = e as CustomEvent<string>;
+    if (customEvent.detail) callback(customEvent.detail);
+  };
+  window.addEventListener('canvas-menu-action', windowHandler);
+
+  let unlistenTauri: (() => void) | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tauri = (window as any).__TAURI__;
+  if (tauri?.event?.listen) {
+    tauri.event
+      .listen('menu-action', (event: { payload: string }) => {
+        if (typeof event.payload === 'string') {
+          callback(event.payload);
+        }
+      })
+      .then((unlistenFn: () => void) => {
+        unlistenTauri = unlistenFn;
+      })
+      .catch((err: unknown) => {
+        console.warn('[DesktopBridge] Failed to bind menu-action listener:', err);
+      });
+  }
+
+  return () => {
+    window.removeEventListener('canvas-menu-action', windowHandler);
+    if (unlistenTauri) unlistenTauri();
+  };
+}

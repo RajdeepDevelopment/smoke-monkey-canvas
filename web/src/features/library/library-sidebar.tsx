@@ -485,6 +485,31 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     checkAppVersion();
   }, [checkAppVersion]);
 
+  // ── Native Desktop Menu & Global Key Action Listeners ──
+  useEffect(() => {
+    const handleSetTab = (e: Event) => {
+      const tab = (e as CustomEvent<LibraryTab>).detail;
+      setActiveTab(tab);
+      setSelectedDetail(null);
+    };
+    const handleToggleDock = () => {
+      setActiveTab((prev) => (prev ? null : 'mcp'));
+      setSelectedDetail(null);
+    };
+    const handleCheckUpdate = () => {
+      checkAppVersion();
+      setShowVersionModal(true);
+    };
+    window.addEventListener('canvas-set-library-tab', handleSetTab);
+    window.addEventListener('canvas-toggle-library', handleToggleDock);
+    window.addEventListener('canvas-check-updates', handleCheckUpdate);
+    return () => {
+      window.removeEventListener('canvas-set-library-tab', handleSetTab);
+      window.removeEventListener('canvas-toggle-library', handleToggleDock);
+      window.removeEventListener('canvas-check-updates', handleCheckUpdate);
+    };
+  }, [checkAppVersion]);
+
   // ── Custom Persistent Collections (Stored in localStorage) ──
   const [customMcps, setCustomMcps] = useState<StockMcp[]>(() => loadCustomStorage<StockMcp>(STORAGE_KEYS.mcps));
   const [customSkills, setCustomSkills] = useState<StockSkillItem[]>(() => loadCustomStorage<StockSkillItem>(STORAGE_KEYS.skills));

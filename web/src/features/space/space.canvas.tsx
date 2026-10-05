@@ -15,8 +15,9 @@ import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { SpaceAgentEntity, AgentRecord } from '../agent/agent.types.js';
 import type { SpaceContextMenuState, AgentNode } from './space.types.js';
 import { CrabAgentNode } from '../agent/agent.crab-node.js';
-import { SpaceToolbar, type ThemeMode } from './space.toolbar.js';
+import { SpaceToolbar, type ThemeMode, THEMES } from './space.toolbar.js';
 import { SpaceContextMenu } from './space.context-menu.js';
+import { onMenuAction } from '../../config/desktop.bridge.js';
 import { AgentModal } from '../agent/agent.modal.js';
 import { McpModal } from '../mcp/mcp.modal.js';
 import { SkillModal } from '../skill/skill.modal.js';
@@ -942,6 +943,159 @@ export const SpaceCanvas: React.FC = () => {
     },
     [],
   );
+
+  // ── Native Desktop Menu & System Shortcuts Listener ──
+  useEffect(() => {
+    const unlisten = onMenuAction((actionId) => {
+      switch (actionId) {
+        case 'new_agent':
+        case 'new_agent_menu':
+          handleAddAgentClick();
+          break;
+        case 'quick_blank_agent':
+          AgentService.createAgent({
+            name: `Agent ${agents.length + 1}`,
+            model: 'anthropic/claude-3-7-sonnet',
+            provider: 'anthropic',
+            system_prompt: 'You are an autonomous AI specialist working in Smoke Monkey Canvas.',
+            pos_x: 320,
+            pos_y: 240,
+          })
+            .then(() => refreshSpace())
+            .catch((err) => console.warn('Failed to quick add blank agent:', err));
+          break;
+        case 'api_keys':
+        case 'api_keys_agents':
+          setIsSettingsModalOpen(true);
+          break;
+        case 'fit_view':
+        case 'fit_view_agents':
+          handleFitViewClick();
+          break;
+        case 'reset_zoom':
+          if (rfInstance) rfInstance.zoomTo(1.0, { duration: 300 });
+          break;
+        case 'zoom_in':
+          if (rfInstance) rfInstance.zoomIn({ duration: 300 });
+          break;
+        case 'zoom_out':
+          if (rfInstance) rfInstance.zoomOut({ duration: 300 });
+          break;
+        case 'toggle_sidebar':
+          window.dispatchEvent(new CustomEvent('canvas-toggle-library'));
+          break;
+        case 'tab_mcp':
+          window.dispatchEvent(new CustomEvent('canvas-set-library-tab', { detail: 'mcp' }));
+          break;
+        case 'tab_skills':
+          window.dispatchEvent(new CustomEvent('canvas-set-library-tab', { detail: 'skills' }));
+          break;
+        case 'tab_agents':
+          window.dispatchEvent(new CustomEvent('canvas-set-library-tab', { detail: 'agents' }));
+          break;
+        case 'tab_tools':
+          window.dispatchEvent(new CustomEvent('canvas-set-library-tab', { detail: 'tools' }));
+          break;
+        case 'tab_persona':
+          window.dispatchEvent(new CustomEvent('canvas-set-library-tab', { detail: 'personality' }));
+          break;
+        case 'tab_output':
+          window.dispatchEvent(new CustomEvent('canvas-set-library-tab', { detail: 'output' }));
+          break;
+        case 'toggle_theme': {
+          const currentIdx = THEMES.findIndex((t) => t.id === currentTheme);
+          const nextIdx = (currentIdx + 1) % THEMES.length;
+          setTheme(THEMES[nextIdx].id);
+          break;
+        }
+        case 'open_drawer':
+          if (activeDrawerAgentId) {
+            setActiveDrawerAgentId(null);
+          } else if (agents.length > 0) {
+            setActiveDrawerAgentId(agents[0].id);
+          }
+          break;
+        case 'check_updates':
+          window.dispatchEvent(new CustomEvent('canvas-check-updates'));
+          break;
+      }
+    });
+
+    return unlisten;
+  }, [
+    handleAddAgentClick,
+    handleFitViewClick,
+    rfInstance,
+    agents,
+    activeDrawerAgentId,
+    setActiveDrawerAgentId,
+    currentTheme,
+    setTheme,
+    refreshSpace,
+  ]);
+
+  // Global Canvas Hotkeys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('.modal-backdrop') ||
+          target.closest('.agent-drawer-container'))
+      ) {
+        return;
+      }
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+
+      if (cmdKey && !e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleAddAgentClick();
+      } else if (cmdKey && e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('canvas-menu-action', { detail: 'quick_blank_agent' }));
+      } else if (cmdKey && e.key === ',') {
+        e.preventDefault();
+        setIsSettingsModalOpen(true);
+      } else if (cmdKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('canvas-toggle-library'));
+      } else if (cmdKey && e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('canvas-menu-action', { detail: 'toggle_theme' }));
+      } else if (cmdKey && e.key === '0') {
+        e.preventDefault();
+        if (rfInstance) rfInstance.zoomTo(1.0, { duration: 300 });
+      } else if (cmdKey && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        if (rfInstance) rfInstance.zoomIn({ duration: 300 });
+      } else if (cmdKey && e.key === '-') {
+        e.preventDefault();
+        if (rfInstance) rfInstance.zoomOut({ duration: 300 });
+      } else if (cmdKey && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+        e.preventDefault();
+        const tabMap: Record<string, string> = {
+          '1': 'mcp',
+          '2': 'skills',
+          '3': 'agents',
+          '4': 'tools',
+          '5': 'personality',
+          '6': 'output',
+        };
+        window.dispatchEvent(new CustomEvent('canvas-set-library-tab', { detail: tabMap[e.key] }));
+      } else if (e.code === 'Space' && !cmdKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        handleFitViewClick();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleAddAgentClick, handleFitViewClick, rfInstance]);
 
   return (
     <div className={`space-container ${currentTheme}`} onClick={handleCloseContextMenu}>
