@@ -32,8 +32,8 @@ Download the standalone native desktop application for offline privacy and local
 
 | Platform | Download Link | Type | Status |
 |:---|:---|:---|:---|
-| **🍏 macOS (Apple Silicon M1/M2/M3/M4)** | [**⬇️ Download .dmg**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/macOS-Apple-Silicon-Installer.dmg) | Drag-and-Drop Disk Image (~11 MB) | **Latest v1.3.2** |
-| **🍏 macOS (Portable Archive)** | [**⬇️ Download .zip**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/macOS-Portable.zip) | Standalone Application (~10 MB) | **Latest v1.3.2** |
+| **🍏 macOS (Apple Silicon M1/M2/M3/M4)** | [**⬇️ Download .dmg**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/Smoke-Monkey-Canvas-1.3.2-mac-arm64.dmg) | Drag-and-Drop Disk Image (~11 MB) | **Latest v1.3.2** |
+| **🍏 macOS (Portable Archive)** | [**⬇️ Download .zip**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/Smoke-Monkey-Canvas-1.3.2-mac-arm64.zip) | Standalone Application (~10 MB) | **Latest v1.3.2** |
 | **🪟 Windows (10 / 11 64-bit)** | [**⬇️ Download .exe**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/latest/download/Smoke-Monkey-Canvas-x64-setup.exe) / [Install Script](install-windows.ps1) | NSIS Installer & PowerShell | **Available** |
 | **🐧 Linux (Universal x86_64)** | [**⬇️ Download .AppImage**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/latest/download/Smoke-Monkey-Canvas-amd64.AppImage) / [Install Script](install-linux.sh) | AppImage & DEB | **Available** |
 
