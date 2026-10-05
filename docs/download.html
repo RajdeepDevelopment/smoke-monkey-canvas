@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Download Smoke Monkey Canvas | macOS, Windows & Linux Desktop</title>
+  
+  <meta name="title" content="Download Smoke Monkey Canvas Desktop App" />
+  <meta name="description" content="Download Smoke Monkey Canvas for macOS, Windows, and Linux. Standalone native desktop app with multi-agent spatial canvas, local SQLite runtime, and MCP tool execution." />
+  <meta name="keywords" content="download smoke monkey canvas, smoke monkey desktop, mac dmg, windows installer, linux appimage, ai agent canvas" />
+  <meta name="author" content="RajdeepDevelopment" />
+  <meta name="theme-color" content="#08090d" />
+  <link rel="canonical" href="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/download.html" />
+
+  <!-- Open Graph / Twitter -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/download.html" />
+  <meta property="og:title" content="Download Smoke Monkey Canvas Desktop" />
+  <meta property="og:description" content="Direct 1-click downloads for macOS (.dmg), Windows (.exe), and Linux (.AppImage)." />
+  <meta property="og:image" content="https://rajdeepdevelopment.github.io/smoke-monkey-canvas/assets/smoke-monkey-banner.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/smoke-monkey-mascot.png" />
+  <link rel="apple-touch-icon" href="assets/smoke-monkey-mascot.png" />
+
+  <style>
+    :root {
+      --bg: #08090d;
+      --bg-card: rgba(18, 20, 29, 0.72);
+      --bg-card-hover: rgba(24, 27, 39, 0.9);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(16, 185, 129, 0.45);
+      --primary: #10b981;
+      --primary-glow: #34d399;
+      --cyan: #06b6d4;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.12) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(6, 182, 212, 0.08) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    /* Navigation */
+    nav {
+      max-width: 1140px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 24px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 700;
+      font-size: 17px;
+      letter-spacing: -0.01em;
+    }
+
+    .brand img {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-link:hover { color: var(--text); }
+
+    .nav-btn {
+      padding: 7px 16px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      color: var(--text);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 40px 24px 80px;
+      text-align: center;
+    }
+
+    /* Hero */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--primary-glow);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 20px;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--primary);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--primary);
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 5vw, 3.6rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 14px;
+      background: linear-gradient(180deg, #ffffff 40%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .lead {
+      font-size: clamp(1rem, 2vw, 1.15rem);
+      color: var(--text-muted);
+      max-width: 640px;
+      margin: 0 auto 36px;
+      font-weight: 400;
+    }
+
+    /* Primary Auto-detected Download Box */
+    .hero-download-box {
+      max-width: 480px;
+      margin: 0 auto 56px;
+      padding: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-highlight);
+      border-radius: 16px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 40px rgba(16, 185, 129, 0.12);
+    }
+
+    .hero-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      padding: 16px 24px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #04100c;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.35);
+      transition: all 0.2s ease;
+    }
+
+    .hero-btn:hover {
+      box-shadow: 0 6px 30px rgba(16, 185, 129, 0.55);
+      transform: translateY(-2px);
+    }
+
+    .hero-meta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* Platform Cards Grid */
+    .platforms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      gap: 24px;
+      margin-bottom: 60px;
+      text-align: left;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 30px 26px;
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      position: relative;
+    }
+
+    .card:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.18);
+      transform: translateY(-4px);
+    }
+
+    .card.recommended {
+      border-color: var(--border-highlight);
+      box-shadow: 0 0 25px rgba(16, 185, 129, 0.15);
+    }
+
+    .card-badge {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: var(--primary-glow);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      min-height: 38px;
+    }
+
+    .card-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .btn-download {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+
+    .btn-download:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-download.primary-card-btn {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.35);
+      color: #34d399;
+    }
+
+    .btn-download.primary-card-btn:hover {
+      background: rgba(16, 185, 129, 0.22);
+      border-color: var(--primary);
+    }
+
+    .btn-tag {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-dim);
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+
+    .card-meta {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Terminal Quick Install */
+    .cli-section {
+      background: #0d0f17;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 28px;
+      text-align: left;
+      max-width: 900px;
+      margin: 0 auto 60px;
+    }
+
+    .cli-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .cli-title {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .cli-tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .cli-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .cli-tab-btn.active {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    .cli-snippet {
+      position: relative;
+      background: #06070a;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .cli-code {
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      color: #fff;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 30px 24px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    footer a { color: var(--text-muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav>
+    <a href="index.html" class="brand">
+      <img src="assets/smoke-monkey-mascot.png" alt="Smoke Monkey" />
+      <span>Smoke Monkey Canvas</span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">Overview</a>
+      <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas#readme" class="nav-link" target="_blank">Docs</a>
+      <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases" class="nav-link" target="_blank">Releases</a>
+      <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas" class="nav-btn" target="_blank">★ Star on GitHub</a>
+    </div>
+  </nav>
+
+  <!-- Main Hero -->
+  <main>
+    <div class="badge">
+      <span class="badge-dot"></span>
+      <span>Latest Release: v1.3.2</span>
+    </div>
+
+    <h1>Download Desktop App</h1>
+    <p class="lead">
+      Experience the multi-agent spatial workspace as a native standalone desktop app.
+      Zero configuration, 100% local SQLite runtime, and offline privacy.
+    </p>
+
+    <!-- Auto-Detected One-Click Hero Button -->
+    <div class="hero-download-box" id="heroBox">
+      <a id="primaryDownloadBtn" href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/macOS-Apple-Silicon-Installer.dmg" class="hero-btn">
+        <svg id="primaryIcon" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <!-- Default Mac Apple SVG -->
+          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 0.92-2.85-.9.04-2 .6-2.65 1.34-.56.63-1.04 1.68-.92 2.71.99.08 2.03-.45 2.65-1.2z"/>
+        </svg>
+        <span id="primaryText">Download for macOS (.dmg)</span>
+      </a>
+      <div class="hero-meta">
+        <span id="primaryArch">Apple Silicon (M1/M2/M3/M4)</span>
+        <span>•</span>
+        <span>v1.3.2 (~11 MB)</span>
+        <span>•</span>
+        <span>100% Free & Open Source</span>
+      </div>
+    </div>
+
+    <!-- 3 Platforms Grid -->
+    <div class="platforms-grid">
+
+      <!-- macOS Card -->
+      <div class="card" id="cardMac">
+        <span class="card-badge" id="badgeMac" style="display:none;">Detected</span>
+        <div class="card-header">
+          <div class="card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 0.92-2.85-.9.04-2 .6-2.65 1.34-.56.63-1.04 1.68-.92 2.71.99.08 2.03-.45 2.65-1.2z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">macOS</div>
+            <div style="font-size:12px; color:var(--text-dim);">macOS 10.15 Catalina or later</div>
+          </div>
+        </div>
+        <p class="card-desc">
+          Native Cocoa window, macOS system menu bar, keyboard shortcuts, and full terminal PTY emulation.
+        </p>
+        <div class="card-actions">
+          <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/macOS-Apple-Silicon-Installer.dmg" class="btn-download primary-card-btn">
+            <span>Apple Silicon (.dmg)</span>
+            <span class="btn-tag">11 MB</span>
+          </a>
+          <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/macOS-Portable.zip" class="btn-download">
+            <span>Portable Archive (.zip)</span>
+            <span class="btn-tag">10 MB</span>
+          </a>
+        </div>
+        <div class="card-meta">
+          <span>⚡ Universal M-Series & Intel support</span>
+        </div>
+      </div>
+
+      <!-- Windows Card -->
+      <div class="card" id="cardWin">
+        <span class="card-badge" id="badgeWin" style="display:none;">Detected</span>
+        <div class="card-header">
+          <div class="card-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M0 3.449L9.75 2.1v9.451H0V3.449zm0 17.102L9.75 21.9v-9.45H0v8.101zm10.75 1.448l13.25 1.901V12.45h-13.25v9.549zM24 0L10.75 1.901V11.55H24V0z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">Windows</div>
+            <div style="font-size:12px; color:var(--text-dim);">Windows 10 / 11 (64-bit)</div>
+          </div>
+        </div>
+        <p class="card-desc">
+          Standalone setup with WebView2 accelerated graphics, PowerShell agent daemon, and tray integration.
+        </p>
+        <div class="card-actions">
+          <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/latest/download/Smoke-Monkey-Canvas-x64-setup.exe" class="btn-download primary-card-btn" id="winInstallerBtn">
+            <span>Windows Installer (.exe)</span>
+            <span class="btn-tag">x64</span>
+          </a>
+          <a href="https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/install-windows.ps1" class="btn-download">
+            <span>1-Click PowerShell Script</span>
+            <span class="btn-tag">.ps1</span>
+          </a>
+        </div>
+        <div class="card-meta">
+          <span>🛡️ Signed NSIS Installer</span>
+        </div>
+      </div>
+
+      <!-- Linux Card -->
+      <div class="card" id="cardLinux">
+        <span class="card-badge" id="badgeLinux" style="display:none;">Detected</span>
+        <div class="card-header">
+          <div class="card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <!-- Tux Linux Penguin -->
+              <path d="M12.002 0c-3.14 0-5.69 2.55-5.69 5.69 0 1.25.4 2.41 1.08 3.35C5.812 10.38 4.7 13.06 4.7 16.14c0 3.31 1.57 6.2 3.96 7.42.34.18.73.28 1.13.28 1.44 0 2.21-1.34 2.21-1.34s.77 1.34 2.21 1.34c.4 0 .79-.1 1.13-.28 2.39-1.22 3.96-4.11 3.96-7.42 0-3.08-1.11-5.76-2.69-7.1 0.68-.94 1.08-2.1 1.08-3.35 0-3.14-2.55-5.69-5.688-5.69zm-1.8 4.2c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7zm3.6 0c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">Linux</div>
+            <div style="font-size:12px; color:var(--text-dim);">Ubuntu, Debian, Fedora, Arch</div>
+          </div>
+        </div>
+        <p class="card-desc">
+          Universal standalone AppImage and Debian package with native WebKitGTK spatial canvas rendering.
+        </p>
+        <div class="card-actions">
+          <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/latest/download/Smoke-Monkey-Canvas-amd64.AppImage" class="btn-download primary-card-btn" id="linuxAppImageBtn">
+            <span>Universal AppImage</span>
+            <span class="btn-tag">x86_64</span>
+          </a>
+          <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/latest/download/smoke-monkey-canvas_amd64.deb" class="btn-download" id="linuxDebBtn">
+            <span>Debian Package (.deb)</span>
+            <span class="btn-tag">Ubuntu/Debian</span>
+          </a>
+        </div>
+        <div class="card-meta">
+          <span>🐧 No root permissions required</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Quick Terminal Install Option -->
+    <div class="cli-section">
+      <div class="cli-header">
+        <div class="cli-title">⚡ Or install via Terminal in 5 seconds</div>
+        <div class="cli-tabs">
+          <button class="cli-tab-btn active" onclick="switchCli('mac')">macOS / Linux</button>
+          <button class="cli-tab-btn" onclick="switchCli('win')">Windows</button>
+          <button class="cli-tab-btn" onclick="switchCli('npx')">NPX Instant</button>
+        </div>
+      </div>
+
+      <div class="cli-snippet">
+        <code class="cli-code" id="cliCommand">curl -fsSL https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/install.sh | bash</code>
+        <button class="copy-btn" id="copyBtn" onclick="copyCli()">Copy</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p>
+      Smoke Monkey Canvas is released under the <a href="https://github.com/RajdeepDevelopment/smoke-monkey-canvas/blob/main/LICENSE.md" target="_blank">MIT License</a>.
+      Crafted with precision for autonomous AI engineering.
+    </p>
+  </footer>
+
+  <script>
+    // ── Automatic OS Detection & Personalization ──
+    const ua = navigator.userAgent.toLowerCase();
+    const platform = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
+
+    const isMac = platform.includes('mac') || ua.includes('macintosh');
+    const isWin = platform.includes('win') || ua.includes('windows');
+    const isLinux = platform.includes('linux') || ua.includes('linux') || ua.includes('x11');
+
+    const heroBox = document.getElementById('heroBox');
+    const primaryBtn = document.getElementById('primaryDownloadBtn');
+    const primaryText = document.getElementById('primaryText');
+    const primaryArch = document.getElementById('primaryArch');
+
+    if (isWin) {
+      document.getElementById('cardWin').classList.add('recommended');
+      document.getElementById('badgeWin').style.display = 'inline-block';
+      primaryBtn.href = "https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/latest/download/Smoke-Monkey-Canvas-x64-setup.exe";
+      primaryText.textContent = "Download for Windows (.exe)";
+      primaryArch.textContent = "Windows 10 / 11 64-bit";
+      document.getElementById('primaryIcon').innerHTML = `<path d="M0 3.449L9.75 2.1v9.451H0V3.449zm0 17.102L9.75 21.9v-9.45H0v8.101zm10.75 1.448l13.25 1.901V12.45h-13.25v9.549zM24 0L10.75 1.901V11.55H24V0z"/>`;
+    } else if (isLinux) {
+      document.getElementById('cardLinux').classList.add('recommended');
+      document.getElementById('badgeLinux').style.display = 'inline-block';
+      primaryBtn.href = "https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/latest/download/Smoke-Monkey-Canvas-amd64.AppImage";
+      primaryText.textContent = "Download for Linux (.AppImage)";
+      primaryArch.textContent = "Universal Linux x86_64";
+      document.getElementById('primaryIcon').innerHTML = `<path d="M12.002 0c-3.14 0-5.69 2.55-5.69 5.69 0 1.25.4 2.41 1.08 3.35C5.812 10.38 4.7 13.06 4.7 16.14c0 3.31 1.57 6.2 3.96 7.42.34.18.73.28 1.13.28 1.44 0 2.21-1.34 2.21-1.34s.77 1.34 2.21 1.34c.4 0 .79-.1 1.13-.28 2.39-1.22 3.96-4.11 3.96-7.42 0-3.08-1.11-5.76-2.69-7.1 0.68-.94 1.08-2.1 1.08-3.35 0-3.14-2.55-5.69-5.688-5.69zm-1.8 4.2c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7zm3.6 0c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7z"/>`;
+    } else {
+      // Default macOS
+      document.getElementById('cardMac').classList.add('recommended');
+      document.getElementById('badgeMac').style.display = 'inline-block';
+      primaryBtn.href = "https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/macOS-Apple-Silicon-Installer.dmg";
+      primaryText.textContent = "Download for macOS (.dmg)";
+      primaryArch.textContent = "Apple Silicon (M1/M2/M3/M4)";
+    }
+
+    // ── CLI Switcher ──
+    const snippets = {
+      mac: 'curl -fsSL https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/install.sh | bash',
+      win: 'irm https://raw.githubusercontent.com/RajdeepDevelopment/smoke-monkey-canvas/main/install-windows.ps1 | iex',
+      npx: 'npx smoke-monkey-canvas'
+    };
+
+    function switchCli(type) {
+      document.querySelectorAll('.cli-tab-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('cliCommand').textContent = snippets[type];
+      document.getElementById('copyBtn').textContent = 'Copy';
+    }
+
+    function copyCli() {
+      const code = document.getElementById('cliCommand').textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

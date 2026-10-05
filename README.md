@@ -7,7 +7,7 @@
 > **The visual, spatial multi-agent workspace for [Smoke Monkey Harness](https://github.com/RajdeepDevelopment/smoke-monkey-harness).**
 > Deploy, schedule, and chat with unlimited autonomous AI agents on an infinite canvas — all running locally with zero cloud lock-in.
 
-[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases)
+[![Version](https://img.shields.io/badge/version-1.3.2-blue.svg)](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases)
 [![License](https://img.shields.io/badge/license-Sustainable%20Use-orange.svg)](LICENSE.md)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
@@ -25,6 +25,20 @@
 </p>
 
 ---
+
+## 🚀 Download Desktop App (1-Click Install)
+
+Download the standalone native desktop application for offline privacy and local execution:
+
+| Platform | Download Link | Type | Status |
+|:---|:---|:---|:---|
+| **🍏 macOS (Apple Silicon M1/M2/M3/M4)** | [**⬇️ Download .dmg**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/macOS-Apple-Silicon-Installer.dmg) | Drag-and-Drop Disk Image (~11 MB) | **Latest v1.3.2** |
+| **🍏 macOS (Portable Archive)** | [**⬇️ Download .zip**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/download/v1.3.2/macOS-Portable.zip) | Standalone Application (~10 MB) | **Latest v1.3.2** |
+| **🪟 Windows (10 / 11 64-bit)** | [**⬇️ Download .exe**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/latest/download/Smoke-Monkey-Canvas-x64-setup.exe) / [Install Script](install-windows.ps1) | NSIS Installer & PowerShell | **Available** |
+| **🐧 Linux (Universal x86_64)** | [**⬇️ Download .AppImage**](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases/latest/download/Smoke-Monkey-Canvas-amd64.AppImage) / [Install Script](install-linux.sh) | AppImage & DEB | **Available** |
+
+> 🌐 **Prefer the web browser or full download portal?** Visit the **[Desktop Download Portal](https://rajdeepdevelopment.github.io/smoke-monkey-canvas/download.html)** or run instant NPX: `npx smoke-monkey-canvas`
+
 
 ## What is Smoke Monkey Canvas?
 
