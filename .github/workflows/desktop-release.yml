@@ -50,8 +50,10 @@ jobs:
 
       - name: Install Dependencies & Build Frontend
         run: |
-          npm ci || npm install
+          npm install -g @tauri-apps/cli
+          npm install
           npm --prefix web install
+          npm --prefix desktop install
           npm --prefix web run build
 
       - name: Build Tauri Desktop Application

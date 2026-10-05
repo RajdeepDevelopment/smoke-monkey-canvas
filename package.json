@@ -30,7 +30,8 @@
     "desktop:build:mac": "npm --prefix desktop run build:mac",
     "desktop:build:win": "npm --prefix desktop run build:win",
     "desktop:build:linux": "npm --prefix desktop run build:linux",
-    "desktop:bundle:mac": "npm --prefix desktop run bundle:mac"
+    "desktop:bundle:mac": "npm --prefix desktop run bundle:mac",
+    "tauri": "tauri"
   },
   "homepage": "https://rajdeepdevelopment.github.io/smoke-monkey-canvas/",
   "bugs": {
@@ -71,6 +72,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^24.13.3",
     "@types/ws": "^8.5.14",
+    "@tauri-apps/cli": "^2.2.7",
     "railway": "^3.12.0",
     "typescript": "^5.7.0"
   },
