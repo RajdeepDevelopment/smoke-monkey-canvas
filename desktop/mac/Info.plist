@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleExecutable</key>
+  <string>smoke-monkey-canvas-desktop</string>
+  <key>CFBundleIconFile</key>
+  <string>icon</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.smokemonkey.canvas</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Smoke Monkey Canvas</string>
+  <key>CFBundleDisplayName</key>
+  <string>Smoke Monkey Canvas</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.3.2</string>
+  <key>CFBundleVersion</key>
+  <string>1.3.2</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>10.15</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
+  <true/>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+  </dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Smoke Monkey Canvas requires microphone access to enable voice commands, speech-to-text, and conversational interaction with autonomous agents.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Smoke Monkey Canvas requires camera access for multi-modal visual inspection.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Smoke Monkey Canvas requires access to documents to save and load agent workspaces.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Smoke Monkey Canvas requires access to downloads to export workspace files.</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Smoke Monkey Canvas requires access to desktop folders for agent project interactions.</string>
+</dict>
+</plist>

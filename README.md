@@ -96,6 +96,42 @@ smoke-monkey-canvas/
 
 ## Quick Start
 
+### 📦 Fresh Local Installation (macOS, Linux & Windows)
+
+Clone the repository and run the one-command installer for your platform:
+
+#### 🍎 macOS:
+```bash
+git clone https://github.com/RajdeepDevelopment/smoke-monkey-canvas.git
+cd smoke-monkey-canvas
+./install-mac.sh
+```
+> Validates Node.js & Rust, installs workspace dependencies, compiles the frontend bundle, packages the native macOS desktop app with signed permissions, and installs it directly into `/Applications/Smoke Monkey Canvas.app`.
+
+#### 🐧 Linux:
+```bash
+git clone https://github.com/RajdeepDevelopment/smoke-monkey-canvas.git
+cd smoke-monkey-canvas
+./install-linux.sh
+```
+> Checks WebKitGTK/GUI dependencies, installs all packages, builds the web distribution, and compiles the native desktop binary.
+
+#### 🪟 Windows (PowerShell or Command Prompt):
+```powershell
+git clone https://github.com/RajdeepDevelopment/smoke-monkey-canvas.git
+cd smoke-monkey-canvas
+powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
+```
+> *Or double-click `install-windows.bat` directly from File Explorer.*
+
+#### 🌐 Universal Auto-Detector:
+```bash
+./install.sh
+```
+> Automatically detects your host OS (macOS, Linux, or Windows) and executes the matching platform installer.
+
+---
+
 ### 🚀 Option 1: Global CLI & Background Daemon (Recommended)
 
 Install globally once, then control your background Canvas from any terminal directory:

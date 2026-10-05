@@ -206,6 +206,7 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
         return state;
       }
       return {
+        agents: state.agents.map((a) => (a.id === agentId ? { ...a, pos_x: posX, pos_y: posY } : a)),
         nodes: state.nodes.map((n) =>
           n.id === agentId ? { ...n, position: { x: posX, y: posY } } : n,
         ),

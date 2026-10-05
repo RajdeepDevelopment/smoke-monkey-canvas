@@ -5,7 +5,7 @@ import {
   FileText, DollarSign, Brain, Share2, Code2, KeyRound, Star,
   Clock, ShieldCheck, Copy, Check, Plus, WandSparkles,
   GripHorizontal, SlidersHorizontal, Eye, Edit3, Zap,
-  Trash2, Sparkles,
+  Trash2, Sparkles, ArrowUpCircle, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { getBrandIcon } from '../common/brand-icons.js';
@@ -24,6 +24,7 @@ import { LibGlyph } from './library-glyph.js';
 import { PROVIDER_CATALOG } from '../common/provider-catalog.js';
 import { getPersonalityMarkdown, getOutputStyleMarkdown } from './library-rich-content.js';
 import { AgentClockScheduler, describeCron } from './agent-clock-scheduler.js';
+import { openExternalLink, isTauri } from '../../config/desktop.bridge.js';
 
 function formatAgentModelBadge(modelId: string): string {
   if (!modelId) return 'Default Model';
@@ -385,6 +386,15 @@ const TABS: { id: LibraryTab; label: string; shortLabel: string; color: string }
   { id: 'output', label: 'Output Style', shortLabel: 'Output', color: LIB_TAB_COLORS.output },
 ];
 
+const TAB_DESCRIPTIONS: Record<LibraryTab, string> = {
+  mcp: 'MCP Servers',
+  skills: 'Agent Skills',
+  agents: 'Agent Templates',
+  tools: 'Custom Toolkits',
+  personality: 'Persona Directives',
+  output: 'Output Styles',
+};
+
 interface LibrarySidebarProps {
   stockMcps: StockMcp[];
   /** key name -> whether a credential is currently stored (from /api/settings/keys) */
@@ -441,6 +451,39 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   const isDraggingRef = useRef(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  // ── Version & Upgrade State ──
+  const [versionInfo, setVersionInfo] = useState<{
+    currentVersion: string;
+    latestVersion: string;
+    harnessVersion: string;
+    latestHarnessVersion: string;
+    hasUpdate: boolean;
+    upgradeCommand: string;
+    releaseNotesUrl: string;
+  } | null>(null);
+  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [upgradeCopied, setUpgradeCopied] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  const checkAppVersion = useCallback(async () => {
+    setIsCheckingUpdate(true);
+    try {
+      const res = await fetch('/api/settings/version');
+      if (res.ok) {
+        const data = await res.json();
+        setVersionInfo(data);
+      }
+    } catch (e) {
+      console.warn('[LibrarySidebar] Failed checking version:', e);
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAppVersion();
+  }, [checkAppVersion]);
 
   // ── Custom Persistent Collections (Stored in localStorage) ──
   const [customMcps, setCustomMcps] = useState<StockMcp[]>(() => loadCustomStorage<StockMcp>(STORAGE_KEYS.mcps));
@@ -1262,7 +1305,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
           <span className="lib-grip-pill" />
         </div>
 
-        {TABS.map((tab) => {
+        {TABS.map((tab, idx) => {
           const Icon = LIB_TAB_ICONS[tab.id];
           const isActive = activeTab === tab.id;
           return (
@@ -1275,7 +1318,9 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                 if (isDraggingRef.current) return;
                 handleTabClick(tab.id);
               }}
-              title={tab.label}
+              data-tooltip={TAB_DESCRIPTIONS[tab.id] || tab.label}
+              data-tooltip-side="right"
+              data-tooltip-shortcut={`⌘${idx + 1}`}
             >
               <span className="lib-tab-icon">
                 <LibGlyph icon={Icon} color={tab.color} size={16} />
@@ -1293,11 +1338,43 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
               setActiveTab(null);
               setSelectedDetail(null);
             }}
-            title="Close sidebar"
+            data-tooltip="Close Sidebar"
+            data-tooltip-shortcut="Esc"
+            data-tooltip-side="right"
           >
             <X size={15} />
             <span className="lib-tab-label">Close</span>
           </button>
+        )}
+
+        {/* ── Version & Upgrade Indicator (Desktop App Only) ── */}
+        {isTauri() && (
+          <div className="lib-rail-version-section" style={{ marginTop: 'auto', paddingTop: '10px' }}>
+            <button
+              className={`lib-tab-btn lib-version-btn ${versionInfo?.hasUpdate ? 'has-update' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowVersionModal(true);
+              }}
+              data-tooltip={versionInfo?.hasUpdate ? 'Update Available' : 'Up to Date'}
+              data-tooltip-side="right"
+              style={{
+                borderColor: versionInfo?.hasUpdate ? 'rgba(245, 158, 11, 0.4)' : undefined,
+                background: versionInfo?.hasUpdate ? 'rgba(245, 158, 11, 0.1)' : undefined,
+              }}
+            >
+              <span className="lib-tab-icon">
+                {versionInfo?.hasUpdate ? (
+                  <ArrowUpCircle size={16} className="text-amber-400 animate-pulse" />
+                ) : (
+                  <CheckCircle2 size={16} className="text-emerald-400" />
+                )}
+              </span>
+              <span className="lib-tab-label" style={{ fontSize: '9px', fontWeight: 600 }}>
+                {versionInfo?.hasUpdate ? 'Update' : `v${versionInfo?.currentVersion || '1.3.2'}`}
+              </span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -3639,6 +3716,162 @@ ${selectedDetail.item.tools.map((t) => `- \`${t}\`: Built-in safe workspace prim
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* ── Version & Upgrade Modal (Desktop App Only) ── */}
+      {isTauri() && showVersionModal && (
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0, 0, 0, 0.72)', backdropFilter: 'blur(10px)' }}
+          onClick={() => setShowVersionModal(false)}
+        >
+          <div
+            className="w-full max-w-[460px] rounded-2xl border p-6 shadow-2xl relative"
+            style={{
+              background: '#0d1322',
+              borderColor: 'rgba(255, 255, 255, 0.12)',
+              color: '#f8fafc',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-b from-white/10 to-white/5 border border-white/15 p-2 flex items-center justify-center shadow-lg shrink-0">
+                  <img
+                    src="/smoke-monkey-mascot.png"
+                    alt="Smoke Monkey"
+                    className="w-full h-full object-contain filter drop-shadow"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white tracking-tight">Smoke Monkey Canvas</h3>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                      v{versionInfo?.currentVersion || '1.3.2'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">Spatial Multi-Agent Runtime &amp; Library</p>
+                </div>
+              </div>
+              <button
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                onClick={() => setShowVersionModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Status Card */}
+            <div className="my-4">
+              {versionInfo?.hasUpdate ? (
+                <div
+                  className="p-4 rounded-xl border flex flex-col gap-2.5"
+                  style={{ background: 'rgba(245, 158, 11, 0.08)', borderColor: 'rgba(245, 158, 11, 0.3)' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <ArrowUpCircle size={18} className="text-amber-400 animate-pulse" />
+                    <span className="font-semibold text-amber-300 text-sm">
+                      New Release Available: v{versionInfo.latestVersion}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    A newer version of Smoke Monkey Canvas &amp; Harness has been published.
+                  </p>
+                  <div
+                    className="flex items-center justify-between p-2.5 rounded-lg border text-xs font-mono"
+                    style={{ background: 'rgba(0, 0, 0, 0.45)', borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                  >
+                    <code className="text-amber-200 select-all truncate mr-2">
+                      {versionInfo.upgradeCommand}
+                    </code>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-colors shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(versionInfo.upgradeCommand);
+                        setUpgradeCopied(true);
+                        setTimeout(() => setUpgradeCopied(false), 2000);
+                      }}
+                    >
+                      {upgradeCopied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                      <span>{upgradeCopied ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="p-3.5 rounded-xl border flex items-center gap-3"
+                  style={{ background: 'rgba(16, 185, 129, 0.07)', borderColor: 'rgba(16, 185, 129, 0.22)' }}
+                >
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                    <CheckCircle2 size={17} className="text-emerald-400" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-emerald-300">You are on the latest release</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">All spatial runtime engines and harness libraries are up to date.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Spec Sheet List */}
+            <div
+              className="rounded-xl border divide-y text-xs mb-5"
+              style={{
+                background: 'rgba(255, 255, 255, 0.02)',
+                borderColor: 'rgba(255, 255, 255, 0.08)',
+              }}
+            >
+              <div className="flex items-center justify-between px-3.5 py-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+                <span className="text-slate-400 font-medium">Canvas Workspace</span>
+                <span className="font-semibold text-slate-200 font-mono">v{versionInfo?.currentVersion || '1.3.2'}</span>
+              </div>
+              <div className="flex items-center justify-between px-3.5 py-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+                <span className="text-slate-400 font-medium">Harness Core</span>
+                <span className="font-semibold text-sky-400 font-mono">v{versionInfo?.harnessVersion || '1.3.1'}</span>
+              </div>
+              <div className="flex items-center justify-between px-3.5 py-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+                <span className="text-slate-400 font-medium">Platform</span>
+                <span className="text-slate-300">macOS (Apple Silicon • arm64)</span>
+              </div>
+              <div className="flex items-center justify-between px-3.5 py-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+                <span className="text-slate-400 font-medium">Release Channel</span>
+                <span className="text-slate-300 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Stable Channel
+                </span>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-between pt-3 border-t border-white/10 text-xs">
+              <button
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 text-slate-300 hover:text-white transition-colors"
+                onClick={checkAppVersion}
+                disabled={isCheckingUpdate}
+              >
+                <RefreshCw size={12} className={isCheckingUpdate ? 'animate-spin' : ''} />
+                <span>{isCheckingUpdate ? 'Checking…' : 'Check for Updates'}</span>
+              </button>
+
+              <a
+                href={versionInfo?.releaseNotesUrl || 'https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases'}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  void openExternalLink(versionInfo?.releaseNotesUrl || 'https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases');
+                }}
+                className="flex items-center gap-1.5 text-sky-400 hover:text-sky-300 transition-colors"
+              >
+                <span>Release Notes</span>
+                <ExternalLink size={12} />
+              </a>
+            </div>
+          </div>
         </div>
       )}
     </div>

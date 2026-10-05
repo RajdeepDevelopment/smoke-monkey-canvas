@@ -135,13 +135,31 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
     setError(null);
   }, []);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
     if (!isSupported) {
       const msg = 'Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.';
       setError(msg);
       setStatus('error');
       onErrorRef.current?.(msg);
       return;
+    }
+
+    // Explicitly request OS microphone permission to trigger system prompt if not yet granted
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Immediately release tracks once permission is verified/granted
+        stream.getTracks().forEach((t) => t.stop());
+      } catch (err: any) {
+        if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+          const msg = 'Microphone permission denied. Please allow microphone access in macOS System Settings > Privacy & Security > Microphone.';
+          setError(msg);
+          setStatus('error');
+          onErrorRef.current?.(msg);
+          userIntentListeningRef.current = false;
+          return;
+        }
+      }
     }
 
     try {

@@ -43,6 +43,21 @@ build/
 .vite/
 .rollup.cache/
 
+# Rust & Tauri Desktop Artifacts
+target/
+**/target/
+src-tauri/target/
+src-tauri/gen/
+**/gen/schemas/
+*.app
+*.dmg
+*.exe
+*.msi
+*.deb
+*.AppImage
+*.rpm
+
+
 # Process & Daemon files
 *.pid
 *.seed
@@ -71,3 +86,7 @@ Thumbs.db
 # Test coverage
 coverage/
 .nyc_output/
+
+# Mobile (WIP - not ready)
+mobile/
+

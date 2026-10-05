@@ -21,6 +21,23 @@ const __dirname = join(__filename, '..');
 export interface AppServerOptions {
   port?: number;
   dbPath?: string;
+  /**
+   * Interface to bind.
+   *
+   * Undefined by default, which preserves the existing behaviour of listening on
+   * every interface. That is deliberate for desktop and container deployments,
+   * where reaching the server from another machine is the point.
+   *
+   * The mobile build passes '127.0.0.1'. On a phone the same default would bind
+   * the Wi-Fi interface too, and since this API has no authentication of its own,
+   * that would expose agent creation and configuration to every other device on
+   * the network. Android's network security config does not help here — it
+   * governs the app's outgoing traffic, not sockets the app happens to be
+   * listening on.
+   *
+   * Previously advertised in .env.example as HOST, but never actually read.
+   */
+  host?: string;
 }
 
 export function startAppServer(opts: AppServerOptions = {}) {
@@ -85,12 +102,21 @@ export function startAppServer(opts: AppServerOptions = {}) {
   const cron = AgentCronScheduler.getInstance();
   cron.start(10000);
 
-  server.listen(port, () => {
-    console.log(`\n======================================================`);
-    console.log(`  🐒 Smoke Monkey Canvas Server running:`);
-    console.log(`  ▶ http://localhost:${port}`);
-    console.log(`======================================================\n`);
-  });
+  if (opts.host) {
+    server.listen(port, opts.host, () => {
+      console.log(`\n======================================================`);
+      console.log(`  🐒 Smoke Monkey Canvas Server running:`);
+      console.log(`  ▶ http://${opts.host}:${port}`);
+      console.log(`======================================================\n`);
+    });
+  } else {
+    server.listen(port, () => {
+      console.log(`\n======================================================`);
+      console.log(`  🐒 Smoke Monkey Canvas Server running:`);
+      console.log(`  ▶ http://localhost:${port}`);
+      console.log(`======================================================\n`);
+    });
+  }
 
   return { app, server, db, ws, cron };
 }

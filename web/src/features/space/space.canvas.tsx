@@ -31,6 +31,7 @@ import type { StockMcp } from '../mcp/mcp.types.js';
 import { LibrarySidebar } from '../library/library-sidebar.js';
 import { readLibDragPayload, LIB_DRAG_KEY, type LibDragPayload, type PromptPreset, type StockSkillItem } from '../library/library.types.js';
 import { useSpaceStore } from './space.store.js';
+import { AppLoader } from '../common/app-loader.js';
 
 const NODE_TYPES: NodeTypes = {
   crabAgent: CrabAgentNode,
@@ -134,7 +135,18 @@ export const SpaceCanvas: React.FC = () => {
     };
   }, []);
 
-  const refreshConfiguredKeys = useCallback(async () => {
+  const LLM_PROVIDER_KEYS = [
+    'NVIDIA_API_KEY',
+    'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'GEMINI_API_KEY',
+    'OPENROUTER_API_KEY',
+    'GROQ_API_KEY',
+  ];
+
+  const hasCheckedInitialLlmRef = useRef(false);
+
+  const refreshConfiguredKeys = useCallback(async (isInitialBoot = false) => {
     try {
       const res = await fetch('/api/settings/keys');
       if (!res.ok) return;
@@ -142,6 +154,15 @@ export const SpaceCanvas: React.FC = () => {
       const next: Record<string, boolean> = {};
       for (const [key, val] of Object.entries(data)) next[key] = Boolean(val?.isSet);
       setConfiguredKeys(next);
+
+      // Auto-open API Keys modal ONLY on initial boot/refresh if user hasn't configured any LLM provider key yet
+      if (isInitialBoot && !hasCheckedInitialLlmRef.current) {
+        hasCheckedInitialLlmRef.current = true;
+        const hasConfiguredLlm = LLM_PROVIDER_KEYS.some((k) => Boolean(data[k]?.isSet));
+        if (!hasConfiguredLlm) {
+          setIsSettingsModalOpen(true);
+        }
+      }
     } catch {
       /* non-fatal: library simply shows everything as locked */
     }
@@ -162,7 +183,7 @@ export const SpaceCanvas: React.FC = () => {
       })
       .catch(() => {});
 
-    refreshConfiguredKeys();
+    refreshConfiguredKeys(true);
   }, [refreshConfiguredKeys]);
 
   /**
@@ -206,13 +227,17 @@ export const SpaceCanvas: React.FC = () => {
     return agents.find((a) => a.id === activeDrawerAgentId) ?? null;
   }, [agents, activeDrawerAgentId]);
 
+  const [isAppReady, setIsAppReady] = useState(false);
+
   // 1. Initial Load of Space Entities
   const refreshSpace = useCallback(async () => {
     try {
       const data = await SpaceService.fetchSpaceAgents();
       setAgents(data);
+      setIsAppReady(true);
     } catch (err) {
       console.error('[SpaceCanvas] Failed refreshing space:', err);
+      setIsAppReady(true);
     }
   }, []);
 
@@ -770,8 +795,45 @@ export const SpaceCanvas: React.FC = () => {
     setIsAgentModalOpen(true);
   }, []);
   const handleFitViewClick = useCallback(() => {
-    rfInstance?.fitView({ padding: 0.25, duration: 600 });
-  }, [rfInstance]);
+    if (!rfInstance) return;
+    const currentNodes = rfInstance.getNodes();
+    if (!currentNodes || currentNodes.length === 0) {
+      rfInstance.fitView({ padding: 0.25, duration: 600 });
+      return;
+    }
+
+    // Check for runaway/outlier nodes (e.g. pos_y < -1000 or massive coordinate gaps)
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const n of currentNodes) {
+      minX = Math.min(minX, n.position.x);
+      maxX = Math.max(maxX, n.position.x);
+      minY = Math.min(minY, n.position.y);
+      maxY = Math.max(maxY, n.position.y);
+    }
+
+    const isWildlySpread = maxY - minY > 2000 || maxX - minX > 3000 || minY < -1000;
+
+    if (isWildlySpread) {
+      // Re-cluster nodes neatly so all agents are positioned cleanly and visibly
+      const CARD_WIDTH = 480;
+      const GAP = 80;
+      const COLS = Math.ceil(Math.sqrt(currentNodes.length));
+
+      currentNodes.forEach((n, idx) => {
+        const col = idx % COLS;
+        const row = Math.floor(idx / COLS);
+        const newX = 250 + col * (CARD_WIDTH + GAP);
+        const newY = 200 + row * 520;
+        n.position = { x: newX, y: newY };
+        SpaceService.updateNodePosition(n.id, newX, newY);
+      });
+      setNodes([...currentNodes]);
+    }
+
+    setTimeout(() => {
+      rfInstance.fitView({ padding: 0.25, duration: 600 });
+    }, 60);
+  }, [rfInstance, setNodes]);
 
   const handleSpawnTemplate = useCallback(
     async (template: AgentTemplate, flowX: number, flowY: number) => {
@@ -1037,6 +1099,9 @@ export const SpaceCanvas: React.FC = () => {
         onStopNow={handleStopAgent}
         onClose={handleCloseDrawer}
       />
+
+      {/* Premium Spatial Workspace Boot Loader */}
+      <AppLoader isReady={isAppReady} />
     </div>
   );
 };

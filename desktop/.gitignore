@@ -1,0 +1,15 @@
+# Rust / Tauri build outputs
+src-tauri/target/
+src-tauri/gen/
+target/
+
+# Package outputs
+*.app
+*.dmg
+*.exe
+*.msi
+*.deb
+*.AppImage
+
+# Node dependencies
+node_modules/

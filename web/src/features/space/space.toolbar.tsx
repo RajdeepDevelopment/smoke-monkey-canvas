@@ -113,7 +113,14 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
       )}
 
       {/* Add Agent Button */}
-      <button className="toolbar-btn" onClick={onAddAgent} title="Add New Agent to Space" style={{ flexShrink: 0 }}>
+      <button
+        className="toolbar-btn"
+        onClick={onAddAgent}
+        data-tooltip="Add Agent"
+        data-tooltip-shortcut="⌘N"
+        data-tooltip-side="bottom"
+        style={{ flexShrink: 0 }}
+      >
         <Plus size={14} />
         <span className="toolbar-btn-label">Add Agent</span>
       </button>
@@ -122,7 +129,9 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
       <button
         className="toolbar-icon-btn"
         onClick={onOpenSettings}
-        title="Manage API Keys & Credentials (Secure SQLite Storage)"
+        data-tooltip="API Keys"
+        data-tooltip-shortcut="⌘,"
+        data-tooltip-side="bottom"
         style={{ flexShrink: 0 }}
       >
         <ShieldCheck size={15} color="#10b981" />
@@ -133,7 +142,8 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
         <button
           className="toolbar-icon-btn theme-toggle-btn"
           onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
-          title={`Active Theme: ${currentThemeObj.name} (Click to switch)`}
+          data-tooltip="Switch Theme"
+          data-tooltip-side="bottom"
           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 999 }}
         >
           {currentThemeObj.type === 'light' ? <Sun size={13} color="#f59e0b" /> : <Moon size={13} color="#8b5cf6" />}
@@ -281,7 +291,9 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
       <button
         className="toolbar-icon-btn"
         onClick={onFitView}
-        title="Fit all agents into view"
+        data-tooltip="Fit all agents into view"
+        data-tooltip-shortcut="Space"
+        data-tooltip-side="bottom"
       >
         <Maximize2 size={13} />
       </button>

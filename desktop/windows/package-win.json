@@ -1,0 +1,7 @@
+{
+  "target": "win32",
+  "formats": ["nsis", "msi", "portable"],
+  "architectures": ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"],
+  "bundleId": "com.smokemonkey.canvas",
+  "name": "Smoke Monkey Canvas"
+}

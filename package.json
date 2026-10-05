@@ -24,7 +24,13 @@
     "build:web": "npm --prefix web run build",
     "build": "npm --prefix web run build",
     "start": "node ./bin/cli.js",
-    "dev": "node ./bin/cli.js"
+    "dev": "node ./bin/cli.js",
+    "desktop:dev": "npm --prefix desktop run dev",
+    "desktop:build": "npm --prefix desktop run build",
+    "desktop:build:mac": "npm --prefix desktop run build:mac",
+    "desktop:build:win": "npm --prefix desktop run build:win",
+    "desktop:build:linux": "npm --prefix desktop run build:linux",
+    "desktop:bundle:mac": "npm --prefix desktop run bundle:mac"
   },
   "homepage": "https://rajdeepdevelopment.github.io/smoke-monkey-canvas/",
   "bugs": {

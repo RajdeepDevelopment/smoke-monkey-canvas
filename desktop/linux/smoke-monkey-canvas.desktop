@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Smoke Monkey Canvas
+Comment=Visual multi-agent spatial workspace for Smoke Monkey Harness
+Exec=smoke-monkey-canvas-desktop %U
+Icon=smoke-monkey-canvas
+Type=Application
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=smoke-monkey-canvas-desktop
+MimeType=x-scheme-handler/smokemonkey;

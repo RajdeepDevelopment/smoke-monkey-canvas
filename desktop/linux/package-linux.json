@@ -1,0 +1,7 @@
+{
+  "target": "linux",
+  "formats": ["appimage", "deb", "tar.gz"],
+  "architectures": ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"],
+  "bundleId": "com.smokemonkey.canvas",
+  "name": "Smoke Monkey Canvas"
+}

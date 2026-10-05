@@ -5,9 +5,10 @@ import { BrandIcons } from '../common/brand-icons.js';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onKeysSaved?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onKeysSaved }) => {
   if (!isOpen) return null;
 
   const [keys, setKeys] = useState<Record<string, { masked: string; isSet: boolean }>>({});
@@ -42,6 +43,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       const refreshed = await fetch('/api/settings/keys').then((r) => r.json());
       setKeys(refreshed);
       setFormData({});
+      onKeysSaved?.();
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error saving settings');

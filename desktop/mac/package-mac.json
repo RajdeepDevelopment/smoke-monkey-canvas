@@ -1,0 +1,7 @@
+{
+  "target": "darwin",
+  "formats": ["app", "dmg"],
+  "architectures": ["universal-apple-darwin", "aarch64-apple-darwin", "x86_64-apple-darwin"],
+  "bundleId": "com.smokemonkey.canvas",
+  "name": "Smoke Monkey Canvas"
+}

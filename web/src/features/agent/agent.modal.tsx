@@ -17,6 +17,7 @@ import {
 import type { SpaceAgentEntity, AgentRecord } from './agent.types.js';
 import { PROVIDER_CATALOG, getProvider, getDefaultModelForProvider } from '../common/provider-catalog.js';
 import { BrandIcons } from '../common/brand-icons.js';
+import { isTauri, pickNativeDirectory } from '../../config/desktop.bridge.js';
 
 export interface ClockTimeItem {
   id: string;
@@ -350,6 +351,14 @@ export const AgentModal: React.FC<AgentModalProps> = ({
 
   const handleBrowseLocalDirectory = async () => {
     try {
+      if (isTauri()) {
+        const nativeDir = await pickNativeDirectory('Select Agent Working Directory');
+        if (nativeDir) {
+          setWorkingDir(nativeDir);
+          return;
+        }
+      }
+
       if ('showDirectoryPicker' in window) {
         const dirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
         if (dirHandle?.name) {

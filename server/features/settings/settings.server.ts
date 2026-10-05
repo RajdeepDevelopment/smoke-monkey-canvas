@@ -117,5 +117,118 @@ export function createSettingsRouter(): Router {
     });
   });
 
+  // GET /api/settings/version
+  router.get('/version', async (_req: Request, res: Response) => {
+    try {
+      const versionInfo = await checkVersion();
+      res.json(versionInfo);
+    } catch {
+      res.json({
+        currentVersion: '1.3.2',
+        latestVersion: '1.3.2',
+        harnessVersion: '1.3.1',
+        latestHarnessVersion: '1.3.1',
+        hasUpdate: false,
+        upgradeCommand: 'npm install -g @smoke-monkey/canvas@latest',
+        releaseNotesUrl: 'https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases',
+        checkedAt: new Date().toISOString(),
+      });
+    }
+  });
+
   return router;
+}
+
+interface VersionInfo {
+  currentVersion: string;
+  latestVersion: string;
+  harnessVersion: string;
+  latestHarnessVersion: string;
+  hasUpdate: boolean;
+  upgradeCommand: string;
+  releaseNotesUrl: string;
+  checkedAt: string;
+}
+
+let cachedVersionInfo: { timestamp: number; data: VersionInfo } | null = null;
+
+function compareSemver(v1: string, v2: string): number {
+  const p1 = v1.replace(/^v/, '').split('.').map(Number);
+  const p2 = v2.replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const a = p1[i] || 0;
+    const b = p2[i] || 0;
+    if (a > b) return 1;
+    if (a < b) return -1;
+  }
+  return 0;
+}
+
+async function checkVersion(): Promise<VersionInfo> {
+  const now = Date.now();
+  if (cachedVersionInfo && now - cachedVersionInfo.timestamp < 10 * 60 * 1000) {
+    return cachedVersionInfo.data;
+  }
+
+  let currentVersion = '1.3.2';
+  let harnessVersion = '1.3.1';
+  try {
+    const pkgPath = resolve(process.cwd(), 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (pkg.version) currentVersion = pkg.version;
+      if (pkg.dependencies && pkg.dependencies['smoke-monkey-harness']) {
+        harnessVersion = pkg.dependencies['smoke-monkey-harness'].replace(/^[\^~]/, '');
+      }
+    }
+  } catch {}
+
+  let latestVersion = currentVersion;
+  let latestHarnessVersion = harnessVersion;
+  let hasUpdate = false;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+
+    const [canvasRes, harnessRes] = await Promise.allSettled([
+      fetch('https://registry.npmjs.org/@smoke-monkey/canvas/latest', { signal: controller.signal }),
+      fetch('https://registry.npmjs.org/smoke-monkey-harness/latest', { signal: controller.signal }),
+    ]);
+    clearTimeout(timeout);
+
+    if (canvasRes.status === 'fulfilled' && canvasRes.value.ok) {
+      const data = (await canvasRes.value.json()) as { version?: string };
+      if (data.version) {
+        latestVersion = data.version;
+        if (compareSemver(latestVersion, currentVersion) > 0) {
+          hasUpdate = true;
+        }
+      }
+    }
+
+    if (harnessRes.status === 'fulfilled' && harnessRes.value.ok) {
+      const data = (await harnessRes.value.json()) as { version?: string };
+      if (data.version) {
+        latestHarnessVersion = data.version;
+        if (compareSemver(latestHarnessVersion, harnessVersion) > 0) {
+          hasUpdate = true;
+        }
+      }
+    }
+  } catch {}
+
+  const data: VersionInfo = {
+    currentVersion,
+    latestVersion,
+    harnessVersion,
+    latestHarnessVersion,
+    hasUpdate,
+    upgradeCommand: 'npm install -g @smoke-monkey/canvas@latest',
+    releaseNotesUrl: 'https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases',
+    checkedAt: new Date().toISOString(),
+  };
+
+  cachedVersionInfo = { timestamp: now, data };
+  return data;
 }

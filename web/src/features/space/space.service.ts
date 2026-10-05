@@ -1,4 +1,5 @@
 import type { SpaceAgentEntity } from '../agent/agent.types.js';
+import { getWsUrl } from '../../config/desktop.bridge.ts';
 
 const API_BASE = '/api';
 
@@ -20,9 +21,7 @@ export class SpaceService {
   }
 
   static connectWebSocket(onMessage: (msg: { type: string; agentId?: string; runId?: string; data?: unknown }) => void): () => void {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws`;
+    const wsUrl = getWsUrl();
 
     let ws: WebSocket | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;

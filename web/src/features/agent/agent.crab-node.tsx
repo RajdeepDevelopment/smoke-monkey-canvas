@@ -417,7 +417,6 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               e.stopPropagation();
               data.onEdit(data, 'directory');
             }}
-            title={`Click to edit Directory or RAM limits\nRoot Directory: ${data.working_dir || `~/.smoke-agents/${data.name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-') || 'agent'}`}\nMax RAM Limit: ${data.max_memory_mb || 1024} MB`}
           >
             <div className="crab-resource-dir">
               <Folder size={11} color="#60a5fa" style={{ flexShrink: 0 }} />
@@ -437,7 +436,6 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               e.stopPropagation();
               data.onEdit(data, 'schedule');
             }}
-            title="Click to edit Clock schedule & execution frequency"
           >
             <div className="crab-cron-info">
               <Clock size={11} color={data.cron_enabled ? '#d97706' : '#94a3b8'} style={{ flexShrink: 0 }} />
@@ -519,11 +517,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               }
               data.onOpenDrawer(data);
             }}
-            title={
-              hasUnconfiguredMcps
-                ? 'Configure credentials before opening chat'
-                : 'Inspect Agent Chat & Terminal Logs'
-            }
+            data-tooltip="Terminal Logs"
           >
             <Terminal size={14} />
           </button>
@@ -537,7 +531,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
                 ? data.onVoiceToggle(data.id)
                 : undefined;
             }}
-            title={isVoiceOpen ? 'Close Voice Input' : 'Voice Command: Speak to Agent'}
+            data-tooltip={isVoiceOpen ? 'Close Voice' : 'Voice Input'}
           >
             <Mic size={14} />
           </button>
@@ -548,7 +542,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               e.stopPropagation();
               data.onOpenTools?.(data);
             }}
-            title="Manage Allowed Tools (24 Built-in Tools)"
+            data-tooltip="Agent Tools"
           >
             <Wrench size={14} />
           </button>
@@ -559,7 +553,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               e.stopPropagation();
               data.onOpenPolicies?.(data);
             }}
-            title="Manage Guardrail Policies"
+            data-tooltip="Guard Policies"
           >
             <ShieldCheck size={14} />
           </button>
@@ -570,7 +564,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               e.stopPropagation();
               data.onEdit(data);
             }}
-            title="Configure Agent"
+            data-tooltip="Agent Settings"
           >
             <Settings size={14} />
           </button>
@@ -581,7 +575,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               e.stopPropagation();
               data.onDelete(data.id);
             }}
-            title="Delete Agent"
+            data-tooltip="Delete Agent"
           >
             <Trash2 size={14} />
           </button>
