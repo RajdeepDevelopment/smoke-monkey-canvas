@@ -6,6 +6,7 @@
 
 > **The visual, spatial multi-agent workspace for [Smoke Monkey Harness](https://github.com/RajdeepDevelopment/smoke-monkey-harness).**
 > Deploy, schedule, and chat with unlimited autonomous AI agents on an infinite canvas — all running locally with zero cloud lock-in.
+> 🌐 **Official Website & Live Simulator:** [https://smokemonkey.in](https://smokemonkey.in)
 
 [![Version](https://img.shields.io/badge/version-1.3.2-blue.svg)](https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases)
 [![License](https://img.shields.io/badge/license-Sustainable%20Use-orange.svg)](LICENSE.md)
