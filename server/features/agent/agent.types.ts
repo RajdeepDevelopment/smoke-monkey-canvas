@@ -22,6 +22,48 @@ export interface AgentRecord {
   created_at: string;
 }
 
+export type AttachmentSource = 'canvas' | 'user' | 'agent';
+
+export interface AgentPolicyEntry {
+  /** The policy/constraint text, rendered into the agent's system prompt. */
+  text: string;
+  /** Who added this policy: canvas (platform-managed), user (input box), or agent (self-added during a run). */
+  source: AttachmentSource;
+}
+
+/** Parse the `agents.policies` JSON column into entries. Accepts legacy arrays
+ * of plain strings (treated as `user`-added) and arrays of `{text, source}`. */
+export const parsePolicies = (raw: string | null | undefined): AgentPolicyEntry[] => {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return raw.trim() ? [{ text: raw.trim(), source: 'user' }] : [];
+    return parsed
+      .map((p): AgentPolicyEntry | null => {
+        if (typeof p === 'string') {
+          const text = p.trim();
+          return text ? { text, source: 'user' } : null;
+        }
+        if (p && typeof p === 'object') {
+          const o = p as { text?: unknown; source?: unknown };
+          const text = typeof o.text === 'string' ? o.text.trim() : '';
+          if (!text) return null;
+          const src =
+            o.source === 'canvas' || o.source === 'agent' || o.source === 'user'
+              ? o.source
+              : 'user';
+          return { text, source: src };
+        }
+        return null;
+      })
+      .filter((p): p is AgentPolicyEntry => p !== null);
+  } catch {
+    return raw.trim() ? [{ text: raw.trim(), source: 'user' }] : [];
+  }
+};
+
+export const stringifyPolicies = (entries: AgentPolicyEntry[]): string => JSON.stringify(entries);
+
 export interface AgentMcpRecord {
   id: string;
   agent_id: string;
@@ -30,6 +72,8 @@ export interface AgentMcpRecord {
   config_json: string;
   enabled: number;
   created_at: string;
+  /** Origin of this attachment: canvas (managed), user (input box), or agent (self-added). */
+  source?: AttachmentSource;
 }
 
 export interface AgentSkillRecord {
@@ -40,6 +84,7 @@ export interface AgentSkillRecord {
   content: string;
   enabled: number;
   created_at: string;
+  source?: AttachmentSource;
 }
 
 export interface RunRecord {

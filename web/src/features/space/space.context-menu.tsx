@@ -3,6 +3,8 @@ import { Search, X, Plus, Sparkles, Sliders, Clock, Tag, Bot, GripHorizontal } f
 import type { SpaceContextMenuState } from './space.types.js';
 import {
   ENTERPRISE_CATEGORIES,
+  ENTERPRISE_DISCIPLINES,
+  ENTERPRISE_SPECIALTIES,
   ENTERPRISE_AGENT_TEMPLATES,
   type AgentTemplate,
   type EnterpriseCategory,
@@ -18,16 +20,16 @@ interface SpaceContextMenuProps {
 
 const CATEGORY_SHORT_NAMES: Record<string, string> = {
   All: 'All',
-  'Engineering & DevOps': 'Engineering',
-  'HR & People Operations': 'HR & People',
+  'Software Development': 'Software',
+  'People & Talent': 'People',
   'Finance & Accounting': 'Finance',
-  'Sales & Marketing': 'Sales & Mktg',
-  'Customer Support & Success': 'Support',
+  'Sales & Marketing': 'Sales',
+  'Customer Experience': 'Support',
   'Legal & Compliance': 'Legal',
-  'Data & Business Intelligence': 'Data & BI',
+  'Data & Analytics': 'Data',
   'Security & SecOps': 'Security',
   'Product & Project Management': 'Product',
-  'Operations & IT Admin': 'IT & Ops',
+  'IT & Operations': 'IT & Ops',
 };
 
 const MENU_WIDTH = 470;
@@ -42,6 +44,8 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<EnterpriseCategory>('All');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ── Drag state ──
@@ -64,6 +68,8 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
       setPos({ x: clampedX, y: clampedY });
       setSearchQuery('');
       setSelectedCategory('All');
+      setSelectedSubcategory(null);
+      setSelectedSpecialty(null);
       setTimeout(() => searchInputRef.current?.focus(), 50);
     }
   }, [state.visible, state.x, state.y]);
@@ -138,13 +144,23 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
     };
   }, [state.visible, onClose]);
 
-  // ── Category counts ──
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { All: ENTERPRISE_AGENT_TEMPLATES.length };
+  // ── Taxonomy counts (domain / discipline / specialty) ──
+  const { categoryCounts, disciplineCounts, specialtyCounts } = useMemo(() => {
+    const categoryCounts: Record<string, number> = { All: ENTERPRISE_AGENT_TEMPLATES.length };
+    const disciplineCounts: Record<string, number> = {};
+    const specialtyCounts: Record<string, number> = {};
     for (const t of ENTERPRISE_AGENT_TEMPLATES) {
-      counts[t.category] = (counts[t.category] || 0) + 1;
+      categoryCounts[t.category] = (categoryCounts[t.category] || 0) + 1;
+      if (t.subcategory) {
+        const dk = `${t.category} :: ${t.subcategory}`;
+        disciplineCounts[dk] = (disciplineCounts[dk] || 0) + 1;
+      }
+      if (t.subcategory && t.specialty) {
+        const sk = `${t.category} :: ${t.subcategory} :: ${t.specialty}`;
+        specialtyCounts[sk] = (specialtyCounts[sk] || 0) + 1;
+      }
     }
-    return counts;
+    return { categoryCounts, disciplineCounts, specialtyCounts };
   }, []);
 
   // ── Filter templates ──
@@ -152,6 +168,12 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
     let list = ENTERPRISE_AGENT_TEMPLATES;
     if (selectedCategory !== 'All') {
       list = list.filter((t) => t.category === selectedCategory);
+      if (selectedSubcategory) {
+        list = list.filter((t) => t.subcategory === selectedSubcategory);
+        if (selectedSpecialty) {
+          list = list.filter((t) => t.specialty === selectedSpecialty);
+        }
+      }
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -160,12 +182,71 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
           t.name.toLowerCase().includes(q) ||
           t.role.toLowerCase().includes(q) ||
           t.category.toLowerCase().includes(q) ||
+          (t.subcategory || '').toLowerCase().includes(q) ||
+          (t.specialty || '').toLowerCase().includes(q) ||
           t.description.toLowerCase().includes(q) ||
           t.tags.some((tag) => tag.toLowerCase().includes(q)),
       );
     }
     return list;
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, selectedSubcategory, selectedSpecialty, searchQuery]);
+
+  // ── Drill-down navigation: which pills to show at the current level ──
+  const levelPills = useMemo(() => {
+    if (selectedCategory === 'All') {
+      return ENTERPRISE_CATEGORIES.filter((c) => c !== 'All').map((cat) => ({
+        key: cat,
+        label: CATEGORY_SHORT_NAMES[cat] || cat,
+        count: categoryCounts[cat] || 0,
+        onSelect: () => {
+          setSelectedCategory(cat);
+          setSelectedSubcategory(null);
+          setSelectedSpecialty(null);
+        },
+      }));
+    }
+    if (!selectedSubcategory) {
+      return (ENTERPRISE_DISCIPLINES[selectedCategory] || []).map((disc) => ({
+        key: `${selectedCategory}::${disc}`,
+        label: disc,
+        count: disciplineCounts[`${selectedCategory} :: ${disc}`] || 0,
+        onSelect: () => {
+          setSelectedSubcategory(disc);
+          setSelectedSpecialty(null);
+        },
+      }));
+    }
+    return (ENTERPRISE_SPECIALTIES[`${selectedCategory} :: ${selectedSubcategory}`] || []).map((sp) => ({
+      key: `${selectedCategory}::${selectedSubcategory}::${sp}`,
+      label: sp,
+      count: specialtyCounts[`${selectedCategory} :: ${selectedSubcategory} :: ${sp}`] || 0,
+      onSelect: () => setSelectedSpecialty(sp),
+    }));
+  }, [selectedCategory, selectedSubcategory, categoryCounts, disciplineCounts, specialtyCounts]);
+
+  // ── Breadcrumb path for the current drill-down position ──
+  const crumbs: { label: string; onClick: () => void }[] = [];
+  if (selectedCategory !== 'All') {
+    crumbs.push({
+      label: CATEGORY_SHORT_NAMES[selectedCategory] || selectedCategory,
+      onClick: () => {
+        setSelectedSubcategory(null);
+        setSelectedSpecialty(null);
+      },
+    });
+  }
+  if (selectedSubcategory) {
+    crumbs.push({
+      label: selectedSubcategory,
+      onClick: () => setSelectedSpecialty(null),
+    });
+  }
+  if (selectedSpecialty) {
+    crumbs.push({
+      label: selectedSpecialty,
+      onClick: () => setSelectedSpecialty(selectedSpecialty),
+    });
+  }
 
   if (!state.visible || !pos) return null;
 
@@ -201,7 +282,7 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
           ref={searchInputRef}
           type="text"
           className="context-menu-search-input"
-          placeholder="Search 100 enterprise agents, roles, or tags..."
+          placeholder="Search 300 enterprise agents, roles, or tags..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -216,24 +297,50 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
         )}
       </div>
 
-      {/* Category Pills */}
+      {/* Taxonomy Drill-Down: Domain → Discipline → Specialty */}
+      {crumbs.length > 0 && (
+        <div className="context-menu-breadcrumb">
+          <button
+            className="breadcrumb-chip crumb-root"
+            type="button"
+            onClick={() => {
+              setSelectedCategory('All');
+              setSelectedSubcategory(null);
+              setSelectedSpecialty(null);
+            }}
+            title="Back to all domains"
+          >
+            ⌂ All
+          </button>
+          {crumbs.map((crumb, i) => (
+            <React.Fragment key={i}>
+              <span className="breadcrumb-sep">›</span>
+              <button
+                className="breadcrumb-chip"
+                type="button"
+                onClick={crumb.onClick}
+                title={i === crumbs.length - 1 ? 'Current location' : 'Navigate up'}
+              >
+                {crumb.label}
+              </button>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
+      {/* Level Pills (domains, disciplines, or specialties) */}
       <div className="context-menu-categories">
-        {ENTERPRISE_CATEGORIES.map((cat) => {
-          const isSelected = selectedCategory === cat;
-          const count = categoryCounts[cat] || 0;
-          const shortName = CATEGORY_SHORT_NAMES[cat] || cat;
-          return (
-            <button
-              key={cat}
-              className={`category-pill ${isSelected ? 'active' : ''}`}
-              onClick={() => setSelectedCategory(cat)}
-              type="button"
-            >
-              <span>{shortName}</span>
-              <span className="pill-count">{count}</span>
-            </button>
-          );
-        })}
+        {levelPills.map((pill) => (
+          <button
+            key={pill.key}
+            className="category-pill"
+            onClick={pill.onSelect}
+            type="button"
+          >
+            <span>{pill.label}</span>
+            <span className="pill-count">{pill.count}</span>
+          </button>
+        ))}
       </div>
 
       {/* Quick Action: Blank Custom Agent */}
@@ -263,9 +370,13 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
           {searchQuery ? (
             <>Found {filteredTemplates.length} matching &quot;{searchQuery}&quot;</>
           ) : selectedCategory === 'All' ? (
-            <>100 Enterprise Presets Available</>
+            <>300 Enterprise Presets Available</>
+          ) : !selectedSubcategory ? (
+            <>{selectedCategory} · {filteredTemplates.length} agents</>
+          ) : !selectedSpecialty ? (
+            <>{selectedCategory} › {selectedSubcategory} · {filteredTemplates.length} agents</>
           ) : (
-            <>{selectedCategory} ({filteredTemplates.length})</>
+            <>{selectedCategory} › {selectedSubcategory} › {selectedSpecialty} · {filteredTemplates.length} agents</>
           )}
         </span>
       </div>
@@ -281,6 +392,8 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
               onClick={() => {
                 setSearchQuery('');
                 setSelectedCategory('All');
+                setSelectedSubcategory(null);
+                setSelectedSpecialty(null);
               }}
             >
               Reset Filters
@@ -292,7 +405,14 @@ export const SpaceContextMenu: React.FC<SpaceContextMenuProps> = ({
               <div className="template-header">
                 <div className="template-name-group">
                   <span className="template-name">{template.name}</span>
-                  <span className="template-category-badge">{template.category}</span>
+                  <span
+                    className="template-category-badge"
+                    title={[template.category, template.subcategory, template.specialty]
+                      .filter(Boolean)
+                      .join(' › ')}
+                  >
+                    {template.subcategory || template.category}
+                  </span>
                 </div>
                 {template.suggested_cron && (
                   <span className="template-cron-badge" title={`Schedule: ${template.suggested_cron}`}>

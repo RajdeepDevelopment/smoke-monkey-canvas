@@ -101,18 +101,82 @@ export interface LibDragPayload {
  */
 export const LIB_DRAG_KEY = 'application/x-smoke-monkey-library';
 
-/** Serialize a drag payload onto the DataTransfer in both readable forms. */
-export function writeLibDragPayload(dt: DataTransfer, payload: LibDragPayload): void {
-  const json = JSON.stringify(payload);
-  dt.setData(LIB_DRAG_KEY, json);
-  dt.setData('text/plain', json);
-  dt.effectAllowed = 'copy';
+/**
+ * In-memory active drag tracking.
+ * In Safari, Tauri (macOS WKWebView), and secure WebView contexts, custom MIME types
+ * are often stripped from `dataTransfer.types` during dragover, and `getData()` may be
+ * blocked or empty. Maintaining in-memory state ensures 100% reliable drag detection
+ * and payload retrieval across all environments.
+ */
+let activeDragPayload: LibDragPayload | null = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('dragend', () => {
+    activeDragPayload = null;
+  });
+  window.addEventListener('drop', () => {
+    setTimeout(() => {
+      activeDragPayload = null;
+    }, 50);
+  });
 }
 
-/** Read and validate a drag payload. Returns null for foreign drags. */
+export function setActiveDragPayload(payload: LibDragPayload | null): void {
+  activeDragPayload = payload;
+}
+
+export function getActiveDragPayload(): LibDragPayload | null {
+  return activeDragPayload;
+}
+
+/**
+ * Universal check for whether the current drag operation originated from the library.
+ * Checks in-memory drag state first, then falls back to inspect dataTransfer.types safely.
+ */
+export function isLibDrag(dt?: DataTransfer | null): boolean {
+  if (activeDragPayload !== null) return true;
+  if (!dt) return false;
+  try {
+    const types = dt.types ? Array.from(dt.types) : [];
+    return (
+      types.includes(LIB_DRAG_KEY) ||
+      types.some(
+        (t) =>
+          typeof t === 'string' &&
+          (t.toLowerCase().includes('smoke-monkey') || t === 'application/x-smoke-monkey-library'),
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Serialize a drag payload onto the DataTransfer in both readable forms and track in-memory. */
+export function writeLibDragPayload(dt: DataTransfer, payload: LibDragPayload): void {
+  activeDragPayload = payload;
+  const json = JSON.stringify(payload);
+  try {
+    dt.setData(LIB_DRAG_KEY, json);
+  } catch {}
+  try {
+    dt.setData('text/plain', json);
+  } catch {}
+  try {
+    dt.effectAllowed = 'copy';
+  } catch {}
+}
+
+/** Read and validate a drag payload. Uses in-memory payload or deserializes from DataTransfer. */
 export function readLibDragPayload(dt: DataTransfer | null): LibDragPayload | null {
+  if (activeDragPayload) {
+    const cached = activeDragPayload;
+    return cached;
+  }
   if (!dt) return null;
-  const raw = dt.getData(LIB_DRAG_KEY) || dt.getData('text/plain');
+  let raw = '';
+  try {
+    raw = dt.getData(LIB_DRAG_KEY) || dt.getData('text/plain');
+  } catch {}
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as LibDragPayload;
@@ -123,3 +187,4 @@ export function readLibDragPayload(dt: DataTransfer | null): LibDragPayload | nu
     return null;
   }
 }
+

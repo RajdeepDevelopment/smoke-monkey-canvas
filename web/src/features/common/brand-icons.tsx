@@ -364,11 +364,398 @@ export const BrandIcons: Record<string, React.FC<{ size?: number; className?: st
       <path d="M7.4 15.5H5.8V8.5h1.6c1.7 0 2.7.9 2.7 2.4v2.2c0 1.5-1 2.4-2.7 2.4zm-.2-1.3c.7 0 1.2-.4 1.2-1.2v-2c0-.8-.5-1.2-1.2-1.2h-.4v4.4h.4zm4.2 1.3h-1.4V8.5h1.4v7zm6 0h-3.4V8.5H16v1.3h-1.9v1.6h1.7v1.3h-1.7v1.6h2z" fill="#fff" />
     </svg>
   ),
+  vercel: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M12 2L23 21H1L12 2Z" fill="#FFFFFF" />
+    </svg>
+  ),
+  postman: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#FF6C37" className={className}>
+      <path d="M13.5 2C7.15 2 2 7.15 2 13.5S7.15 25 13.5 25 25 19.85 25 13.5 19.85 2 13.5 2zm5.72 6.43c-.45-.64-1.31-.83-1.95-.39l-4.7 3.23-1.63-1.64a1.44 1.44 0 00-2.03 0 1.44 1.44 0 000 2.03l2.64 2.65a1.44 1.44 0 001.83.17l5.45-3.75c.64-.44.83-1.31.39-2.3z" transform="scale(0.85) translate(1,1)" />
+    </svg>
+  ),
+  graphql: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#E10098" className={className}>
+      <path d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2zm0 2.3L5.34 8.2v7.6L12 19.7l6.66-3.9V8.2L12 4.3z" />
+      <circle cx="12" cy="2" r="2" fill="#E10098" />
+      <circle cx="20.66" cy="7" r="2" fill="#E10098" />
+      <circle cx="20.66" cy="17" r="2" fill="#E10098" />
+      <circle cx="12" cy="22" r="2" fill="#E10098" />
+      <circle cx="3.34" cy="17" r="2" fill="#E10098" />
+      <circle cx="3.34" cy="7" r="2" fill="#E10098" />
+    </svg>
+  ),
+  firebase: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M4.5 18.5L6.8 3.8a.7.7 0 011.3-.2l2.6 5L4.5 18.5z" fill="#FFA000" />
+      <path d="M4.5 18.5L12 22l7.5-3.5L14.7 7.2a.7.7 0 00-1.2 0L4.5 18.5z" fill="#F57C00" />
+      <path d="M10.7 8.6L12.5 5a.7.7 0 011.3.1L19.5 18.5 12 22l-1.3-13.4z" fill="#FFCA28" />
+    </svg>
+  ),
+  airtable: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M11.5 2.5L2 6.5l9.5 4 9.5-4-9.5-4z" fill="#FCB400" />
+      <path d="M13 12.5l8-3.5v7l-8 3.5v-7z" fill="#18BFFF" />
+      <path d="M11 12.5v7l-8-3.5v-7l8 3.5z" fill="#ED3F69" />
+    </svg>
+  ),
+  shopify: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#95BF47" className={className}>
+      <path d="M19.5 5.5l-2.2-.6c-.1 0-.1-.1-.2-.1l-1.4-1.4c-.4-.4-1-.7-1.6-.7H9.9c-.6 0-1.2.3-1.6.7L6.9 4.8c-.1 0-.1.1-.2.1L4.5 5.5C3.7 5.7 3.1 6.4 3 7.2L2 19c-.1 1.1.8 2 1.9 2h16.2c1.1 0 2-.9 1.9-2L21 7.2c-.1-.8-.7-1.5-1.5-1.7zM12 4.2c.4 0 .7.3.7.7v1.6H11.3V4.9c0-.4.3-.7.7-.7zm1.8 11.6c-.6.6-1.5 1-2.4 1-1.3 0-2.3-.7-2.3-2.1 0-1.8 1.9-2.2 3.5-2.4v-.4c0-.6-.4-.9-1.1-.9-.6 0-1.2.3-1.4.8l-1.2-.6c.5-1.1 1.6-1.6 2.7-1.6 1.6 0 2.4.9 2.4 2.2v4.4h-1.4v-.4h1.2z" />
+    </svg>
+  ),
+  terminal: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="2" y="3" width="20" height="18" rx="4" fill="#0F172A" stroke="#38BDF8" strokeWidth="2" />
+      <path d="M7 8l4 4-4 4M13 16h4" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  duckdb: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#FFF000" className={className}>
+      <circle cx="12" cy="12" r="10" fill="#000" />
+      <circle cx="14" cy="9" r="6" fill="#FFF000" />
+      <circle cx="10" cy="14" r="5" fill="#FFF000" />
+      <path d="M19 9c1.5 0 3 .8 3 2s-1.5 1-3 1v-3z" fill="#FF9900" />
+      <circle cx="15" cy="8" r="1" fill="#000" />
+    </svg>
+  ),
+  clickhouse: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#FFCC00" className={className}>
+      <rect x="2" y="4" width="2" height="16" fill="#FF0000" />
+      <rect x="6" y="4" width="2" height="16" />
+      <rect x="10" y="4" width="2" height="16" />
+      <rect x="14" y="4" width="2" height="16" />
+      <rect x="18" y="4" width="2" height="16" />
+      <rect x="22" y="10" width="2" height="4" />
+    </svg>
+  ),
+  pinecone: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="12" cy="6" r="3" fill="#10B981" />
+      <circle cx="8" cy="11" r="3" fill="#059669" />
+      <circle cx="16" cy="11" r="3" fill="#059669" />
+      <circle cx="6" cy="16" r="3" fill="#047857" />
+      <circle cx="12" cy="16" r="3" fill="#047857" />
+      <circle cx="18" cy="16" r="3" fill="#047857" />
+    </svg>
+  ),
+  qdrant: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#DC2626" className={className}>
+      <path d="M12 2L3 7v10l9 5 9-5V7l-9-5zm0 3.3L18.5 8 12 11.7 5.5 8 12 5.3zm-7 4.5l6 3.4v6.5l-6-3.4V9.8zm8 9.9v-6.5l6-3.4v6.5l-6 3.4z" />
+    </svg>
+  ),
+  weaviate: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M4 12c2.5-5 5.5-5 8 0s5.5 5 8 0" stroke="#06B6D4" strokeWidth="3" strokeLinecap="round" />
+      <path d="M4 18c2.5-5 5.5-5 8 0s5.5 5 8 0" stroke="#0891B2" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  ),
+  chroma: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="8" cy="9" r="6" fill="#F43F5E" />
+      <circle cx="16" cy="9" r="6" fill="#06B6D4" />
+      <circle cx="12" cy="16" r="6" fill="#EAB308" />
+    </svg>
+  ),
 };
+
+export interface BrandMeta {
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  glowColor: string;
+}
+
+export const BRAND_CONFIGS: Record<string, BrandMeta> = {
+  github: {
+    color: '#FFFFFF',
+    bgColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    glowColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  gitlab: {
+    color: '#FC6D26',
+    bgColor: 'rgba(252, 109, 38, 0.14)',
+    borderColor: 'rgba(252, 109, 38, 0.32)',
+    glowColor: 'rgba(252, 109, 38, 0.35)',
+  },
+  filesystem: {
+    color: '#3B82F6',
+    bgColor: 'rgba(59, 130, 246, 0.14)',
+    borderColor: 'rgba(59, 130, 246, 0.32)',
+    glowColor: 'rgba(59, 130, 246, 0.35)',
+  },
+  localfilesystem: {
+    color: '#3B82F6',
+    bgColor: 'rgba(59, 130, 246, 0.14)',
+    borderColor: 'rgba(59, 130, 246, 0.32)',
+    glowColor: 'rgba(59, 130, 246, 0.35)',
+  },
+  git: {
+    color: '#F05032',
+    bgColor: 'rgba(240, 80, 50, 0.14)',
+    borderColor: 'rgba(240, 80, 50, 0.32)',
+    glowColor: 'rgba(240, 80, 50, 0.35)',
+  },
+  sentry: {
+    color: '#FF4F64',
+    bgColor: 'rgba(255, 79, 100, 0.14)',
+    borderColor: 'rgba(255, 79, 100, 0.32)',
+    glowColor: 'rgba(255, 79, 100, 0.35)',
+  },
+  slack: {
+    color: '#E01E5A',
+    bgColor: 'rgba(224, 30, 90, 0.14)',
+    borderColor: 'rgba(224, 30, 90, 0.32)',
+    glowColor: 'rgba(224, 30, 90, 0.35)',
+  },
+  notion: {
+    color: '#FFFFFF',
+    bgColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    glowColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  googledrive: {
+    color: '#00AC47',
+    bgColor: 'rgba(0, 172, 71, 0.14)',
+    borderColor: 'rgba(0, 172, 71, 0.32)',
+    glowColor: 'rgba(0, 172, 71, 0.35)',
+  },
+  google: {
+    color: '#4285F4',
+    bgColor: 'rgba(66, 133, 244, 0.14)',
+    borderColor: 'rgba(66, 133, 244, 0.32)',
+    glowColor: 'rgba(66, 133, 244, 0.35)',
+  },
+  docker: {
+    color: '#2496ED',
+    bgColor: 'rgba(36, 150, 237, 0.14)',
+    borderColor: 'rgba(36, 150, 237, 0.32)',
+    glowColor: 'rgba(36, 150, 237, 0.35)',
+  },
+  kubernetes: {
+    color: '#326CE5',
+    bgColor: 'rgba(50, 108, 229, 0.14)',
+    borderColor: 'rgba(50, 108, 229, 0.32)',
+    glowColor: 'rgba(50, 108, 229, 0.35)',
+  },
+  aws: {
+    color: '#FF9900',
+    bgColor: 'rgba(255, 153, 0, 0.14)',
+    borderColor: 'rgba(255, 153, 0, 0.32)',
+    glowColor: 'rgba(255, 153, 0, 0.35)',
+  },
+  cloudflare: {
+    color: '#F38020',
+    bgColor: 'rgba(243, 128, 32, 0.14)',
+    borderColor: 'rgba(243, 128, 32, 0.32)',
+    glowColor: 'rgba(243, 128, 32, 0.35)',
+  },
+  supabase: {
+    color: '#3ECF8E',
+    bgColor: 'rgba(62, 207, 142, 0.14)',
+    borderColor: 'rgba(62, 207, 142, 0.32)',
+    glowColor: 'rgba(62, 207, 142, 0.35)',
+  },
+  redis: {
+    color: '#DC382D',
+    bgColor: 'rgba(220, 56, 45, 0.14)',
+    borderColor: 'rgba(220, 56, 45, 0.32)',
+    glowColor: 'rgba(220, 56, 45, 0.35)',
+  },
+  postgres: {
+    color: '#336791',
+    bgColor: 'rgba(51, 103, 145, 0.14)',
+    borderColor: 'rgba(51, 103, 145, 0.32)',
+    glowColor: 'rgba(51, 103, 145, 0.35)',
+  },
+  mysql: {
+    color: '#00758F',
+    bgColor: 'rgba(0, 117, 143, 0.14)',
+    borderColor: 'rgba(0, 117, 143, 0.32)',
+    glowColor: 'rgba(0, 117, 143, 0.35)',
+  },
+  sqlite: {
+    color: '#38BDF8',
+    bgColor: 'rgba(56, 189, 248, 0.14)',
+    borderColor: 'rgba(56, 189, 248, 0.32)',
+    glowColor: 'rgba(56, 189, 248, 0.35)',
+  },
+  mongodb: {
+    color: '#13AA52',
+    bgColor: 'rgba(19, 170, 82, 0.14)',
+    borderColor: 'rgba(19, 170, 82, 0.32)',
+    glowColor: 'rgba(19, 170, 82, 0.35)',
+  },
+  linear: {
+    color: '#5E6AD2',
+    bgColor: 'rgba(94, 106, 210, 0.14)',
+    borderColor: 'rgba(94, 106, 210, 0.32)',
+    glowColor: 'rgba(94, 106, 210, 0.35)',
+  },
+  jira: {
+    color: '#0052CC',
+    bgColor: 'rgba(0, 82, 204, 0.14)',
+    borderColor: 'rgba(0, 82, 204, 0.32)',
+    glowColor: 'rgba(0, 82, 204, 0.35)',
+  },
+  confluence: {
+    color: '#0052CC',
+    bgColor: 'rgba(0, 82, 204, 0.14)',
+    borderColor: 'rgba(0, 82, 204, 0.32)',
+    glowColor: 'rgba(0, 82, 204, 0.35)',
+  },
+  brave: {
+    color: '#FB542B',
+    bgColor: 'rgba(251, 84, 43, 0.14)',
+    borderColor: 'rgba(251, 84, 43, 0.32)',
+    glowColor: 'rgba(251, 84, 43, 0.35)',
+  },
+  stripe: {
+    color: '#635BFF',
+    bgColor: 'rgba(99, 91, 255, 0.14)',
+    borderColor: 'rgba(99, 91, 255, 0.32)',
+    glowColor: 'rgba(99, 91, 255, 0.35)',
+  },
+  playwright: {
+    color: '#2EAD33',
+    bgColor: 'rgba(46, 173, 51, 0.14)',
+    borderColor: 'rgba(46, 173, 51, 0.32)',
+    glowColor: 'rgba(46, 173, 51, 0.35)',
+  },
+  puppeteer: {
+    color: '#00D8A2',
+    bgColor: 'rgba(0, 216, 162, 0.14)',
+    borderColor: 'rgba(0, 216, 162, 0.32)',
+    glowColor: 'rgba(0, 216, 162, 0.35)',
+  },
+  datadog: {
+    color: '#632CA6',
+    bgColor: 'rgba(99, 44, 166, 0.14)',
+    borderColor: 'rgba(99, 44, 166, 0.32)',
+    glowColor: 'rgba(99, 44, 166, 0.35)',
+  },
+  discord: {
+    color: '#5865F2',
+    bgColor: 'rgba(88, 101, 242, 0.14)',
+    borderColor: 'rgba(88, 101, 242, 0.32)',
+    glowColor: 'rgba(88, 101, 242, 0.35)',
+  },
+  figma: {
+    color: '#F24E1E',
+    bgColor: 'rgba(242, 78, 30, 0.14)',
+    borderColor: 'rgba(242, 78, 30, 0.32)',
+    glowColor: 'rgba(242, 78, 30, 0.35)',
+  },
+  vercel: {
+    color: '#FFFFFF',
+    bgColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    glowColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  postman: {
+    color: '#FF6C37',
+    bgColor: 'rgba(255, 108, 55, 0.14)',
+    borderColor: 'rgba(255, 108, 55, 0.32)',
+    glowColor: 'rgba(255, 108, 55, 0.35)',
+  },
+  graphql: {
+    color: '#E10098',
+    bgColor: 'rgba(225, 0, 152, 0.14)',
+    borderColor: 'rgba(225, 0, 152, 0.32)',
+    glowColor: 'rgba(225, 0, 152, 0.35)',
+  },
+  firebase: {
+    color: '#FFA000',
+    bgColor: 'rgba(255, 160, 0, 0.14)',
+    borderColor: 'rgba(255, 160, 0, 0.32)',
+    glowColor: 'rgba(255, 160, 0, 0.35)',
+  },
+  airtable: {
+    color: '#FCB400',
+    bgColor: 'rgba(252, 180, 0, 0.14)',
+    borderColor: 'rgba(252, 180, 0, 0.32)',
+    glowColor: 'rgba(252, 180, 0, 0.35)',
+  },
+  terminal: {
+    color: '#38BDF8',
+    bgColor: 'rgba(56, 189, 248, 0.14)',
+    borderColor: 'rgba(56, 189, 248, 0.32)',
+    glowColor: 'rgba(56, 189, 248, 0.35)',
+  },
+  duckdb: {
+    color: '#FFF000',
+    bgColor: 'rgba(255, 240, 0, 0.14)',
+    borderColor: 'rgba(255, 240, 0, 0.32)',
+    glowColor: 'rgba(255, 240, 0, 0.35)',
+  },
+  clickhouse: {
+    color: '#FFCC00',
+    bgColor: 'rgba(255, 204, 0, 0.14)',
+    borderColor: 'rgba(255, 204, 0, 0.32)',
+    glowColor: 'rgba(255, 204, 0, 0.35)',
+  },
+  pinecone: {
+    color: '#10B981',
+    bgColor: 'rgba(16, 185, 129, 0.14)',
+    borderColor: 'rgba(16, 185, 129, 0.32)',
+    glowColor: 'rgba(16, 185, 129, 0.35)',
+  },
+  qdrant: {
+    color: '#DC2626',
+    bgColor: 'rgba(220, 38, 38, 0.14)',
+    borderColor: 'rgba(220, 38, 38, 0.32)',
+    glowColor: 'rgba(220, 38, 38, 0.35)',
+  },
+  tavily: {
+    color: '#3B82F6',
+    bgColor: 'rgba(59, 130, 246, 0.14)',
+    borderColor: 'rgba(59, 130, 246, 0.32)',
+    glowColor: 'rgba(59, 130, 246, 0.35)',
+  },
+  firecrawl: {
+    color: '#FF5722',
+    bgColor: 'rgba(255, 87, 34, 0.14)',
+    borderColor: 'rgba(255, 87, 34, 0.32)',
+    glowColor: 'rgba(255, 87, 34, 0.35)',
+  },
+  snowflake: {
+    color: '#29B5E8',
+    bgColor: 'rgba(41, 181, 232, 0.14)',
+    borderColor: 'rgba(41, 181, 232, 0.32)',
+    glowColor: 'rgba(41, 181, 232, 0.35)',
+  },
+  twilio: {
+    color: '#F22F46',
+    bgColor: 'rgba(242, 47, 70, 0.14)',
+    borderColor: 'rgba(242, 47, 70, 0.32)',
+    glowColor: 'rgba(242, 47, 70, 0.35)',
+  },
+  hubspot: {
+    color: '#FF7A59',
+    bgColor: 'rgba(255, 122, 89, 0.14)',
+    borderColor: 'rgba(255, 122, 89, 0.32)',
+    glowColor: 'rgba(255, 122, 89, 0.35)',
+  },
+  salesforce: {
+    color: '#00A1E0',
+    bgColor: 'rgba(0, 161, 224, 0.14)',
+    borderColor: 'rgba(0, 161, 224, 0.32)',
+    glowColor: 'rgba(0, 161, 224, 0.35)',
+  },
+};
+
+export interface BrandVisuals {
+  icon: React.ReactNode;
+  brandKey: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  glowColor: string;
+}
 
 export const getBrandIcon = (key: string, size = 16) => {
   const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-  // Sort keys by descending length so specific keys (e.g. 'github', 'googledrive') match before prefixes (e.g. 'git', 'google')
   const sortedKeys = Object.keys(BrandIcons).sort((a, b) => b.length - a.length);
   for (const k of sortedKeys) {
     if (normalized.includes(k)) {
@@ -377,4 +764,40 @@ export const getBrandIcon = (key: string, size = 16) => {
     }
   }
   return null;
+};
+
+export const getBrandVisuals = (key: string, size = 26): BrandVisuals => {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const sortedKeys = Object.keys(BrandIcons).sort((a, b) => b.length - a.length);
+  for (const k of sortedKeys) {
+    if (normalized.includes(k)) {
+      const IconComponent = BrandIcons[k];
+      const cfg = BRAND_CONFIGS[k] || {
+        color: '#60A5FA',
+        bgColor: 'rgba(96, 165, 250, 0.14)',
+        borderColor: 'rgba(96, 165, 250, 0.32)',
+        glowColor: 'rgba(96, 165, 250, 0.35)',
+      };
+      return {
+        icon: <IconComponent size={size} />,
+        brandKey: k,
+        ...cfg,
+      };
+    }
+  }
+
+  // Fallback visuals
+  return {
+    icon: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#A78BFA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16.5 9.4 7.55 4.24a1.78 1.78 0 0 0-2.5 1.55v12.42a1.78 1.78 0 0 0 2.5 1.55L16.5 14.6a1.78 1.78 0 0 0 0-3.2z" />
+        <polyline points="21 16 21 8" />
+      </svg>
+    ),
+    brandKey: 'generic',
+    color: '#A78BFA',
+    bgColor: 'rgba(167, 139, 250, 0.12)',
+    borderColor: 'rgba(167, 139, 250, 0.28)',
+    glowColor: 'rgba(167, 139, 250, 0.3)',
+  };
 };

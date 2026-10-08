@@ -65,6 +65,11 @@ const SKILL_CATEGORY_ICONS: Record<string, LucideIcon> = {
   'Web Scraping & Research': Globe,
   'Operations & IT Admin': Server,
   'HR & People Operations': CircleUserRound,
+  'Software Development': Code2,
+  'People & Talent': CircleUserRound,
+  'Customer Experience': Headphones,
+  'Data & Analytics': ChartColumnIncreasing,
+  'IT & Operations': Server,
 };
 
 /** Skill category accents, extended to cover the server's SKILL_CATEGORIES. */
@@ -97,6 +102,11 @@ export const SKILL_CATEGORY_COLORS: Record<string, string> = {
   'Web Scraping & Research': '#14b8a6',
   'Operations & IT Admin': '#475569',
   'HR & People Operations': '#d946ef',
+  'Software Development': '#f97316',
+  'People & Talent': '#d946ef',
+  'Customer Experience': '#10b981',
+  'Data & Analytics': '#8b5cf6',
+  'IT & Operations': '#475569',
 };
 
 export const skillCategoryIcon = (category: string): LucideIcon =>

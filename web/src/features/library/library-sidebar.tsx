@@ -8,12 +8,12 @@ import {
   Trash2, Sparkles, ArrowUpCircle, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { getBrandIcon } from '../common/brand-icons.js';
+import { getBrandVisuals } from '../common/brand-icons.js';
 import type { StockMcp } from '../mcp/mcp.types.js';
 import type { AgentTemplate } from '../agent/agent.templates.js';
 import { ENTERPRISE_AGENT_TEMPLATES } from '../agent/agent.templates.js';
 import type { LibraryTab, LibDragPayload, PromptPreset, StockSkillItem, ToolKit } from './library.types.js';
-import { writeLibDragPayload, PLUGIN_CATEGORY_ORDER } from './library.types.js';
+import { writeLibDragPayload, setActiveDragPayload, PLUGIN_CATEGORY_ORDER } from './library.types.js';
 import { STOCK_SKILLS, TOOL_KITS } from './library.data.js';
 import { CUSTOM_PLUGINS, pluginToSkillItem, formatStars, VERIFIED_AT } from './library.plugins.js';
 import {
@@ -25,6 +25,8 @@ import { PROVIDER_CATALOG } from '../common/provider-catalog.js';
 import { getPersonalityMarkdown, getOutputStyleMarkdown } from './library-rich-content.js';
 import { AgentClockScheduler, describeCron } from './agent-clock-scheduler.js';
 import { openExternalLink, isTauri } from '../../config/desktop.bridge.js';
+import { useIsMobile } from '../common/use-mobile.js';
+import { LibrarySidebarMobile } from './mobile/library-sidebar.mobile.js';
 
 function formatAgentModelBadge(modelId: string): string {
   if (!modelId) return 'Default Model';
@@ -67,10 +69,10 @@ const MCP_CATEGORIES = [
 ];
 
 const AGENT_CATEGORIES = [
-  'All', 'Engineering & DevOps', 'Data & Business Intelligence',
-  'Security & SecOps', 'Product & Project Management', 'Operations & IT Admin',
-  'Sales & Marketing', 'Customer Support & Success', 'Finance & Accounting',
-  'HR & People Operations', 'Legal & Compliance',
+  'All', 'Software Development', 'Data & Analytics',
+  'Security & SecOps', 'Product & Project Management', 'IT & Operations',
+  'Sales & Marketing', 'Customer Experience', 'Finance & Accounting',
+  'People & Talent', 'Legal & Compliance',
 ];
 
 const PERSONALITY_CATEGORIES = [
@@ -153,7 +155,7 @@ export const createBlankCustomSkill = (): StockSkillItem => ({
 export const createBlankCustomAgent = (): AgentTemplate => ({
   id: `custom-agent-${Date.now()}`,
   name: 'Custom Autonomous Specialist',
-  category: 'Engineering & DevOps',
+  category: 'Software Development',
   role: 'Specialized Autonomous Worker',
   description: 'Custom autonomous agent configured with your chosen model, directive prompt, schedule, and tool permissions.',
   system_prompt: 'You are an autonomous AI specialist for Smoke Monkey Canvas. Formulate structured execution plans, invoke available tools methodically, verify results before concluding tasks, and maintain high standards of quality.',
@@ -433,6 +435,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   onSpawnTemplate,
 }) => {
   const [activeTab, setActiveTab] = useState<LibraryTab | null>(null);
+  const isMobile = useIsMobile();
   const [selectedDetail, setSelectedDetail] = useState<DetailItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [skillSource, setSkillSource] = useState<SkillSource>('stock');
@@ -524,7 +527,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   const [customAgentModel, setCustomAgentModel] = useState('');
   const [customAgentProvider, setCustomAgentProvider] = useState('');
   const [customAgentRole, setCustomAgentRole] = useState('');
-  const [customAgentCategory, setCustomAgentCategory] = useState('Engineering & DevOps');
+  const [customAgentCategory, setCustomAgentCategory] = useState('Software Development');
   const [customAgentDescription, setCustomAgentDescription] = useState('');
   const [customAgentCron, setCustomAgentCron] = useState('');
   const [customAgentPrompt, setCustomAgentPrompt] = useState('');
@@ -581,7 +584,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
       setCustomAgentModel(a.default_model);
       setCustomAgentProvider(a.provider || 'nvidia');
       setCustomAgentRole(a.role);
-      setCustomAgentCategory(a.category || 'Engineering & DevOps');
+      setCustomAgentCategory(a.category || 'Software Development');
       setCustomAgentDescription(a.description || '');
       setCustomAgentCron(a.suggested_cron || '');
       setCustomAgentPrompt(a.system_prompt || '');
@@ -1273,7 +1276,10 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     setDraggingKey(key);
   };
 
-  const endDrag = () => setDraggingKey(null);
+  const endDrag = () => {
+    setDraggingKey(null);
+    setActiveDragPayload(null);
+  };
 
   const itemClass = (key: string, base = 'lib-item lib-item-ready') =>
     `${base} ${draggingKey === key ? 'lib-dragging' : ''}`;
@@ -1310,8 +1316,8 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
 
   return (
     <div
-      className={`lib-sidebar-root nodrag nopan ${selectedDetail ? 'has-detail' : ''} ${isDraggingDock ? 'is-dragging-dock' : ''}`}
-      style={{ left: pos.x, top: pos.y }}
+      className={`lib-sidebar-root nodrag nopan ${selectedDetail ? 'has-detail' : ''} ${isDraggingDock ? 'is-dragging-dock' : ''} ${isMobile ? 'is-mobile-root' : ''}`}
+      style={!isMobile ? { left: pos.x, top: pos.y } : undefined}
       onClick={(e) => e.stopPropagation()}
     >
       {saveSuccessMsg && (
@@ -1320,15 +1326,17 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
         </div>
       )}
 
-      {/* ── Level 1: Icon Rail (Docked Activity Bar) ── */}
+      {/* ── Level 1: Bottom Dock for Mobile / Icon Rail for Desktop ── */}
       <div
-        className="lib-icon-rail"
-        onMouseDown={handleDockDragStart}
-        title="Drag to reposition workspace dock"
+        className={`lib-icon-rail ${isMobile ? 'lib-mobile-bottom-dock' : ''}`}
+        onMouseDown={!isMobile ? handleDockDragStart : undefined}
+        title={!isMobile ? 'Drag to reposition workspace dock' : undefined}
       >
-        <div className="lib-grip" title="Drag to reposition workspace dock">
-          <span className="lib-grip-pill" />
-        </div>
+        {!isMobile && (
+          <div className="lib-grip" title="Drag to reposition workspace dock">
+            <span className="lib-grip-pill" />
+          </div>
+        )}
 
         {TABS.map((tab, idx) => {
           const Icon = LIB_TAB_ICONS[tab.id];
@@ -1404,7 +1412,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
       </div>
 
       {/* ── Level 2: Expanded Library Panel ── */}
-      {activeTab && activeTabMeta && (
+      {activeTab && activeTabMeta && !isMobile && (
         <div className="lib-panel" style={{ width: PANEL_WIDTH }}>
           {/* Header is draggable from its upper section */}
           <div
@@ -1562,15 +1570,15 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                     </button>
 
                     {expandedCats.has(cat) && (
-                      <div className="lib-items-list">
+                      <div className="lib-items-list lib-mcp-items-list">
                         {mcps.map((mcp) => {
                           const ready = isMcpReady(mcp);
-                          const Icon = getBrandIcon(`${mcp.label} ${mcp.name}`, 15);
+                          const brand = getBrandVisuals(`${mcp.label} ${mcp.name}`, 26);
                           const isSelected = selectedDetail?.kind === 'mcp' && selectedDetail.item.name === mcp.name;
                           return (
                             <div
                               key={mcp.name}
-                              className={`${itemClass(`mcp:${mcp.name}`, 'lib-item lib-card-item')} ${ready ? 'lib-item-ready' : 'lib-item-locked'} ${isSelected ? 'lib-item-selected' : ''}`}
+                              className={`${itemClass(`mcp:${mcp.name}`, 'lib-item lib-card-item lib-mcp-card')} ${ready ? 'lib-item-ready' : 'lib-item-locked'} ${isSelected ? 'lib-item-selected' : ''}`}
                               draggable
                               onDragStart={(e) => startDrag(`mcp:${mcp.name}`, e, { kind: 'mcp', mcp })}
                               onDragEnd={endDrag}
@@ -1578,59 +1586,82 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                                 setMcpEditMode('form');
                                 handleSelectDetail({ kind: 'mcp', item: mcp, isCustom: mcp.isCustom });
                               }}
+                              style={{
+                                '--brand-accent': brand.color,
+                                '--brand-glow': brand.glowColor,
+                              } as React.CSSProperties}
                               title={`${mcp.label}\n\nClick to inspect details\nDrag onto agent card to attach`}
                             >
-                              <div className="lib-card-header">
-                                <div className="lib-card-identity">
-                                  <span className="lib-item-icon-wrap">{Icon || <Package size={14} />}</span>
-                                  <div className="lib-card-heading">
-                                    <span className="lib-card-title">{mcp.label}</span>
-                                    {mcp.isCustom ? (
-                                      <span className="lib-custom-badge">Custom</span>
-                                    ) : (
-                                      <span className="lib-card-badge">{mcp.category}</span>
-                                    )}
-                                  </div>
+                              <div className="lib-mcp-card-hero">
+                                {/* Large Prominent Brand Icon Tile */}
+                                <div
+                                  className="lib-mcp-brand-tile"
+                                  style={{
+                                    background: brand.bgColor,
+                                    border: `1px solid ${brand.borderColor}`,
+                                    boxShadow: `0 4px 14px -3px ${brand.glowColor}`,
+                                  }}
+                                  title={`${mcp.label} Brand Integration`}
+                                >
+                                  {brand.icon}
                                 </div>
-                                <div className="lib-card-header-right">
-                                  {ready ? (
-                                    <span className="lib-badge-status-ready" title="Configured and ready">
-                                      <CheckCircle2 size={11} color="#10b981" />
-                                    </span>
-                                  ) : (
-                                    <button
-                                      className="lib-connect-btn"
-                                      title={`Connect ${mcp.label} and store credentials`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onConnectKey(mcp);
-                                      }}
-                                    >
-                                      <Lock size={9} />
-                                      <span>Connect</span>
-                                    </button>
-                                  )}
-                                  {mcp.isCustom && (
-                                    <button
-                                      className="lib-item-delete-btn"
-                                      title="Delete this custom MCP server"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteCustomMcp(mcp.name);
-                                      }}
-                                    >
-                                      <Trash2 size={11} />
-                                    </button>
-                                  )}
-                                  <ChevronRight size={13} className="lib-item-arrow" />
+
+                                <div className="lib-mcp-card-main">
+                                  <div className="lib-mcp-card-header-line">
+                                    <div className="lib-mcp-title-wrap">
+                                      <span className="lib-mcp-title" title={mcp.label}>{mcp.label}</span>
+                                      {mcp.isCustom ? (
+                                        <span className="lib-custom-badge">Custom</span>
+                                      ) : (
+                                        <span className="lib-mcp-category-pill">{mcp.category}</span>
+                                      )}
+                                    </div>
+
+                                    <div className="lib-mcp-actions-wrap">
+                                      {ready ? (
+                                        <span className="lib-badge-status-ready" title="Configured and ready">
+                                          <CheckCircle2 size={13} color="#10b981" />
+                                          <span className="lib-ready-text">Ready</span>
+                                        </span>
+                                      ) : (
+                                        <button
+                                          className="lib-connect-btn lib-connect-btn-prominent"
+                                          title={`Connect ${mcp.label} and store credentials`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onConnectKey(mcp);
+                                          }}
+                                        >
+                                          <Lock size={10} />
+                                          <span>Connect</span>
+                                        </button>
+                                      )}
+                                      {mcp.isCustom && (
+                                        <button
+                                          className="lib-item-delete-btn"
+                                          title="Delete this custom MCP server"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteCustomMcp(mcp.name);
+                                          }}
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      )}
+                                      <ChevronRight size={14} className="lib-item-arrow" />
+                                    </div>
+                                  </div>
+
+                                  <p className="lib-mcp-desc">{mcp.description}</p>
                                 </div>
                               </div>
-                              <p className="lib-card-desc">{mcp.description}</p>
+
                               {mcp.envKeys.length > 0 && (
-                                <div className="lib-card-chips">
+                                <div className="lib-mcp-footer-chips">
                                   {mcp.envKeys.map((k) => (
-                                    <span key={k} className="lib-tool-chip" style={{ color: '#f59e0b' }}>
-                                      <KeyRound size={8} /> {k}
+                                    <span key={k} className="lib-mcp-key-chip" style={{ color: '#f59e0b' }}>
+                                      <KeyRound size={9} />
+                                      <code>{k}</code>
                                     </span>
                                   ))}
                                 </div>
@@ -2196,7 +2227,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
       )}
 
       {/* ── Level 3: Inner Section Detail Panel (Inspector) ── */}
-      {selectedDetail && (
+      {selectedDetail && !isMobile && (
         <div className="lib-detail-panel" style={{ width: DETAIL_WIDTH }}>
           {/* Agent Template Details with Live Model Configuration & Dragging */}
           {selectedDetail.kind === 'agent' && (
@@ -2558,10 +2589,32 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                       </div>
                     )
                   ) : (
-                    <>
-                      <h3 className="lib-detail-title">{selectedDetail.item.label}</h3>
-                      <p className="lib-detail-role"><code>{selectedDetail.item.name}</code></p>
-                    </>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                      {(() => {
+                        const brand = getBrandVisuals(`${selectedDetail.item.label} ${selectedDetail.item.name}`, 30);
+                        return (
+                          <div
+                            className="lib-mcp-brand-tile"
+                            style={{
+                              width: 50,
+                              height: 50,
+                              minWidth: 50,
+                              minHeight: 50,
+                              borderRadius: 13,
+                              background: brand.bgColor,
+                              border: `1px solid ${brand.borderColor}`,
+                              boxShadow: `0 4px 16px -3px ${brand.glowColor}`,
+                            }}
+                          >
+                            {brand.icon}
+                          </div>
+                        );
+                      })()}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <h3 className="lib-detail-title" style={{ margin: 0, fontSize: 15 }}>{selectedDetail.item.label}</h3>
+                        <p className="lib-detail-role" style={{ margin: '3px 0 0' }}><code>{selectedDetail.item.name}</code></p>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -3898,6 +3951,29 @@ ${selectedDetail.item.tools.map((t) => `- \`${t}\`: Built-in safe workspace prim
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Mobile Library Sheet with full Level 2 & Inner Detail Navigation ── */}
+      {isMobile && activeTab && (
+        <LibrarySidebarMobile
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          stockMcps={stockMcps}
+          configuredKeys={configuredKeys}
+          serverStockSkills={serverStockSkills}
+          customMcps={customMcps}
+          customSkills={customSkills}
+          customAgents={customAgents}
+          customToolkits={customToolkits}
+          personalityPresets={personalityPresets}
+          outputStylePresets={outputStylePresets}
+          onConnectKey={onConnectKey}
+          onSpawnTemplate={onSpawnTemplate}
+          onClose={() => {
+            setActiveTab(null);
+            setSelectedDetail(null);
+          }}
+        />
       )}
     </div>
   );

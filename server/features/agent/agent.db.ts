@@ -132,12 +132,13 @@ export class AgentDb {
 
   addAgentMcp(mcp: Omit<AgentMcpRecord, 'created_at'> & { created_at?: string }): AgentMcpRecord {
     const createdAt = mcp.created_at ?? new Date().toISOString();
+    const source = mcp.source ?? 'user';
     const stmt = this.coreDb.db.prepare(`
-      INSERT INTO agent_mcps (id, agent_id, mcp_name, label, config_json, enabled, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agent_mcps (id, agent_id, mcp_name, label, config_json, enabled, created_at, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(mcp.id, mcp.agent_id, mcp.mcp_name, mcp.label, mcp.config_json, mcp.enabled, createdAt);
-    return { ...mcp, created_at: createdAt };
+    stmt.run(mcp.id, mcp.agent_id, mcp.mcp_name, mcp.label, mcp.config_json, mcp.enabled, createdAt, source);
+    return { ...mcp, created_at: createdAt, source };
   }
 
   deleteAgentMcp(id: string): boolean {
@@ -154,9 +155,10 @@ export class AgentDb {
 
   addAgentSkill(skill: Omit<AgentSkillRecord, 'created_at'> & { created_at?: string }): AgentSkillRecord {
     const createdAt = skill.created_at ?? new Date().toISOString();
+    const source = skill.source ?? 'user';
     const stmt = this.coreDb.db.prepare(`
-      INSERT INTO agent_skills (id, agent_id, skill_name, description, content, enabled, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agent_skills (id, agent_id, skill_name, description, content, enabled, created_at, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       skill.id,
@@ -166,8 +168,9 @@ export class AgentDb {
       skill.content,
       skill.enabled,
       createdAt,
+      source,
     );
-    return { ...skill, created_at: createdAt };
+    return { ...skill, created_at: createdAt, source };
   }
 
   deleteAgentSkill(id: string): boolean {

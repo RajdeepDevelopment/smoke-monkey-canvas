@@ -7,8 +7,23 @@ import type { AgentRecord, RunRecord } from './agent.types.js';
 import { CoreWsServer } from '../core/ws.server.js';
 import { CoreDatabase } from '../core/database.db.js';
 import { STOCK_MCPS } from '../mcp/mcp.stock.js';
-import { writeAgentManifest, manifestPrompt } from './agent.manifest.js';
-import { personalityPrompt, outputStylePrompt, parseIdList } from './agent.presets.js';
+import {
+  writeAgentManifest,
+  writeCommonAgentRegistry,
+  writeAgentRunState,
+  readAgentPolicyManifest,
+  reconcileManifestRemovals,
+  reconcileAgentWorkspaceRuntime,
+  buildAgentWorkspace,
+  COMMON_DIR,
+  SMOKE_AGENTS_ROOT,
+  type SharedMcpInfo,
+  type SharedEnvVar,
+  type CommonRegistryPaths,
+} from './agent.manifest.js';
+import { buildSubPrompts, mergeEffectivePolicies, resolveAgentWorkspace } from './agent.prompt.js';
+import { parsePolicies } from './agent.types.js';
+import { detectGitRepository, ensureRepoMemory } from './agent.repo-memory.js';
 
 export interface ActiveRunContext {
   runId: string;
@@ -266,6 +281,17 @@ export class AgentRunner {
     if (!agent) {
       throw new Error(`Agent ${agentId} not found in database.`);
     }
+
+    // Honor attachments the agent removed from its own manifest files before
+    // the DB reads below — the manifest rewrite later in this run must not
+    // resurrect entries the agent deliberately deleted.
+    reconcileManifestRemovals({
+      ws: buildAgentWorkspace(resolveAgentWorkspace(agent)),
+      skills: this.db.getAgentSkills(agentId),
+      mcps: this.db.getAgentMcps(agentId),
+      removeSkill: (rowId) => this.db.deleteAgentSkill(rowId),
+      removeMcp: (rowId) => this.db.deleteAgentMcp(rowId),
+    });
 
     const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const isCron = triggerType === 'cron';
@@ -536,20 +562,11 @@ export class AgentRunner {
         resolvedModel = 'nvidia/nemotron-3-super-120b-a12b';
       }
 
-      // 4. Gather policies and disabled tools
-      let policyList: string[] = [];
-      try {
-        if (agent.policies) {
-          policyList = JSON.parse(agent.policies);
-        }
-      } catch {
-        if (agent.policies) policyList = [agent.policies];
-      }
-
-      let policyGuidance = '';
-      if (policyList.length > 0) {
-        policyGuidance = `## STRICT AGENT POLICIES & BOUNDARY CONSTRAINTS:\nYou MUST follow these operational boundaries at all times:\n${policyList.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
-      }
+      // 4. Gather policies and disabled tools. DB policies (`canvas`/`user`) are
+      // merged with any policies the agent wrote itself during earlier runs
+      // (after the manifest is refreshed below) so the compiled block reflects
+      // everything, including agent-added boundaries.
+      const dbPolicies = parsePolicies(agent.policies);
 
       let disabledTools: string[] = [];
       try {
@@ -561,11 +578,7 @@ export class AgentRunner {
       }
 
       // 5. Resolve designated working directory & resource envelope
-      let resolvedWorkspace = agent.working_dir ? agent.working_dir.trim() : '';
-      if (!resolvedWorkspace) {
-        const safeName = agent.name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'agent';
-        resolvedWorkspace = join(homedir(), '.smoke-agents', `${safeName}-${agent.id}`);
-      }
+      const resolvedWorkspace = resolveAgentWorkspace(agent);
       try {
         fs.mkdirSync(resolvedWorkspace, { recursive: true });
       } catch (e) {
@@ -605,7 +618,7 @@ export class AgentRunner {
             env: authoredEnv,
             stock: STOCK_MCPS.some((s) => s.name === c.name),
             enabled: true,
-            source: 'canvas' as const,
+            source: record?.source === 'user' ? 'user' : ('canvas' as const),
             attachment_id: record?.id,
           };
         }),
@@ -614,33 +627,93 @@ export class AgentRunner {
           description: s.description ?? s.skill_name,
           content: s.content,
           enabled: true,
-          source: 'canvas' as const,
+          source: s.source === 'user' ? 'user' : ('canvas' as const),
           attachment_id: s.id,
         })),
+        policyEntries: dbPolicies,
+        systemPrompt: agent.system_prompt,
       });
 
-      const resourceConstraints = [
-        `## RESOURCE ENVELOPE & RUNTIME CONSTRAINTS:`,
-        `- Designated Working Directory: "${resolvedWorkspace}"`,
-        `- Maximum RAM Allocation Limit: ${memoryLimitMb} MB`,
-        `- Device Profile: ${memoryLimitMb <= 512 ? 'Mobile / Resource-Constrained Embedded Edge' : 'Standard / High-Performance Workstation'}`,
-        `- Always keep memory usage minimal, free unused data buffers, stream large files instead of loading into memory, and keep all output assets inside the designated working directory.`,
-      ].join('\n');
+      // Shared registry every agent can read/append to (MCP servers + env names).
+      const commonRoot = join(homedir(), SMOKE_AGENTS_ROOT, COMMON_DIR);
+      const sharedMcps: SharedMcpInfo[] = STOCK_MCPS.map((s) => ({
+        name: s.name,
+        description: s.description,
+        command: s.command,
+        args: s.args,
+        url: s.url,
+        envKeys: s.envKeys,
+        stock: true,
+      }));
 
-      const combinedSubPrompts: string[] = [];
-      if (policyGuidance) combinedSubPrompts.push(policyGuidance);
-      if (disabledTools.length > 0) {
-        combinedSubPrompts.push(`## DISABLED TOOLS:\nYou MUST NOT call the following tools under any circumstances: ${disabledTools.join(', ')}`);
+      const envByName = new Map<string, Set<string>>();
+      const noteVar = (name: string, usedBy: string) => {
+        if (!envByName.has(name)) envByName.set(name, new Set());
+        envByName.get(name)!.add(usedBy);
+      };
+      for (const s of STOCK_MCPS) for (const k of s.envKeys) noteVar(k, s.name);
+
+      for (const rec of mcpRecords) {
+        let cfg: Record<string, unknown> = {};
+        try {
+          cfg = JSON.parse(rec.config_json);
+        } catch {
+          cfg = {};
+        }
+        const isStock = STOCK_MCPS.some((s) => s.name === rec.mcp_name);
+        if (!isStock && (typeof cfg.command === 'string' || typeof cfg.url === 'string')) {
+          sharedMcps.push({
+            name: rec.mcp_name,
+            description: rec.label ?? rec.mcp_name,
+            command: typeof cfg.command === 'string' ? cfg.command : undefined,
+            args: Array.isArray(cfg.args) ? (cfg.args as string[]) : undefined,
+            url: typeof cfg.url === 'string' ? cfg.url : undefined,
+            envKeys: Object.keys((cfg.env ?? {}) as Record<string, unknown>),
+            stock: false,
+          });
+        }
+        for (const k of Object.keys((cfg.env ?? {}) as Record<string, unknown>)) noteVar(k, rec.mcp_name);
       }
-      combinedSubPrompts.push(resourceConstraints);
-      // Voice and formatting are explicit choices the user made on the agent, so
-      // they go in ahead of the toolbox instructions but behind hard policies.
-      const voice = personalityPrompt(parseIdList(agent.personalities));
-      if (voice) combinedSubPrompts.push(voice);
-      const format = outputStylePrompt(parseIdList(agent.output_styles));
-      if (format) combinedSubPrompts.push(format);
-      // Always last so the add-a-plugin instructions sit closest to the task.
-      combinedSubPrompts.push(manifestPrompt(manifest, agentId));
+      for (const [provider, keyName] of Object.entries(keyMap)) noteVar(keyName, `${provider} provider key`);
+
+      const sharedEnv: SharedEnvVar[] = [...envByName.entries()]
+        .map(([name, usedBy]) => ({
+          name,
+          description: usedBy.size ? `Used by: ${[...usedBy].join(', ')}` : 'Environment variable',
+          usedBy: [...usedBy],
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      const common: CommonRegistryPaths = writeCommonAgentRegistry(commonRoot, sharedMcps, sharedEnv);
+
+      // Stamp this run into the agent's runtime state + session context files.
+      writeAgentRunState(manifest, {
+        agentId,
+        runId,
+        taskPrompt: run.task_prompt,
+        triggerType: run.trigger_type,
+        agentName: agent.name,
+      });
+
+      // Compile the exact sub-prompt chain used for this run via the shared
+      // builder — the agent-box preview renders this same output, so the two
+      // can never disagree. Policies = DB (`canvas`/`user`) + agent-written
+      // entries found in the freshly refreshed policies manifest.
+      const effectivePolicies = mergeEffectivePolicies(
+        dbPolicies,
+        readAgentPolicyManifest(manifest),
+      );
+      const combinedSubPrompts = buildSubPrompts({
+        policyEntries: effectivePolicies,
+        disabledTools,
+        resolvedWorkspace,
+        memoryLimitMb,
+        personalities: agent.personalities,
+        outputStyles: agent.output_styles,
+        manifest,
+        common,
+        agentId,
+      });
 
       // 6. Instantiate harness agent with stable session and store
       const harnessAgent = createAgent({
@@ -832,7 +905,7 @@ export class AgentRunner {
           },
         ),
       );
-      harnessAgent.on('tool.completed', (e) =>
+      harnessAgent.on('tool.completed', (e) => {
         broadcastAndLog(
           'tool.completed',
           {
@@ -845,8 +918,21 @@ export class AgentRunner {
             toolCallId: e.data.toolCallId,
             result: e.data.result,
           },
-        ),
-      );
+        );
+
+        // Immediate real-time sync: detect changes made by the agent
+        // (MCP unlinking, skills, automations, system_prompt.md) and sync to UI & DB
+        try {
+          reconcileAgentWorkspaceRuntime({
+            agentId,
+            ws: manifest,
+            db: this.db,
+            wsServer: this.ws,
+          });
+        } catch (err) {
+          console.warn(`[AgentRunner] Live reconcile error for agent ${agentId}:`, err);
+        }
+      });
       harnessAgent.on('tool.failed', (e) =>
         broadcastAndLog(
           'tool.failed',
@@ -952,6 +1038,23 @@ export class AgentRunner {
         event: completeEvt,
         streamEvent: completeEvt,
       });
+
+      // Final reconciliation of the agent's workspace & shared repository memory
+      try {
+        reconcileAgentWorkspaceRuntime({
+          agentId,
+          ws: manifest,
+          db: this.db,
+          wsServer: this.ws,
+        });
+
+        const repoInfo = detectGitRepository(resolvedWorkspace);
+        if (repoInfo) {
+          ensureRepoMemory(commonRoot, repoInfo, agentId, agent.name, finalText);
+        }
+      } catch (err) {
+        console.warn('[AgentRunner] Final workspace reconciliation error:', err);
+      }
 
       this.ws.broadcast({
         type: 'run_completed',

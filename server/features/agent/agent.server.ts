@@ -1,13 +1,44 @@
 import { Router, type Request, type Response } from 'express';
 import fs from 'node:fs';
-import { join, resolve } from 'node:path';
+import path, { join } from 'node:path';
 import { homedir } from 'node:os';
+import {
+  scanAgentWorkspaceFiles,
+  safeResolveWorkspacePath,
+  getFileCategory,
+  getFileMimeType,
+  watchAgentWorkspace,
+} from './agent.files.js';
 import { AgentDb } from './agent.db.js';
 import { AgentRunner } from './agent.runner.js';
 import { calculateNextCronRun } from './agent.cron.js';
 import { CoreDatabase } from '../core/database.db.js';
 import { STOCK_MCPS } from '../mcp/mcp.stock.js';
 import { PRESETS_BY_KIND, parseIdList } from './agent.presets.js';
+import {
+  ensureAgentWorkspace,
+  readAgentMcpManifest,
+  readAgentSkillManifest,
+  readAgentPolicyManifest,
+  reconcileManifestRemovals,
+  reconcileAgentWorkspaceRuntime,
+  readAgentAutomations,
+  readAgentMemorySummaries,
+} from './agent.manifest.js';
+import {
+  buildEffectiveSystemPrompt,
+  mergeEffectivePolicies,
+  resolveAgentWorkspace,
+  commonRegistryPaths,
+} from './agent.prompt.js';
+import { parsePolicies, type AgentMcpRecord, type AgentSkillRecord } from './agent.types.js';
+import {
+  detectGitRepository,
+  ensureRepoMemory,
+  getRepoMemorySummary,
+  buildRepoMemoryPaths,
+} from './agent.repo-memory.js';
+import { CoreWsServer } from '../core/ws.server.js';
 
 const PROVIDER_KEY_MAP: Record<string, string> = {
   nvidia: 'NVIDIA_API_KEY',
@@ -201,6 +232,433 @@ export function createAgentRouter(): Router {
     }
     const events = db.getRunEvents(runId);
     res.json({ ...run, events });
+  });
+
+  /**
+   * Merged, source-aware view of everything attached to this agent: DB rows
+   * (`canvas`/`user`) + what the agent itself wrote into its `.smoke-agent/`
+   * folder during runs (`agent`), plus the exact effective system prompt the
+   * next run will send — assembled by the same builder the runner uses.
+   */
+  router.get('/:id/manifest', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    const workspace = resolveAgentWorkspace(agent);
+    const ws = ensureAgentWorkspace(workspace, agent.id, agent.name, agent.system_prompt);
+
+    // Live runtime sync: reconcile any self-made agent changes (system_prompt.md,
+    // unlinked MCPs, skills, automations) before returning data
+    reconcileAgentWorkspaceRuntime({
+      agentId: agent.id,
+      ws,
+      db,
+      wsServer: CoreWsServer.getInstance(),
+    });
+    const freshAgent = db.getAgent(id) || agent;
+    const dbPolicies = parsePolicies(freshAgent.policies);
+
+    // The agent can detach app-managed attachments by editing its own
+    // manifest files — honor those removals before assembling the response so
+    // the UI stops listing what the agent deleted.
+    const reconciled = reconcileManifestRemovals({
+      ws,
+      skills: db.getAgentSkills(freshAgent.id),
+      mcps: db.getAgentMcps(freshAgent.id),
+      removeSkill: (rowId) => db.deleteAgentSkill(rowId),
+      removeMcp: (rowId) => db.deleteAgentMcp(rowId),
+    });
+    const dbMcps = reconciled.mcps;
+    const dbSkills = reconciled.skills;
+
+    let manifestUpdatedAt = new Date().toISOString();
+    try {
+      manifestUpdatedAt = fs.statSync(ws.mcpFile).mtime.toISOString();
+    } catch {
+      // workspace just created
+    }
+
+    const manifestMcps = readAgentMcpManifest(ws);
+    const manifestSkills = readAgentSkillManifest(ws);
+    const manifestPolicies = readAgentPolicyManifest(ws);
+
+    const dbMcpNames = new Set(dbMcps.map((m) => m.mcp_name));
+    const dbSkillNames = new Set(dbSkills.map((s) => s.skill_name));
+
+    // Entries the agent wrote itself (legacy entries with no source predate the
+    // `source` field and are also agent-authored).
+    const agentMcpEntries = manifestMcps.filter(
+      (e) => (e.source === 'agent' || !e.source) && !dbMcpNames.has(e.name),
+    );
+    const agentSkillEntries = manifestSkills.filter(
+      (e) => (e.source === 'agent' || !e.source) && !dbSkillNames.has(e.name),
+    );
+
+    const mcps: AgentMcpRecord[] = [
+      ...dbMcps,
+      ...agentMcpEntries.map((e) => ({
+        id: `agent_${e.key}`,
+        agent_id: freshAgent.id,
+        mcp_name: e.name,
+        label: e.label || e.name,
+        config_json: JSON.stringify({
+          command: e.command,
+          args: e.args,
+          url: e.url,
+          env: e.env,
+        }),
+        enabled: e.enabled === false ? 0 : 1,
+        created_at: manifestUpdatedAt,
+        source: 'agent' as const,
+      })),
+    ];
+
+    const skills: AgentSkillRecord[] = [
+      ...dbSkills,
+      ...agentSkillEntries.map((e) => ({
+        id: `agent_${e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        agent_id: freshAgent.id,
+        skill_name: e.name,
+        description: e.description ?? e.name,
+        content: e.content ?? '',
+        enabled: e.enabled === false ? 0 : 1,
+        created_at: manifestUpdatedAt,
+        source: 'agent' as const,
+      })),
+    ];
+
+    const policies = mergeEffectivePolicies(dbPolicies, manifestPolicies);
+
+    let disabledTools: string[] = [];
+    try {
+      if (freshAgent.disabled_tools) disabledTools = JSON.parse(freshAgent.disabled_tools);
+    } catch {
+      disabledTools = [];
+    }
+
+    const effectiveSystemPrompt = buildEffectiveSystemPrompt(freshAgent.system_prompt, {
+      policyEntries: policies,
+      disabledTools,
+      resolvedWorkspace: workspace,
+      memoryLimitMb: freshAgent.max_memory_mb || 1024,
+      personalities: freshAgent.personalities,
+      outputStyles: freshAgent.output_styles,
+      manifest: ws,
+      common: commonRegistryPaths(),
+      agentId: freshAgent.id,
+      agentName: freshAgent.name,
+    });
+
+    const automations = readAgentAutomations(ws);
+    const memoryFiles = readAgentMemorySummaries(ws);
+
+    // Shared cross-agent repository memory
+    const repoInfo = detectGitRepository(workspace);
+    let repoMemory = null;
+    if (repoInfo) {
+      ensureRepoMemory(commonRegistryPaths().dir, repoInfo, freshAgent.id, freshAgent.name);
+      repoMemory = getRepoMemorySummary(commonRegistryPaths().dir, repoInfo.repoKey);
+    }
+
+    res.json({
+      agent_id: freshAgent.id,
+      agent_name: freshAgent.name,
+      workspace,
+      updated_at: manifestUpdatedAt,
+      system_prompt: freshAgent.system_prompt,
+      mcps,
+      skills,
+      policies,
+      automations,
+      memory_files: memoryFiles,
+      repository_memory: repoMemory,
+      effective_system_prompt: effectiveSystemPrompt,
+    });
+  });
+
+  /** List all shared repositories known across Smoke Monkey Canvas */
+  router.get('/common/repositories', (_req: Request, res: Response) => {
+    try {
+      const catalogFile = join(commonRegistryPaths().dir, 'repositories.json');
+      if (fs.existsSync(catalogFile)) {
+        const catalog = JSON.parse(fs.readFileSync(catalogFile, 'utf8'));
+        res.json(catalog);
+        return;
+      }
+    } catch {}
+    res.json({ repositories: {} });
+  });
+
+  /** Get shared repository memory for an agent's workspace */
+  router.get('/:id/repo-memory', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    const workspace = resolveAgentWorkspace(agent);
+    const repoInfo = detectGitRepository(workspace);
+    if (!repoInfo) {
+      res.json({ detected: false, repository: null });
+      return;
+    }
+    const commonRoot = commonRegistryPaths().dir;
+    ensureRepoMemory(commonRoot, repoInfo, agent.id, agent.name);
+    const summary = getRepoMemorySummary(commonRoot, repoInfo.repoKey);
+    res.json({ detected: true, info: repoInfo, memory: summary });
+  });
+
+  /** Update a file in the shared repository memory */
+  router.patch('/:id/repo-memory/:file', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const file = getParam(req.params.file);
+    const content = req.body?.content;
+    if (typeof content !== 'string') {
+      res.status(400).json({ error: 'Missing content string in body' });
+      return;
+    }
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    const workspace = resolveAgentWorkspace(agent);
+    const repoInfo = detectGitRepository(workspace);
+    if (!repoInfo) {
+      res.status(400).json({ error: 'No Git repository associated with this agent workspace' });
+      return;
+    }
+    const commonRoot = commonRegistryPaths().dir;
+    const paths = buildRepoMemoryPaths(commonRoot, repoInfo.repoKey);
+    const allowedMap: Record<string, string> = {
+      insights: paths.insightsFile,
+      features: paths.featuresFile,
+      explore: paths.exploreFile,
+      history: paths.historyFile,
+      readme: paths.readmeFile,
+    };
+    const targetPath = allowedMap[file.replace(/\.md$/, '')];
+    if (!targetPath) {
+      res.status(400).json({ error: `Invalid repo memory file: ${file}` });
+      return;
+    }
+    try {
+      fs.writeFileSync(targetPath, content, 'utf8');
+      const wsServer = CoreWsServer.getInstance();
+      wsServer.broadcast({
+        type: 'agent_manifest_updated',
+        agentId: agent.id,
+      });
+      res.json({ success: true, file, path: targetPath });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed writing file' });
+    }
+  });
+
+  /** Read an agent's specific human memory file */
+  router.get('/:id/memory/:file', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const file = getParam(req.params.file);
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    const workspace = resolveAgentWorkspace(agent);
+    const ws = ensureAgentWorkspace(workspace, agent.id, agent.name, agent.system_prompt);
+    const fileName = file.endsWith('.md') ? file : `${file}.md`;
+    const targetFile = ws.memoryFiles[fileName];
+    if (!targetFile || !fs.existsSync(targetFile)) {
+      res.status(404).json({ error: `Memory file not found: ${file}` });
+      return;
+    }
+    try {
+      const content = fs.readFileSync(targetFile, 'utf8');
+      res.json({ file: fileName, content, path: targetFile });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /** Update an agent's specific human memory file */
+  router.patch('/:id/memory/:file', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const file = getParam(req.params.file);
+    const content = req.body?.content;
+    if (typeof content !== 'string') {
+      res.status(400).json({ error: 'Missing content string in body' });
+      return;
+    }
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    const workspace = resolveAgentWorkspace(agent);
+    const ws = ensureAgentWorkspace(workspace, agent.id, agent.name, agent.system_prompt);
+    const fileName = file.endsWith('.md') ? file : `${file}.md`;
+    const targetFile = ws.memoryFiles[fileName];
+    if (!targetFile) {
+      res.status(400).json({ error: `Unknown memory file: ${file}` });
+      return;
+    }
+    try {
+      fs.writeFileSync(targetFile, content, 'utf8');
+      const wsServer = CoreWsServer.getInstance();
+      wsServer.broadcast({
+        type: 'agent_manifest_updated',
+        agentId: agent.id,
+      });
+      res.json({ success: true, file: fileName, path: targetFile });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /** List all files in the agent workspace */
+  router.get('/:id/files', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    const workspaceRoot = resolveAgentWorkspace(agent);
+
+    // Watch workspace for live file creations/updates
+    watchAgentWorkspace(agent.id, workspaceRoot, () => {
+      CoreWsServer.getInstance().broadcast({
+        type: 'agent_files_updated',
+        agentId: agent.id,
+        data: { timestamp: new Date().toISOString() },
+      });
+    });
+
+    const result = scanAgentWorkspaceFiles(workspaceRoot);
+    res.json(result);
+  });
+
+  /** Get text content of a workspace file */
+  router.get('/:id/files/content', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const relativePath = getParam(req.query.path as string);
+    if (!relativePath) {
+      res.status(400).json({ error: 'Query parameter "path" is required' });
+      return;
+    }
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    const workspaceRoot = resolveAgentWorkspace(agent);
+    const targetPath = safeResolveWorkspacePath(workspaceRoot, relativePath);
+    if (!targetPath || !fs.existsSync(targetPath)) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+    try {
+      const stat = fs.statSync(targetPath);
+      if (stat.isDirectory()) {
+        res.status(400).json({ error: 'Path is a directory' });
+        return;
+      }
+      const ext = path.extname(targetPath).toLowerCase().replace(/^\./, '');
+      const content = fs.readFileSync(targetPath, 'utf8');
+      res.json({
+        path: relativePath,
+        name: path.basename(targetPath),
+        extension: ext,
+        category: getFileCategory(ext),
+        mimeType: getFileMimeType(ext),
+        size: stat.size,
+        mtime: stat.mtime.toISOString(),
+        content,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /** Stream raw media / PDF / binary / document for in-place rendering & playback */
+  router.get('/:id/files/raw', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const relativePath = getParam(req.query.path as string);
+    if (!relativePath) {
+      res.status(400).json({ error: 'Query parameter "path" is required' });
+      return;
+    }
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    const workspaceRoot = resolveAgentWorkspace(agent);
+    const targetPath = safeResolveWorkspacePath(workspaceRoot, relativePath);
+    if (!targetPath || !fs.existsSync(targetPath)) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+    try {
+      const stat = fs.statSync(targetPath);
+      if (stat.isDirectory()) {
+        res.status(400).json({ error: 'Path is a directory' });
+        return;
+      }
+      const ext = path.extname(targetPath).toLowerCase().replace(/^\./, '');
+      const mime = getFileMimeType(ext);
+
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Length', stat.size);
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(path.basename(targetPath))}"`);
+      res.setHeader('Cache-Control', 'no-cache');
+
+      const stream = fs.createReadStream(targetPath);
+      stream.pipe(res);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /** Save / update text content of a workspace file */
+  router.patch('/:id/files/content', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const relativePath = req.body?.path;
+    const content = req.body?.content;
+    if (!relativePath || typeof content !== 'string') {
+      res.status(400).json({ error: 'Missing path or content in body' });
+      return;
+    }
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    const workspaceRoot = resolveAgentWorkspace(agent);
+    const targetPath = safeResolveWorkspacePath(workspaceRoot, relativePath);
+    if (!targetPath) {
+      res.status(400).json({ error: 'Invalid path' });
+      return;
+    }
+    try {
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.writeFileSync(targetPath, content, 'utf8');
+
+      CoreWsServer.getInstance().broadcast({
+        type: 'agent_files_updated',
+        agentId: agent.id,
+        data: { path: relativePath },
+      });
+
+      res.json({ success: true, path: relativePath });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.get('/:id', (req: Request, res: Response) => {

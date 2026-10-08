@@ -28,7 +28,8 @@ import type { SpaceAgentEntity } from './agent.types.js';
 import type { AgentNodeData } from '../space/space.types.js';
 import { BrandIcons, getBrandIcon } from '../common/brand-icons.js';
 import { VoiceAgentPopover } from '../voice/voice-agent-popover.js';
-import { readLibDragPayload, LIB_DRAG_KEY, type LibDragPayload } from '../library/library.types.js';
+import { readLibDragPayload, isLibDrag, setActiveDragPayload, type LibDragPayload } from '../library/library.types.js';
+import { useIsMobile } from '../common/use-mobile.js';
 
 export interface CrabAgentNodeProps {
   data: AgentNodeData & {
@@ -122,6 +123,7 @@ function areAgentNodePropsEqual(
 }
 
 export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data }) => {
+  const isMobile = useIsMobile();
   // ── Library drop target ───────────────────────────────────────────────────
   // dragenter/dragleave also fire for descendants, so a depth counter is used to
   // avoid flickering the highlight when the pointer crosses child elements.
@@ -129,22 +131,24 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
   const isDragOver = dragDepth > 0;
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(LIB_DRAG_KEY)) return;
+    if (!isLibDrag(e.dataTransfer)) return;
     e.preventDefault();
     e.stopPropagation();
     setDragDepth((d) => d + 1);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(LIB_DRAG_KEY)) return;
+    if (!isLibDrag(e.dataTransfer)) return;
     // Required for the element to become a valid drop target.
     e.preventDefault();
     e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
+    try {
+      e.dataTransfer.dropEffect = 'copy';
+    } catch {}
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(LIB_DRAG_KEY)) return;
+    if (!isLibDrag(e.dataTransfer)) return;
     e.stopPropagation();
     setDragDepth((d) => Math.max(0, d - 1));
   }, []);
@@ -153,6 +157,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
     (e: React.DragEvent) => {
       setDragDepth(0);
       const payload = readLibDragPayload(e.dataTransfer);
+      setActiveDragPayload(null);
       if (!payload) return;
       // Agent templates are spawned on the pane, never attached to a node.
       if (payload.kind === 'agent') return;
@@ -216,8 +221,12 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
   // column is written once at attach time and never updated, so OR-ing it in
   // here would latch the run button off permanently after a key is later saved.
   // Non-stock MCPs have no `isConfigured` flag and are treated as ready.
-  const isMcpConfigured = (m: SpaceAgentEntity['mcps'][number]) =>
-    (m as { isConfigured?: boolean }).isConfigured !== false;
+  const isMcpConfigured = (m: SpaceAgentEntity['mcps'][number]) => {
+    const raw = m as { isConfigured?: boolean; missingKeys?: string[] };
+    if (raw.isConfigured === false) return false;
+    if (raw.missingKeys && raw.missingKeys.length > 0) return false;
+    return true;
+  };
 
   const unconfiguredMcps = data.mcps.filter((m) => !isMcpConfigured(m));
   const hasUnconfiguredMcps = unconfiguredMcps.length > 0;
@@ -238,7 +247,8 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
       )}
 
       {/* ── Left Claw Hands (MCP Attachments & Tools) ── */}
-      <div className="crab-hands-left">
+      {!isMobile && (
+        <div className="crab-hands-left">
         {data.mcps.map((mcp) => {
           const McpIcon = getBrandIcon((mcp.mcp_name || '') + ' ' + (mcp.label || ''), 13);
           const isConfigured = isMcpConfigured(mcp);
@@ -264,30 +274,33 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
                   ? {
                       borderColor: 'rgba(245, 158, 11, 0.45)',
                       color: '#f59e0b',
-                      background: 'rgba(245, 158, 11, 0.08)',
+                      background: 'rgba(245, 158, 11, 0.1)',
                       borderStyle: 'dashed',
                       cursor: 'pointer',
                     }
                   : undefined
               }
             >
-              {McpIcon || <Cpu size={12} />}
+              {!isConfigured ? (
+                <AlertTriangle size={12} color="#f59e0b" />
+              ) : (
+                McpIcon || <Cpu size={12} />
+              )}
               <span>{mcp.label || mcp.mcp_name}</span>
               {!isConfigured && (
                 <span
                   style={{
                     fontSize: 8.5,
                     fontWeight: 700,
-                    background: 'rgba(245, 158, 11, 0.2)',
+                    background: 'rgba(245, 158, 11, 0.25)',
                     color: '#f59e0b',
-                    padding: '1px 4px',
+                    padding: '1px 5px',
                     borderRadius: 3,
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 3,
                   }}
                 >
-                  <AlertTriangle size={9} color="#f59e0b" />
                   Key Req.
                 </span>
               )}
@@ -329,6 +342,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
           <span>Tools ({activeToolsCount}/24)</span>
         </button>
       </div>
+      )}
 
       {/* ── Central Crab Body (Clicking opens Agent Chat Drawer if configured) ── */}
       <div
@@ -391,17 +405,48 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
           )}
         </div>
 
+        {/* Mobile Attached Badges Tray */}
+        {isMobile && (data.mcps.length > 0 || data.skills.length > 0 || personalityItems.length > 0) && (
+          <div className="crab-mobile-attachments">
+            {data.mcps.map((m) => (
+              <span
+                key={m.id}
+                className={`attachment-chip mcp ${!isMcpConfigured(m) ? 'unconfigured' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onAddMcp(data.id, m.mcp_name || m.label);
+                }}
+              >
+                <Cpu size={10} />
+                <span>{m.label || m.mcp_name}</span>
+              </span>
+            ))}
+            {data.skills.map((s) => (
+              <span key={s.id} className="attachment-chip skill">
+                <Sparkles size={10} />
+                <span>{s.skill_name}</span>
+              </span>
+            ))}
+            {personalityItems.map((p) => (
+              <span key={p.id} className="attachment-chip persona">
+                <UserRoundCog size={10} />
+                <span>{p.name}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Row 2: Premium Model & Provider Bar */}
-        <div className="crab-model-bar" title={`${data.model} (${providerLabel})`}>
+        <div className={`crab-model-bar ${isMobile ? 'is-mobile' : ''}`} title={`${data.model} (${providerLabel})`}>
           <div className="model-bar-left">
             <div className="crab-model-provider">
-              {ProviderIcon ? <ProviderIcon size={13} /> : <Cpu size={13} />}
+              {ProviderIcon ? <ProviderIcon size={12} /> : <Cpu size={12} />}
               <span className="provider-label">{providerLabel}</span>
             </div>
-            <span className="model-divider">/</span>
+            {!isMobile && <span className="model-divider">/</span>}
             <span className="model-name">{formattedModel}</span>
           </div>
-          <span className="model-badge-tag">LLM</span>
+          {!isMobile && <span className="model-badge-tag">LLM</span>}
         </div>
 
         {/* System Prompt Preview */}
@@ -409,52 +454,89 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
           {data.system_prompt}
         </div>
 
-        {/* Dual-column metadata grid: Directory & RAM on left, Cron Schedule on right */}
-        <div className="crab-meta-grid">
-          <div
-            className="crab-resource-bar"
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onEdit(data, 'directory');
-            }}
-          >
-            <div className="crab-resource-dir">
-              <Folder size={11} color="#60a5fa" style={{ flexShrink: 0 }} />
-              <span className="crab-resource-dir-text">
-                {data.working_dir ? data.working_dir.replace(/^.*[\\/]([^\\/]+[\\/][^\\/]+)$/, '$1') : `~/.smoke-agents/...`}
-              </span>
+        {/* Dual-column metadata grid on desktop, sleek single-row stats on mobile */}
+        {isMobile ? (
+          <div className="crab-mobile-stats-row">
+            <div
+              className="mobile-stat-pill"
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onEdit(data, 'schedule');
+              }}
+            >
+              <Clock size={11} color={data.cron_enabled ? '#d97706' : '#94a3b8'} />
+              <span>{data.cron_enabled && data.cron_schedule ? data.cron_schedule : 'Manual'}</span>
             </div>
-            <div className="crab-resource-ram" style={{ color: (data.max_memory_mb || 1024) <= 512 ? '#10b981' : 'hsl(var(--foreground))' }}>
-              {(data.max_memory_mb || 1024) <= 512 ? <Smartphone size={10} color="#10b981" /> : <HardDrive size={10} />}
+            <div
+              className="mobile-stat-pill"
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onEdit(data, 'directory');
+              }}
+            >
+              <HardDrive size={11} color="#60a5fa" />
               <span>{data.max_memory_mb || 1024} MB</span>
             </div>
-          </div>
-
-          <div
-            className="crab-cron-bar"
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onEdit(data, 'schedule');
-            }}
-          >
-            <div className="crab-cron-info">
-              <Clock size={11} color={data.cron_enabled ? '#d97706' : '#94a3b8'} style={{ flexShrink: 0 }} />
-              <span className="crab-cron-text">
-                {data.cron_enabled && data.cron_schedule
-                  ? `Cron: ${data.cron_schedule}`
-                  : 'Manual trigger'}
-              </span>
-            </div>
-            {data.cron_enabled && data.next_run_at && (
-              <span className="crab-cron-next">
-                Next: {new Date(data.next_run_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
+            {activeToolsCount > 0 && (
+              <div
+                className="mobile-stat-pill"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onOpenTools?.(data);
+                }}
+              >
+                <Wrench size={11} color="#a78bfa" />
+                <span>{activeToolsCount}/24 tools</span>
+              </div>
             )}
           </div>
-        </div>
+        ) : (
+          <div className="crab-meta-grid">
+            <div
+              className="crab-resource-bar"
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onEdit(data, 'directory');
+              }}
+            >
+              <div className="crab-resource-dir">
+                <Folder size={11} color="#60a5fa" style={{ flexShrink: 0 }} />
+                <span className="crab-resource-dir-text">
+                  {data.working_dir ? data.working_dir.replace(/^.*[\\/]([^\\/]+[\\/][^\\/]+)$/, '$1') : `~/.smoke-agents/...`}
+                </span>
+              </div>
+              <div className="crab-resource-ram" style={{ color: (data.max_memory_mb || 1024) <= 512 ? '#10b981' : 'hsl(var(--foreground))' }}>
+                {(data.max_memory_mb || 1024) <= 512 ? <Smartphone size={10} color="#10b981" /> : <HardDrive size={10} />}
+                <span>{data.max_memory_mb || 1024} MB</span>
+              </div>
+            </div>
+
+            <div
+              className="crab-cron-bar"
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onEdit(data, 'schedule');
+              }}
+            >
+              <div className="crab-cron-info">
+                <Clock size={11} color={data.cron_enabled ? '#d97706' : '#94a3b8'} style={{ flexShrink: 0 }} />
+                <span className="crab-cron-text">
+                  {data.cron_enabled && data.cron_schedule
+                    ? `Cron: ${data.cron_schedule}`
+                    : 'Manual trigger'}
+                </span>
+              </div>
+              {data.cron_enabled && data.next_run_at && (
+                <span className="crab-cron-next">
+                  Next: {new Date(data.next_run_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Actions Toolbar */}
-        <div className="crab-actions">
+        <div className={`crab-actions ${isMobile ? 'is-mobile' : ''}`}>
           {isRunning ? (
             <button
               className="crab-btn-stop"
@@ -464,7 +546,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               }}
               title="Stop Agent Execution"
             >
-              <Square size={12} fill="currentColor" />
+              <Square size={13} fill="currentColor" />
               <span>Stop</span>
             </button>
           ) : (
@@ -473,23 +555,26 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               disabled={hasUnconfiguredMcps}
               onClick={(e) => {
                 e.stopPropagation();
-                if (hasUnconfiguredMcps) return;
+                if (hasUnconfiguredMcps) {
+                  data.onAddMcp(data.id, unconfiguredMcps[0]?.mcp_name || unconfiguredMcps[0]?.label);
+                  return;
+                }
                 data.onRun(data.id);
               }}
               style={
                 hasUnconfiguredMcps
                   ? {
-                      background: 'rgba(245, 158, 11, 0.08)',
+                      background: 'rgba(245, 158, 11, 0.1)',
                       color: '#f59e0b',
-                      border: '1px dashed rgba(245, 158, 11, 0.4)',
-                      opacity: 0.7,
-                      cursor: 'not-allowed',
+                      border: '1px dashed rgba(245, 158, 11, 0.5)',
+                      opacity: 0.9,
+                      cursor: 'pointer',
                     }
                   : undefined
               }
               title={
                 hasUnconfiguredMcps
-                  ? `Cannot run: ${unconfiguredMcps.map((m) => m.label || m.mcp_name).join(', ')} require credentials. Click the MCP pill on the left to configure.`
+                  ? `Cannot run: ${unconfiguredMcps.map((m) => m.label || m.mcp_name).join(', ')} require credentials. Click to configure.`
                   : 'Execute agent loop now'
               }
             >
@@ -517,9 +602,9 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               }
               data.onOpenDrawer(data);
             }}
-            data-tooltip="Terminal Logs"
+            title="Chat & Logs"
           >
-            <Terminal size={14} />
+            <Terminal size={15} />
           </button>
 
           <button
@@ -527,35 +612,11 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
             className={`crab-btn-icon crab-btn-voice voice-mic-action-btn ${isVoiceOpen ? 'active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
-              data.onVoiceToggle
-                ? data.onVoiceToggle(data.id)
-                : undefined;
+              data.onVoiceToggle?.(data.id);
             }}
-            data-tooltip={isVoiceOpen ? 'Close Voice' : 'Voice Input'}
+            title={isVoiceOpen ? 'Close Voice' : 'Voice Input'}
           >
-            <Mic size={14} />
-          </button>
-
-          <button
-            className="crab-btn-icon crab-btn-tools"
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onOpenTools?.(data);
-            }}
-            data-tooltip="Agent Tools"
-          >
-            <Wrench size={14} />
-          </button>
-
-          <button
-            className="crab-btn-icon crab-btn-policies"
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onOpenPolicies?.(data);
-            }}
-            data-tooltip="Guard Policies"
-          >
-            <ShieldCheck size={14} />
+            <Mic size={15} />
           </button>
 
           <button
@@ -564,58 +625,87 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               e.stopPropagation();
               data.onEdit(data);
             }}
-            data-tooltip="Agent Settings"
+            title="Agent Settings"
           >
-            <Settings size={14} />
+            <Settings size={15} />
           </button>
 
-          <button
-            className="crab-btn-icon crab-btn-delete delete"
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onDelete(data.id);
-            }}
-            data-tooltip="Delete Agent"
-          >
-            <Trash2 size={14} />
-          </button>
+          {!isMobile && (
+            <>
+              <button
+                className="crab-btn-icon crab-btn-tools"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onOpenTools?.(data);
+                }}
+                title="Agent Tools"
+              >
+                <Wrench size={14} />
+              </button>
+
+              <button
+                className="crab-btn-icon crab-btn-policies"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onOpenPolicies?.(data);
+                }}
+                title="Guard Policies"
+              >
+                <ShieldCheck size={14} />
+              </button>
+
+              <button
+                className="crab-btn-icon crab-btn-delete delete"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onDelete(data.id);
+                }}
+                title="Delete Agent"
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Integrated Bottom Output Dock (Cleanly docked inside the card) */}
-        <div className="crab-card-dock">
-          <div className="dock-info">
-            <div className="dock-label">
-              {data.latestRun?.status === 'completed' && (
-                <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <CheckCircle2 size={11} /> Last Output
-                </span>
-              )}
-              {data.latestRun?.status === 'failed' && (
-                <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <AlertCircle size={11} /> Failed
-                </span>
-              )}
-              {!data.latestRun && 'No Runs Yet'}
+        {/* Integrated Bottom Output Dock (Cleanly docked inside the card, hidden on mobile if empty) */}
+        {(!isMobile || data.latestRun) && (
+          <div className="crab-card-dock">
+            <div className="dock-info">
+              <div className="dock-label">
+                {data.latestRun?.status === 'completed' && (
+                  <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <CheckCircle2 size={11} /> Last Output
+                  </span>
+                )}
+                {data.latestRun?.status === 'failed' && (
+                  <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={11} /> Failed
+                  </span>
+                )}
+                {!data.latestRun && 'No Runs Yet'}
+              </div>
+              <div className="dock-summary">
+                {data.latestRun?.summary || data.latestRun?.error || 'Awaiting initial trigger'}
+              </div>
             </div>
-            <div className="dock-summary">
-              {data.latestRun?.summary || data.latestRun?.error || 'Awaiting initial trigger'}
-            </div>
+            <button
+              className="dock-inspect-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onOpenDrawer(data);
+              }}
+            >
+              <Terminal size={11} />
+              <span>Logs</span>
+            </button>
           </div>
-          <button
-            className="dock-inspect-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onOpenDrawer(data);
-            }}
-          >
-            <Terminal size={11} />
-            <span>Logs</span>
-          </button>
-        </div>
+        )}
       </div>
 
-      {/* ── Right Claw Hands (Skills & Policies Attachments) ── */}
-      <div className="crab-hands-right">
+      {/* ── Right Claw Hands (Skills & Policies Attachments) — Desktop Only ── */}
+      {!isMobile && (
+        <div className="crab-hands-right">
         {data.skills.map((skill) => (
           <div key={skill.id} className="claw-hand-item skill" title={skill.skill_name}>
             <Sparkles size={12} />
@@ -679,6 +769,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
           </div>
         ))}
       </div>
+      )}
 
       {/* ── Floating Voice Command Popover (canvas-exclusive: only one at a time) ── */}
       {isVoiceOpen && (

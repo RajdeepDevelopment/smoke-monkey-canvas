@@ -18,6 +18,7 @@ import type { SpaceAgentEntity, AgentRecord } from './agent.types.js';
 import { PROVIDER_CATALOG, getProvider, getDefaultModelForProvider } from '../common/provider-catalog.js';
 import { BrandIcons } from '../common/brand-icons.js';
 import { isTauri, pickNativeDirectory } from '../../config/desktop.bridge.js';
+import { useIsMobile } from '../common/use-mobile.js';
 
 export interface ClockTimeItem {
   id: string;
@@ -230,6 +231,7 @@ export const AgentModal: React.FC<AgentModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const isMobile = useIsMobile();
   const defaultName = agent?.name || initialData?.name || 'Job & Web Crawler';
   const defaultProvider = agent?.provider || initialData?.provider || 'nvidia';
   const defaultModel =
@@ -527,8 +529,13 @@ export const AgentModal: React.FC<AgentModalProps> = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 660, maxHeight: '90vh' }}>
+    <div className={`modal-overlay ${isMobile ? 'is-mobile-overlay' : ''}`} onClick={onClose}>
+      <div
+        className={`modal-content ${isMobile ? 'is-mobile-modal' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+        style={!isMobile ? { maxWidth: 660, maxHeight: '90vh' } : undefined}
+      >
+        {isMobile && <div className="modal-sheet-handle" />}
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img src="/smoke-monkey-mascot.png" alt="Mascot" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain' }} />
@@ -554,7 +561,7 @@ export const AgentModal: React.FC<AgentModalProps> = ({
             </div>
 
             {/* Provider and Dynamic Model Selection */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 12 : 14 }}>
               {/* Provider Field */}
               <div className="form-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1317,7 +1324,7 @@ export const AgentModal: React.FC<AgentModalProps> = ({
             </div>
           </div>
 
-          <div className="modal-footer" style={{ flexShrink: 0 }}>
+          <div className={`modal-footer ${isMobile ? 'is-mobile-footer' : ''}`} style={{ flexShrink: 0 }}>
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
             </button>

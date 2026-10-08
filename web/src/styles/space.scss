@@ -1,4 +1,5 @@
 /* ── Smoke Monkey Canvas - SCSS & Shadcn Design System ────────────────── */
+@import './mobile.scss';
 
 // ── Shadcn Theme Token Definitions ──────────────────────────────────────────
 
@@ -985,6 +986,19 @@ body, html, #root {
     color: #0ea5e9;
     border-color: rgba(14, 165, 233, 0.35);
     background: rgba(14, 165, 233, 0.08);
+
+    &.unconfigured {
+      color: #f59e0b !important;
+      border-color: rgba(245, 158, 11, 0.5) !important;
+      background: rgba(245, 158, 11, 0.1) !important;
+      border-style: dashed !important;
+      cursor: pointer;
+
+      &:hover {
+        background: rgba(245, 158, 11, 0.18) !important;
+        border-color: #f59e0b !important;
+      }
+    }
   }
 
   &.skill {
@@ -1479,6 +1493,65 @@ body, html, #root {
   font-weight: 500;
 }
 
+// ── Unconfigured MCP Warning Banner in Drawer ──────────────────────────────
+.drawer-unconfigured-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 16px;
+  background: rgba(245, 158, 11, 0.12);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.28);
+  font-size: 12px;
+  color: #fbbf24;
+  flex-shrink: 0;
+
+  .unconfigured-banner-icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .unconfigured-banner-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+
+    .unconfigured-banner-title {
+      font-weight: 700;
+      color: #f59e0b;
+      white-space: nowrap;
+    }
+
+    .unconfigured-banner-desc {
+      color: #fde68a;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .unconfigured-banner-btn {
+    flex-shrink: 0;
+    background: #f59e0b;
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+
+    &:hover {
+      opacity: 0.9;
+    }
+  }
+}
+
 // ── Glowing Hero Mascot in Chat Empty State ────────────────────────────────
 .agent-empty-hero {
   position: relative;
@@ -1487,7 +1560,7 @@ body, html, #root {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 40px 20px 24px;
+  padding: 32px 20px 20px;
   width: 100%;
   max-width: 580px;
   margin: 0 auto;
@@ -1534,8 +1607,61 @@ body, html, #root {
     font-size: 13px;
     line-height: 1.5;
     color: hsl(var(--muted-foreground));
-    margin: 0 0 24px;
-    max-width: 440px;
+    margin: 0 0 14px;
+    max-width: 480px;
+  }
+
+  .hero-directives-wrapper {
+    margin: 0 0 20px;
+    width: 100%;
+    max-width: 500px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    .hero-directives-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      cursor: pointer;
+      transition: all 0.15s ease;
+
+      &:hover {
+        color: #f8fafc;
+        background: rgba(255, 255, 255, 0.09);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+    }
+
+    .hero-directives-scrollbox {
+      margin-top: 10px;
+      width: 100%;
+      max-height: 180px;
+      overflow-y: auto;
+      text-align: left;
+      padding: 12px 14px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+
+      .hero-directives-code {
+        margin: 0;
+        font-family: inherit;
+        font-size: 11.5px;
+        line-height: 1.6;
+        color: #cbd5e1;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    }
   }
 
   .hero-suggestions-title {
@@ -1978,6 +2104,53 @@ body, html, #root {
     &:hover {
       color: hsl(var(--foreground));
     }
+  }
+}
+
+.context-menu-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0 2px;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  .breadcrumb-chip {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: hsl(var(--secondary) / 0.5);
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    color: hsl(var(--muted-foreground));
+    font-size: 10.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.12s;
+    white-space: nowrap;
+
+    &:hover {
+      background: hsl(var(--primary) / 0.15);
+      color: hsl(var(--primary));
+      border-color: hsl(var(--primary) / 0.4);
+    }
+  }
+
+  .crumb-root {
+    font-weight: 700;
+  }
+
+  .breadcrumb-sep {
+    flex-shrink: 0;
+    color: hsl(var(--muted-foreground) / 0.5);
+    font-size: 11px;
   }
 }
 
@@ -2949,10 +3122,10 @@ body, html, #root {
   }
 
   .lib-tab-label {
-    font-size: 8.5px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: -0.1px;
+    text-transform: none;
     line-height: 1;
     color: hsl(var(--muted-foreground));
     transition: color 0.15s ease;
@@ -3590,6 +3763,178 @@ body, html, #root {
   align-items: center;
   justify-content: flex-start;
   width: 100%;
+}
+
+// ── Prominent MCP Brand Cards ───────────────────────────────────────────────
+
+.lib-mcp-card {
+  padding: 12px 14px;
+  min-height: 100px;
+  gap: 8px;
+  border-radius: 12px;
+  background: hsl(var(--secondary) / 0.35);
+  border: 1px solid hsl(var(--border) / 0.85);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover {
+    background: hsl(var(--secondary) / 0.72);
+    border-color: var(--brand-accent, hsl(var(--primary) / 0.7));
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.5), 0 0 16px -4px var(--brand-glow, rgba(99, 102, 241, 0.3));
+  }
+}
+
+.lib-mcp-card-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+}
+
+.lib-mcp-brand-tile {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
+  overflow: hidden;
+
+  svg {
+    display: block;
+    filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.3));
+  }
+}
+
+.lib-mcp-card:hover .lib-mcp-brand-tile {
+  transform: scale(1.08);
+}
+
+.lib-mcp-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.lib-mcp-card-header-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+
+.lib-mcp-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.lib-mcp-title {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.015em;
+}
+
+.lib-mcp-category-pill {
+  padding: 2px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 20px;
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.lib-mcp-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.lib-ready-text {
+  font-size: 10px;
+  font-weight: 700;
+  color: #10b981;
+  margin-left: 3px;
+}
+
+.lib-connect-btn-prominent {
+  padding: 3px 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(245, 158, 11, 0.28);
+    border-color: rgba(245, 158, 11, 0.6);
+    color: #fef08a;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(245, 158, 11, 0.25);
+  }
+}
+
+.lib-mcp-desc {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground) / 0.95);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-align: left;
+  width: 100%;
+}
+
+.lib-mcp-footer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  padding-top: 6px;
+  margin-top: 2px;
+  border-top: 1px solid hsl(var(--border) / 0.45);
+}
+
+.lib-mcp-key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3.5px;
+  padding: 1.5px 6.5px;
+  font-size: 9.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  border-radius: 5px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.24);
+  color: #f59e0b;
 }
 
 .lib-blank-agent-card {
@@ -5839,4 +6184,46 @@ body, html, #root {
   from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .show-mobile {
+    display: none !important;
+  }
+}
+
+.markdown-rich-container {
+  h1, h2, h3, h4, h5, h6 {
+    color: #f8fafc;
+    font-weight: 700;
+    margin-top: 1.25em;
+    margin-bottom: 0.6em;
+    line-height: 1.3;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 0.3em; }
+  h2 { font-size: 1.35rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 0.25em; }
+  h3 { font-size: 1.15rem; }
+  h4 { font-size: 1rem; }
+  p { margin: 0.8em 0; line-height: 1.7; }
+  ul, ol { padding-left: 1.5em; margin: 0.8em 0; }
+  li { margin: 0.35em 0; }
+  hr { border: none; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 1.5em 0; }
+  strong { color: #f1f5f9; font-weight: 600; }
+  a { color: #38bdf8; text-decoration: underline; text-underline-offset: 3px; }
+}
+
 

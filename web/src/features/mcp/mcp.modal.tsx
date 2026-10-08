@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { McpService } from './mcp.service.js';
 import type { StockMcp } from './mcp.types.js';
-import { getBrandIcon } from '../common/brand-icons.js';
+import { getBrandIcon, getBrandVisuals } from '../common/brand-icons.js';
 
 interface McpModalProps {
   isOpen: boolean;
@@ -603,7 +603,7 @@ export const McpModal: React.FC<McpModalProps> = ({
                 }}
               >
                 {filteredStockMcps.map((s) => {
-                  const BrandIcon = getBrandIcon(s.name + ' ' + s.label, 16);
+                  const brand = getBrandVisuals(s.name + ' ' + s.label, 24);
                   const isSelected = selectedStock?.name === s.name;
                   const isConfigured = isMcpConfigured(s);
                   const isAttached = attachedMcpNames.includes(s.name);
@@ -615,38 +615,65 @@ export const McpModal: React.FC<McpModalProps> = ({
                       key={s.name}
                       className={`mcp-stock-card ${isSelected ? 'selected' : ''}`}
                       onClick={() => setSelectedStock(s)}
-                      style={{ cursor: 'pointer', position: 'relative' }}
+                      style={{
+                        cursor: 'pointer',
+                        position: 'relative',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                      }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {BrandIcon || <Cpu size={14} color="#2563eb" />}
-                          <span className="mcp-stock-name" style={{ fontSize: 12.5, fontWeight: 600 }}>{s.label}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div
+                          style={{
+                            width: 38,
+                            height: 38,
+                            minWidth: 38,
+                            borderRadius: 10,
+                            background: brand.bgColor,
+                            border: `1px solid ${brand.borderColor}`,
+                            boxShadow: `0 3px 10px -2px ${brand.glowColor}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {brand.icon}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {isAttached ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(168,85,247,0.18)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.35)', padding: '1px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
-                              ✓ Attached
-                            </span>
-                          ) : isConfigured ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(16,185,129,0.18)', color: '#10b981', border: '1px solid rgba(16,185,129,0.35)', padding: '1px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
-                              ✓ Ready
-                            </span>
-                          ) : isOAuth ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(37,99,235,0.22)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.4)', padding: '1px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
-                              ⚡ OAuth
-                            </span>
-                          ) : isFree ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(16,185,129,0.12)', color: '#10b981', padding: '1px 6px', borderRadius: 4 }}>
-                              Free
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(245,158,11,0.14)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', padding: '1px 6px', borderRadius: 4 }}>
-                              Key Req.
-                            </span>
-                          )}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                            <span className="mcp-stock-name" style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{s.label}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {isAttached ? (
+                                <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(168,85,247,0.18)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.35)', padding: '1px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  ✓ Attached
+                                </span>
+                              ) : isConfigured ? (
+                                <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(16,185,129,0.18)', color: '#10b981', border: '1px solid rgba(16,185,129,0.35)', padding: '1px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  ✓ Ready
+                                </span>
+                              ) : isOAuth ? (
+                                <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(37,99,235,0.22)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.4)', padding: '1px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  ⚡ OAuth
+                                </span>
+                              ) : isFree ? (
+                                <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(16,185,129,0.12)', color: '#10b981', padding: '1px 6px', borderRadius: 4 }}>
+                                  Free
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 9.5, fontWeight: 700, background: 'rgba(245,158,11,0.14)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', padding: '1px 6px', borderRadius: 4 }}>
+                                  Key Req.
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>{s.category}</span>
                         </div>
                       </div>
-                      <div className="mcp-stock-desc" style={{ fontSize: 11, marginTop: 4 }}>{s.description}</div>
+                      <div className="mcp-stock-desc" style={{ fontSize: 11, lineHeight: 1.4, color: 'rgba(255,255,255,0.7)', margin: 0 }}>{s.description}</div>
                       {isOAuth && !isAttached && (
                         <button
                           type="button"

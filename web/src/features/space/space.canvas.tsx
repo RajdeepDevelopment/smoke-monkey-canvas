@@ -16,6 +16,8 @@ import type { SpaceAgentEntity, AgentRecord } from '../agent/agent.types.js';
 import type { SpaceContextMenuState, AgentNode } from './space.types.js';
 import { CrabAgentNode } from '../agent/agent.crab-node.js';
 import { SpaceToolbar, type ThemeMode, THEMES } from './space.toolbar.js';
+import { SpaceToolbarMobile } from './mobile/space-toolbar.mobile.js';
+import { useIsMobile } from '../common/use-mobile.js';
 import { SpaceContextMenu } from './space.context-menu.js';
 import { onMenuAction } from '../../config/desktop.bridge.js';
 import { AgentModal } from '../agent/agent.modal.js';
@@ -30,7 +32,7 @@ import type { SkillInput } from '../skill/skill.types.js';
 import type { AgentTemplate } from '../agent/agent.templates.js';
 import type { StockMcp } from '../mcp/mcp.types.js';
 import { LibrarySidebar } from '../library/library-sidebar.js';
-import { readLibDragPayload, LIB_DRAG_KEY, type LibDragPayload, type PromptPreset, type StockSkillItem } from '../library/library.types.js';
+import { readLibDragPayload, isLibDrag, setActiveDragPayload, type LibDragPayload, type PromptPreset, type StockSkillItem } from '../library/library.types.js';
 import { useSpaceStore } from './space.store.js';
 import { AppLoader } from '../common/app-loader.js';
 
@@ -53,6 +55,7 @@ export const SpaceCanvas: React.FC = () => {
   const setActiveDrawerAgentId = useSpaceStore((s) => s.setActiveDrawerAgentId);
 
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance<AgentNode> | null>(null);
+  const isMobile = useIsMobile();
 
   const handleSelectTheme = (t: ThemeMode) => {
     setTheme(t);
@@ -156,8 +159,8 @@ export const SpaceCanvas: React.FC = () => {
       for (const [key, val] of Object.entries(data)) next[key] = Boolean(val?.isSet);
       setConfiguredKeys(next);
 
-      // Auto-open API Keys modal ONLY on initial boot/refresh if user hasn't configured any LLM provider key yet
-      if (isInitialBoot && !hasCheckedInitialLlmRef.current) {
+      // Auto-open API Keys modal ONLY on desktop initial boot if user hasn't configured any LLM provider key yet
+      if (!isMobile && isInitialBoot && !hasCheckedInitialLlmRef.current) {
         hasCheckedInitialLlmRef.current = true;
         const hasConfiguredLlm = LLM_PROVIDER_KEYS.some((k) => Boolean(data[k]?.isSet));
         if (!hasConfiguredLlm) {
@@ -326,14 +329,22 @@ export const SpaceCanvas: React.FC = () => {
   }, []);
 
   const handleSaveDisabledTools = useCallback(async (agentId: string, disabledTools: string[]) => {
+    const existingAgent = agents.find((a) => a.id === agentId);
+    if (!existingAgent) {
+      throw new Error(`Agent not found on canvas`);
+    }
     await AgentService.updateAgentDisabledTools(agentId, disabledTools);
     await refreshSpace();
-  }, [refreshSpace]);
+  }, [agents, refreshSpace]);
 
   const handleSavePolicies = useCallback(async (agentId: string, policies: string[]) => {
+    const existingAgent = agents.find((a) => a.id === agentId);
+    if (!existingAgent) {
+      throw new Error(`Agent not found on canvas`);
+    }
     await AgentService.updateAgentPolicies(agentId, policies);
     await refreshSpace();
-  }, [refreshSpace]);
+  }, [agents, refreshSpace]);
 
   // ── Library: transient feedback toast ─────────────────────────────────────
   const [toast, setToast] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null);
@@ -412,6 +423,10 @@ export const SpaceCanvas: React.FC = () => {
   const handleLibraryDrop = useCallback(
     async (agentId: string, payload: LibDragPayload) => {
       const agent = agents.find((a) => a.id === agentId);
+      if (!agent) {
+        showToast('Target agent not found on canvas.', 'warn');
+        return;
+      }
       const agentLabel = agent?.name ?? 'agent';
 
       try {
@@ -490,12 +505,7 @@ export const SpaceCanvas: React.FC = () => {
             });
             showToast(`${preset.name} custom voice attached to ${agentLabel}.`, 'ok');
           } else {
-            const res = await fetch(`/api/agents/${agentId}/personalities`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: preset.id }),
-            });
-            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to set personality');
+            await AgentService.attachPersonality(agentId, preset.id);
             showToast(`${preset.name} voice set on ${agentLabel}.`, 'ok');
           }
         } else if (payload.kind === 'outputStyle' && payload.preset) {
@@ -518,12 +528,7 @@ export const SpaceCanvas: React.FC = () => {
             });
             showToast(`${preset.name} custom output format attached to ${agentLabel}.`, 'ok');
           } else {
-            const res = await fetch(`/api/agents/${agentId}/output-styles`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: preset.id }),
-            });
-            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to set output style');
+            await AgentService.attachOutputStyle(agentId, preset.id);
             showToast(`${preset.name} output format set on ${agentLabel}.`, 'ok');
           }
         }
@@ -568,7 +573,14 @@ export const SpaceCanvas: React.FC = () => {
         // Deep comparison for MCPs & Skills & LatestRun to keep stable object references
         const mcpsEqual =
           existing?.data.mcps?.length === agent.mcps?.length &&
-          existing?.data.mcps?.every((m, idx) => m.id === agent.mcps[idx]?.id);
+          existing?.data.mcps?.every((m, idx) => {
+            const nextM = agent.mcps[idx];
+            return (
+              m.id === nextM?.id &&
+              (m as { isConfigured?: boolean }).isConfigured ===
+                (nextM as { isConfigured?: boolean })?.isConfigured
+            );
+          });
         const skillsEqual =
           existing?.data.skills?.length === agent.skills?.length &&
           existing?.data.skills?.every((s, idx) => s.id === agent.skills[idx]?.id);
@@ -687,17 +699,18 @@ export const SpaceCanvas: React.FC = () => {
         refreshSpace();
       } else if (msg.type === 'run_completed' || msg.type === 'run_failed') {
         refreshSpace();
+      } else if (msg.type === 'agent_updated' || msg.type === 'agent_manifest_updated') {
+        refreshSpace();
       }
     });
 
     return cleanupWs;
   }, [refreshSpace, updateAgentStatus, updateNodePositionLocally, updateAgentCron]);
 
-  // 6. Right Click in Space
   const handlePaneContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent) => {
       event.preventDefault();
-      if (!rfInstance) return;
+      if (isMobile || !rfInstance) return;
 
       const flowCoords = rfInstance.screenToFlowPosition({
         x: event.clientX,
@@ -712,7 +725,7 @@ export const SpaceCanvas: React.FC = () => {
         flowY: flowCoords.y,
       });
     },
-    [rfInstance],
+    [rfInstance, isMobile],
   );
 
   const handleCloseContextMenu = useCallback(() => {
@@ -900,6 +913,7 @@ export const SpaceCanvas: React.FC = () => {
   const handlePaneDrop = useCallback(
     (event: React.DragEvent | DragEvent) => {
       const payload = readLibDragPayload((event as React.DragEvent).dataTransfer);
+      setActiveDragPayload(null);
       if (!payload || payload.kind !== 'agent' || !payload.agent) return;
       event.preventDefault();
       event.stopPropagation();
@@ -1100,14 +1114,25 @@ export const SpaceCanvas: React.FC = () => {
   return (
     <div className={`space-container ${currentTheme}`} onClick={handleCloseContextMenu}>
       {/* Space Toolbar */}
-      <SpaceToolbar
-        agents={agents}
-        currentTheme={currentTheme}
-        onSelectTheme={handleSelectTheme}
-        onOpenSettings={handleOpenSettingsModal}
-        onAddAgent={handleAddAgentClick}
-        onFitView={handleFitViewClick}
-      />
+      {isMobile ? (
+        <SpaceToolbarMobile
+          agents={agents}
+          currentTheme={currentTheme}
+          onSelectTheme={handleSelectTheme}
+          onOpenSettings={handleOpenSettingsModal}
+          onAddAgent={handleAddAgentClick}
+          onFitView={handleFitViewClick}
+        />
+      ) : (
+        <SpaceToolbar
+          agents={agents}
+          currentTheme={currentTheme}
+          onSelectTheme={handleSelectTheme}
+          onOpenSettings={handleOpenSettingsModal}
+          onAddAgent={handleAddAgentClick}
+          onFitView={handleFitViewClick}
+        />
+      )}
 
       {/* Infinite Canvas */}
       <ReactFlow<AgentNode>
@@ -1117,15 +1142,20 @@ export const SpaceCanvas: React.FC = () => {
         onInit={setRfInstance}
         onPaneContextMenu={handlePaneContextMenu}
         onDragOver={(e) => {
-          if (e.dataTransfer.types.includes(LIB_DRAG_KEY)) {
+          if (isLibDrag(e.dataTransfer)) {
             e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
+            try {
+              e.dataTransfer.dropEffect = 'copy';
+            } catch {}
           }
         }}
         onDrop={handlePaneDrop}
         fitView
         minZoom={0.2}
         maxZoom={2.5}
+        panOnDrag={true}
+        zoomOnPinch={true}
+        preventScrolling={true}
       >
         <Background variant={BackgroundVariant.Lines} gap={36} size={1} color={gridLineColor} />
         <Controls showInteractive={false} position="bottom-right" />
@@ -1169,19 +1199,21 @@ export const SpaceCanvas: React.FC = () => {
         onCancel={cancelDeleteAgent}
       />
 
-      {/* Right Click Context Menu */}
-      <SpaceContextMenu
-        state={contextMenu}
-        onAddAgent={(flowX, flowY) => {
-          setEditingAgent(null);
-          setTemplateInitialData(null);
-          setNewAgentCoords({ x: flowX, y: flowY });
-          setIsAgentModalOpen(true);
-        }}
-        onSpawnTemplate={handleSpawnTemplate}
-        onCustomizeTemplate={handleCustomizeTemplate}
-        onClose={handleCloseContextMenu}
-      />
+      {/* Right Click Context Menu (Desktop only) */}
+      {!isMobile && (
+        <SpaceContextMenu
+          state={contextMenu}
+          onAddAgent={(flowX, flowY) => {
+            setEditingAgent(null);
+            setTemplateInitialData(null);
+            setNewAgentCoords({ x: flowX, y: flowY });
+            setIsAgentModalOpen(true);
+          }}
+          onSpawnTemplate={handleSpawnTemplate}
+          onCustomizeTemplate={handleCustomizeTemplate}
+          onClose={handleCloseContextMenu}
+        />
+      )}
 
       {/* Agent Modal */}
       <AgentModal
@@ -1251,6 +1283,7 @@ export const SpaceCanvas: React.FC = () => {
         canvasTheme={currentTheme}
         onRunNow={handleRunAgent}
         onStopNow={handleStopAgent}
+        onConfigureMcp={handleAddMcp}
         onClose={handleCloseDrawer}
       />
 

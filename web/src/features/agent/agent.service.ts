@@ -1,10 +1,13 @@
 import type {
   AgentRecord,
+  AgentManifestInfo,
   SpaceAgentEntity,
   RunRecord,
   RunEventRecord,
   ChatSessionRecord,
   ChatMessageRecord,
+  WorkspaceFilesResponse,
+  WorkspaceFileContentResponse,
 } from './agent.types.js';
 
 const API_BASE = '/api';
@@ -182,6 +185,13 @@ export class AgentService {
     return res.json();
   }
 
+  /** Merged, source-aware attachments + the exact effective system prompt for the next run. */
+  static async fetchAgentManifest(id: string): Promise<AgentManifestInfo> {
+    const res = await fetch(`${API_BASE}/agents/${id}/manifest`);
+    if (!res.ok) throw new Error('Failed to fetch agent manifest');
+    return res.json();
+  }
+
   static async updateAgentPolicies(id: string, policies: string[]): Promise<AgentRecord> {
     return this.updateAgent(id, { policies: JSON.stringify(policies) });
   }
@@ -189,4 +199,96 @@ export class AgentService {
   static async updateAgentDisabledTools(id: string, disabled_tools: string[]): Promise<AgentRecord> {
     return this.updateAgent(id, { disabled_tools: JSON.stringify(disabled_tools) });
   }
+
+  static async attachPersonality(agentId: string, presetId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/personalities`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: presetId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to set personality');
+    }
+  }
+
+  static async attachOutputStyle(agentId: string, presetId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/output-styles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: presetId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to set output style');
+    }
+  }
+
+  static async fetchRepoMemory(id: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/agents/${id}/repo-memory`);
+    if (!res.ok) throw new Error('Failed to fetch repo memory');
+    return res.json();
+  }
+
+  static async updateRepoMemoryFile(id: string, file: string, content: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/agents/${id}/repo-memory/${file}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    if (!res.ok) throw new Error('Failed to update repo memory file');
+    return res.json();
+  }
+
+  static async fetchMemoryFile(id: string, file: string): Promise<{ file: string; content: string; path: string }> {
+    const res = await fetch(`${API_BASE}/agents/${id}/memory/${file}`);
+    if (!res.ok) throw new Error('Failed to fetch memory file');
+    return res.json();
+  }
+
+  static async updateMemoryFile(id: string, file: string, content: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/agents/${id}/memory/${file}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    if (!res.ok) throw new Error('Failed to update memory file');
+    return res.json();
+  }
+
+  static async fetchWorkspaceFiles(agentId: string): Promise<WorkspaceFilesResponse> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/files`);
+    if (!res.ok) throw new Error('Failed to fetch workspace files');
+    return res.json();
+  }
+
+  static async fetchWorkspaceFileContent(
+    agentId: string,
+    path: string,
+  ): Promise<WorkspaceFileContentResponse> {
+    const res = await fetch(
+      `${API_BASE}/agents/${agentId}/files/content?path=${encodeURIComponent(path)}`,
+    );
+    if (!res.ok) throw new Error('Failed to fetch workspace file content');
+    return res.json();
+  }
+
+  static getWorkspaceFileRawUrl(agentId: string, path: string): string {
+    return `${API_BASE}/agents/${agentId}/files/raw?path=${encodeURIComponent(path)}`;
+  }
+
+  static async updateWorkspaceFileContent(
+    agentId: string,
+    path: string,
+    content: string,
+  ): Promise<{ success: boolean; path: string }> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/files/content`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, content }),
+    });
+    if (!res.ok) throw new Error('Failed to update workspace file');
+    return res.json();
+  }
 }
+

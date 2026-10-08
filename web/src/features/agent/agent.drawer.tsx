@@ -13,17 +13,39 @@ import {
   Sparkles,
   Plus,
   Folder,
+  FolderOpen,
   HardDrive,
   Smartphone,
   Trash2,
+  AlertTriangle,
+  ChevronDown,
+  FileText,
+  Brain,
+  GitBranch,
+  Zap,
+  Code2,
+  Edit3,
+  Save,
+  ExternalLink,
 } from 'lucide-react';
-import type { SpaceAgentEntity, RunRecord, ChatSessionRecord, ActiveRunRecord } from './agent.types.js';
+import type {
+  SpaceAgentEntity,
+  RunRecord,
+  ChatSessionRecord,
+  ActiveRunRecord,
+  AttachmentSource,
+  AgentManifestInfo,
+  AgentPolicyEntry,
+} from './agent.types.js';
 import { AgentService } from './agent.service.js';
 import { ChatPanel, ChatComposer, applyChatEvent, SyntheticTransport } from '@smoke-monkey/ui';
 import '@smoke-monkey/ui/ui.css';
 import type { ChatMessage, MessagePart, ToolCall } from '@smoke-monkey/ui';
 import { useSpaceStore } from '../space/space.store.js';
 import { ChatVoiceButton } from '../voice/chat-voice-button.js';
+import { useIsMobile } from '../common/use-mobile.js';
+import { AgentDrawerMobile } from './mobile/agent-drawer.mobile.js';
+import { AgentFileExplorer } from './agent.file-explorer.js';
 
 export interface LiveLogEvent {
   eventType: string;
@@ -37,6 +59,7 @@ interface AgentDrawerProps {
   canvasTheme?: string; // e.g. 'theme-dark-midnight' — maps to SM chat theme
   onRunNow: (agentId: string, customPrompt?: string) => Promise<void>;
   onStopNow?: (agentId: string) => Promise<void>;
+  onConfigureMcp?: (agentId: string, mcpName?: string) => void;
   onClose: () => void;
 }
 
@@ -51,12 +74,101 @@ function toSmTheme(canvasTheme?: string): 'dark' | 'midnight' | 'mono' | 'light'
   return 'dark'; // default for theme-dark-midnight
 }
 
+/** Badge styling per attachment origin shown in the Connected Components card. */
+const SOURCE_META: Record<AttachmentSource, { label: string; color: string }> = {
+  canvas: { label: 'Managed', color: '#38bdf8' },
+  user: { label: 'You', color: '#34d399' },
+  agent: { label: 'Agent', color: '#fbbf24' },
+};
+
+/** Parse the raw `agents.policies` column until `/manifest` supplies sources. */
+const parseFallbackPolicies = (raw: string | null | undefined): AgentPolicyEntry[] => {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [{ text: raw.trim(), source: 'user' }];
+    return parsed
+      .map((p): AgentPolicyEntry | null => {
+        if (typeof p === 'string') return p.trim() ? { text: p.trim(), source: 'user' } : null;
+        if (p && typeof p === 'object' && typeof (p as AgentPolicyEntry).text === 'string') {
+          const entry = p as AgentPolicyEntry;
+          return {
+            text: entry.text,
+            source:
+              entry.source === 'canvas' || entry.source === 'agent' ? entry.source : 'user',
+          };
+        }
+        return null;
+      })
+      .filter((p): p is AgentPolicyEntry => p !== null);
+  } catch {
+    return raw.trim() ? [{ text: raw.trim(), source: 'user' }] : [];
+  }
+};
+
+const SourceBadge: React.FC<{ source?: AttachmentSource }> = ({ source }) => {
+  const src: AttachmentSource = source ?? 'canvas';
+  const meta = SOURCE_META[src] ?? SOURCE_META.canvas;
+  const title =
+    src === 'canvas'
+      ? 'Added via the app and refreshed every run'
+      : src === 'user'
+        ? 'Attached by you from the input box'
+        : 'Added by the agent itself during a run';
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '1px 7px',
+        borderRadius: 9999,
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
+        color: meta.color,
+        background: `${meta.color}1f`,
+        border: `1px solid ${meta.color}55`,
+        whiteSpace: 'nowrap',
+      }}
+      title={title}
+    >
+      {meta.label}
+    </span>
+  );
+};
+
+
+
+
+
+
+
+function getPromptSummary(prompt?: string): string {
+  if (!prompt) return 'Autonomous AI specialist agent ready to assist.';
+  // 1. If there's an explicit MISSION heading, use the mission text
+  const missionMatch = prompt.match(/##\s*MISSION\s+([^\n#]+)/i);
+  if (missionMatch && missionMatch[1]?.trim()) {
+    return missionMatch[1].trim();
+  }
+  // 2. Otherwise take the first introductory sentence before any markdown headings or extra lines
+  const firstSection = prompt.split(/\n##|\n\n/)[0]?.trim() || '';
+  if (firstSection) {
+    const matchSentence = firstSection.match(/^([^.!?]+[.!?])/);
+    if (matchSentence && matchSentence[1] && matchSentence[1].length > 15) {
+      return matchSentence[1].trim();
+    }
+    return firstSection.length > 180 ? firstSection.slice(0, 177) + '…' : firstSection;
+  }
+  return prompt.length > 180 ? prompt.slice(0, 177) + '…' : prompt;
+}
+
 export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
   agent,
   liveEvents: liveEventsProp,
   canvasTheme,
   onRunNow,
   onStopNow,
+  onConfigureMcp,
   onClose,
 }) => {
   if (!agent) return null;
@@ -64,9 +176,19 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
   const storeLiveEvents = useSpaceStore((s) => s.liveEvents);
   const liveEvents = liveEventsProp ?? storeLiveEvents;
 
-  const [activeTab, setActiveTab] = useState<'chat' | 'terminal' | 'history'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'terminal' | 'history' | 'files'>('chat');
+  const [workspaceFilesCount, setWorkspaceFilesCount] = useState<number>(0);
+
+  useEffect(() => {
+    AgentService.fetchWorkspaceFiles(agent.id)
+      .then((res) => setWorkspaceFilesCount(res.totalFiles))
+      .catch(() => {});
+  }, [agent.id]);
+
   const [promptInput, setPromptInput] = useState('');
   const [composerText, setComposerText] = useState('');
+  const [showFullPrompt, setShowFullPrompt] = useState(false);
+  const isMobile = useIsMobile();
   const pendingVoicePrompt = useSpaceStore((s) => s.pendingVoicePrompt);
   const setPendingVoicePrompt = useSpaceStore((s) => s.setPendingVoicePrompt);
   const [runs, setRuns] = useState<RunRecord[]>([]);
@@ -78,6 +200,7 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
   const [pastRunEvents, setPastRunEvents] = useState<LiveLogEvent[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [isEntering, setIsEntering] = useState(true);
+  const [manifest, setManifest] = useState<AgentManifestInfo | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
   // ── First-Class Reconnecting Multi-Turn Chat & Concurrency State ──
@@ -87,6 +210,17 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [viewingCronRunId, setViewingCronRunId] = useState<string | null>(null);
   const [viewingHistoryRunId, setViewingHistoryRunId] = useState<string | null>(null);
+
+  // ── Memory & Repository Inspection / Editing State ──
+  const [selectedMemoryFile, setSelectedMemoryFile] = useState<string | null>(null);
+  const [memoryModalContent, setMemoryModalContent] = useState<string>('');
+  const [isEditingMemory, setIsEditingMemory] = useState(false);
+  const [isSavingMemory, setIsSavingMemory] = useState(false);
+
+  const [selectedRepoFile, setSelectedRepoFile] = useState<string | null>(null);
+  const [repoFileContent, setRepoFileContent] = useState<string>('');
+  const [isEditingRepoFile, setIsEditingRepoFile] = useState(false);
+  const [isSavingRepoFile, setIsSavingRepoFile] = useState(false);
 
   // Clear entrance animation class after initial slide-in
   useEffect(() => {
@@ -189,6 +323,64 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
 
   const isAgentActive =
     agent.status === 'running' || running || isStreaming || activeRuns.length > 0;
+
+  // ── Merged manifest: agent-added attachments + effective system prompt ──
+  const refreshManifest = useCallback(() => {
+    AgentService.fetchAgentManifest(agent.id).then(setManifest).catch(() => {});
+  }, [agent.id]);
+
+  const handleSaveMemoryFile = useCallback(async () => {
+    if (!agent || !selectedMemoryFile) return;
+    setIsSavingMemory(true);
+    try {
+      await AgentService.updateMemoryFile(agent.id, selectedMemoryFile, memoryModalContent);
+      setIsEditingMemory(false);
+      refreshManifest();
+    } catch (e: any) {
+      alert(e.message || 'Failed to save memory file');
+    } finally {
+      setIsSavingMemory(false);
+    }
+  }, [agent, selectedMemoryFile, memoryModalContent, refreshManifest]);
+
+  const handleSaveRepoFile = useCallback(async () => {
+    if (!agent || !selectedRepoFile) return;
+    setIsSavingRepoFile(true);
+    try {
+      await AgentService.updateRepoMemoryFile(agent.id, selectedRepoFile, repoFileContent);
+      setIsEditingRepoFile(false);
+      refreshManifest();
+    } catch (e: any) {
+      alert(e.message || 'Failed to save repo memory file');
+    } finally {
+      setIsSavingRepoFile(false);
+    }
+  }, [agent, selectedRepoFile, repoFileContent, refreshManifest]);
+
+  useEffect(() => {
+    let mounted = true;
+    AgentService.fetchAgentManifest(agent.id)
+      .then((m) => {
+        if (mounted) setManifest(m);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [agent.id, agent.mcps.length, agent.skills.length]);
+
+  const displayMcps = manifest?.mcps ?? agent.mcps;
+  const displaySkills = manifest?.skills ?? agent.skills;
+  const displayPolicies: AgentPolicyEntry[] =
+    manifest?.policies ?? parseFallbackPolicies(agent.policies);
+
+  const unconfiguredMcps = useMemo(() => {
+    return (displayMcps || []).filter((m) => {
+      const raw = m as { isConfigured?: boolean; missingKeys?: string[] };
+      return raw.isConfigured === false || (raw.missingKeys && raw.missingKeys.length > 0);
+    });
+  }, [displayMcps]);
+  const hasUnconfiguredMcps = unconfiguredMcps.length > 0;
 
   // ── Polling: Keep active runs & agent status updated ──
   useEffect(() => {
@@ -528,9 +720,14 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
           // Alert user that a background cron job has started
           void AgentService.fetchActiveRuns(agent.id).then(setActiveRuns).catch(() => {});
         }
+      } else if (data.type === 'agent_manifest_updated' || data.type === 'agent_updated') {
+        refreshManifest();
       } else if (data.type === 'run_completed' || data.type === 'run_failed') {
         void AgentService.fetchActiveRuns(agent.id).then(setActiveRuns).catch(() => {});
         void AgentService.fetchAgentRuns(agent.id).then(setRuns).catch(() => {});
+        // The run may have added MCP servers, skills, or policies of its own —
+        // pull the merged manifest so the agent box reflects them immediately.
+        refreshManifest();
         if (activeRunId === data.runId || viewingCronRunId === data.runId || !activeRunId) {
           setIsStreaming(false);
           setActiveRunId(null);
@@ -554,7 +751,7 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
     return () => {
       unsubscribe();
     };
-  }, [agent.id, activeSessionId, viewingCronRunId, viewingHistoryRunId, activeRunId]);
+  }, [agent.id, activeSessionId, viewingCronRunId, viewingHistoryRunId, activeRunId, refreshManifest]);
 
   // ── Initialize Agent Data & Default Session on Mount ──
   useEffect(() => {
@@ -588,6 +785,14 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
   const handleSendMessage = useCallback(
     async (text: string, overrideSessionId?: string) => {
       if (!text.trim() || isStreaming) return;
+      if (hasUnconfiguredMcps) {
+        alert(
+          `Cannot start run: The following attached MCP servers require credentials:\n• ${unconfiguredMcps
+            .map((m) => `${m.label || m.mcp_name} (missing ${((m as { missingKeys?: string[] }).missingKeys || ['credentials']).join(', ')})`)
+            .join('\n• ')}\n\nPlease configure credentials before starting a run.`
+        );
+        return;
+      }
       const userText = text.trim();
       const currentSessionId = overrideSessionId || activeSessionId;
 
@@ -881,6 +1086,32 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
 
   const shortId = agent.id.includes('_') ? `#${agent.id.split('_').pop()}` : `#${agent.id}`;
 
+  if (isMobile) {
+    return (
+      <AgentDrawerMobile
+        agent={agent}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        messages={messages}
+        isStreaming={isStreaming}
+        running={running}
+        composerText={composerText}
+        setComposerText={setComposerText}
+        onSendMessage={(text) => void handleSendMessage(text)}
+        onRunNow={onRunNow}
+        onStopNow={onStopNow}
+        onClose={onClose}
+        liveEvents={liveEvents}
+        runs={runs}
+        chatSessions={chatSessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={setActiveSessionId}
+        onSelectRun={loadRun}
+        filesCount={workspaceFilesCount}
+      />
+    );
+  }
+
   return (
     <div
       ref={drawerRef}
@@ -1137,6 +1368,20 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
             </span>
           </div>
         </button>
+        <button
+          className={`drawer-tab-btn ${activeTab === 'files' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('files');
+            AgentService.fetchWorkspaceFiles(agent.id)
+              .then((res) => setWorkspaceFilesCount(res.totalFiles))
+              .catch(() => {});
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <FolderOpen size={13} />
+            <span>Files ({workspaceFilesCount})</span>
+          </div>
+        </button>
 
         {activeTab === 'chat' && (
           <button
@@ -1169,10 +1414,14 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
 
       {/* Drawer Content */}
       <div
-        className={`drawer-content${activeTab !== 'chat' ? ' scrollable' : ''}`}
+        className={`drawer-content${activeTab !== 'chat' && activeTab !== 'files' ? ' scrollable' : ''}`}
         style={{
-          padding: activeTab === 'chat' ? 0 : 16,
-          gap: activeTab !== 'chat' ? 12 : 0,
+          padding: activeTab === 'chat' || activeTab === 'files' ? 0 : 16,
+          gap: activeTab !== 'chat' && activeTab !== 'files' ? 12 : 0,
+          height: activeTab === 'files' ? '100%' : undefined,
+          display: activeTab === 'files' ? 'flex' : undefined,
+          flexDirection: activeTab === 'files' ? 'column' : undefined,
+          overflow: activeTab === 'files' ? 'hidden' : undefined,
         }}
       >
         {/* TAB 1: SMOKE MONKEY CHAT PANEL */}
@@ -1349,6 +1598,33 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
               </div>
             )}
 
+            {/* Banner: Unconfigured MCP Warning */}
+            {hasUnconfiguredMcps && (
+              <div className="drawer-unconfigured-banner">
+                <div className="unconfigured-banner-icon">
+                  <AlertTriangle size={14} color="#f59e0b" />
+                </div>
+                <div className="unconfigured-banner-content">
+                  <span className="unconfigured-banner-title">Credentials Required:</span>
+                  <span className="unconfigured-banner-desc">
+                    {unconfiguredMcps.map((m) => m.label || m.mcp_name).join(', ')} cannot run until configured.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="unconfigured-banner-btn"
+                  onClick={() =>
+                    onConfigureMcp?.(
+                      agent.id,
+                      unconfiguredMcps[0]?.mcp_name || unconfiguredMcps[0]?.label,
+                    )
+                  }
+                >
+                  Configure
+                </button>
+              </div>
+            )}
+
             {/* Reconnecting ChatPanel */}
             <div
               data-sm-chat=""
@@ -1397,8 +1673,34 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
                     </div>
                     <h2 className="hero-agent-title">{agent.name}</h2>
                     <p className="hero-agent-desc">
-                      {agent.system_prompt || 'Autonomous AI specialist agent ready to assist.'}
+                      {getPromptSummary(manifest?.system_prompt ?? agent.system_prompt)}
                     </p>
+
+                    {(manifest?.system_prompt ?? agent.system_prompt) && (manifest?.system_prompt ?? agent.system_prompt).length > 60 && (
+                      <div className="hero-directives-wrapper">
+                        <button
+                          type="button"
+                          className="hero-directives-btn"
+                          onClick={() => setShowFullPrompt((v) => !v)}
+                        >
+                          <FileText size={12} />
+                          <span>{showFullPrompt ? 'Hide Directives' : 'View Full Directives'}</span>
+                          <ChevronDown
+                            size={12}
+                            style={{
+                              transform: showFullPrompt ? 'rotate(180deg)' : 'none',
+                              transition: 'transform 0.15s ease',
+                            }}
+                          />
+                        </button>
+                        {showFullPrompt && (
+                          <div className="hero-directives-scrollbox">
+                            <pre className="hero-directives-code">{manifest?.system_prompt ?? agent.system_prompt}</pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="hero-suggestions-title">Try Asking</div>
                     <div className="hero-suggestions-list">
                       {chatSuggestions.map((sug, i) => (
@@ -1597,10 +1899,10 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
               <div ref={terminalEndRef} />
             </div>
 
-            {/* Architecture Card */}
+            {/* Connected Components Card (merged, source-aware) */}
             <div className="drawer-summary-card">
-              <div className="drawer-summary-title">Agent Hand Architecture</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="drawer-summary-title">Connected Components</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div className="drawer-summary-line">
                   <strong>Agent ID:</strong>{' '}
                   <span style={{ fontFamily: 'monospace', opacity: 0.85 }}>{agent.id}</span>
@@ -1609,19 +1911,421 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
                   <strong>Model:</strong> {agent.model} ({agent.provider})
                 </div>
                 <div className="drawer-summary-line">
-                  <strong>MCP Claws ({agent.mcps.length}):</strong>{' '}
-                  {agent.mcps.map((m) => m.label || m.mcp_name).join(', ') || 'None attached'}
-                </div>
-                <div className="drawer-summary-line">
-                  <strong>Skill Claws ({agent.skills.length}):</strong>{' '}
-                  {agent.skills.map((s) => s.skill_name).join(', ') || 'None attached'}
-                </div>
-                <div className="drawer-summary-line">
                   <strong>Cron Schedule:</strong>{' '}
                   {agent.cron_enabled && agent.cron_schedule ? agent.cron_schedule : 'Disabled'}
                 </div>
+
+                {(
+                  [
+                    {
+                      title: 'MCP Servers',
+                      empty: 'No MCP servers attached',
+                      items: displayMcps.map((m) => ({
+                        id: m.id,
+                        name: m.label || m.mcp_name,
+                        sub: m.mcp_name,
+                        source: m.source,
+                        hint: m.mcp_name,
+                      })),
+                    },
+                    {
+                      title: 'Skills',
+                      empty: 'No skills attached',
+                      items: displaySkills.map((s) => ({
+                        id: s.id,
+                        name: s.skill_name,
+                        sub: s.description ?? undefined,
+                        source: s.source,
+                        hint: s.description ?? s.skill_name,
+                      })),
+                    },
+                    {
+                      title: 'Policies',
+                      empty: 'No policies enforced',
+                      items: displayPolicies.map((p, i) => ({
+                        id: `pol_${i}`,
+                        name: p.text,
+                        source: p.source,
+                        hint: p.text,
+                      })),
+                    },
+                  ] as Array<{
+                    title: string;
+                    empty: string;
+                    items: Array<{
+                      id: string;
+                      name: string;
+                      sub?: string;
+                      source?: AttachmentSource;
+                      hint?: string;
+                    }>;
+                  }>
+                ).map((group) => (
+                  <div key={group.title}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
+                      <strong style={{ fontSize: 12 }}>{group.title}</strong>
+                      <span style={{ fontSize: 11, opacity: 0.55 }}>({group.items.length})</span>
+                    </div>
+                    {group.items.length === 0 ? (
+                      <div style={{ fontSize: 12, opacity: 0.5, paddingLeft: 2 }}>{group.empty}</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {group.items.map((it) => (
+                          <div
+                            key={it.id}
+                            title={it.hint}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              justifyContent: 'space-between',
+                              background: 'rgba(255, 255, 255, 0.03)',
+                              border: '1px solid rgba(255, 255, 255, 0.07)',
+                              borderRadius: 8,
+                              padding: '5px 8px',
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'baseline',
+                                gap: 6,
+                                minWidth: 0,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {it.name}
+                              </span>
+                              {it.sub && it.sub !== it.name && (
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    opacity: 0.5,
+                                    fontFamily: 'monospace',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {it.sub}
+                                </span>
+                              )}
+                            </div>
+                            <SourceBadge source={it.source} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Effective system prompt preview — same builder as the runner */}
+                <details
+                  style={{
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: 8,
+                    padding: '6px 8px',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                  }}
+                >
+                  <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                    Effective system prompt{' '}
+                    {manifest
+                      ? `(${manifest.effective_system_prompt.length} chars)`
+                      : '(loading…)'}
+                  </summary>
+                  <div style={{ fontSize: 10.5, opacity: 0.6, margin: '6px 0' }}>
+                    Exactly what the next run will send: base prompt + policies + disabled tools +
+                    resource envelope + presets + workspace.{' '}
+                    {manifest ? `Workspace: ${manifest.workspace}` : ''}
+                  </div>
+                  <pre
+                    style={{
+                      maxHeight: 260,
+                      overflow: 'auto',
+                      fontSize: 11,
+                      lineHeight: 1.5,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      opacity: 0.85,
+                      fontFamily: 'monospace',
+                      margin: 0,
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      borderRadius: 6,
+                      padding: '8px 10px',
+                    }}
+                  >
+                    {manifest?.effective_system_prompt ?? 'Loading…'}
+                  </pre>
+                </details>
               </div>
             </div>
+
+            {/* Self-Built Automations */}
+            <div className="drawer-summary-card" style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div className="drawer-summary-title" style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                  <Zap size={14} color="#f59e0b" />
+                  <span>Self-Built Automations</span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: '2px 7px',
+                    borderRadius: 12,
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    color: '#fbbf24',
+                    fontWeight: 600,
+                  }}
+                >
+                  {manifest?.automations?.length ?? 0} Scripts
+                </span>
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 8 }}>
+                Reusable scripts built and registered by this agent during runs to prevent re-solving tasks from scratch.
+              </div>
+              {(!manifest?.automations || manifest.automations.length === 0) ? (
+                <div style={{ fontSize: 11.5, opacity: 0.5, fontStyle: 'italic', padding: '6px 0' }}>
+                  No self-built automations registered yet. Saved scripts appear here automatically.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {manifest.automations.map((auto, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(255, 255, 255, 0.07)',
+                        borderRadius: 8,
+                        padding: '8px 10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 3,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Code2 size={13} color="#f59e0b" />
+                          <strong style={{ fontSize: 12, fontFamily: 'monospace' }}>{auto.file}</strong>
+                        </div>
+                        {auto.cron && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              background: 'rgba(56, 189, 248, 0.15)',
+                              color: '#38bdf8',
+                              fontFamily: 'monospace',
+                            }}
+                          >
+                            ⏱ {auto.cron}
+                          </span>
+                        )}
+                      </div>
+                      {auto.purpose && (
+                        <div style={{ fontSize: 11, opacity: 0.85 }}>{auto.purpose}</div>
+                      )}
+                      {auto.whenToUse && (
+                        <div style={{ fontSize: 10.5, color: '#94a3b8' }}>
+                          <span style={{ color: '#fbbf24' }}>When to use:</span> {auto.whenToUse}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Human Memory Matrix (10 Specialized Dimensions) */}
+            <div className="drawer-summary-card" style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div className="drawer-summary-title" style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                  <Brain size={14} color="#a855f7" />
+                  <span>Human Memory Matrix</span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: '2px 7px',
+                    borderRadius: 12,
+                    background: 'rgba(168, 85, 247, 0.15)',
+                    color: '#c084fc',
+                    fontWeight: 600,
+                  }}
+                >
+                  10 Dimensions
+                </span>
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 8 }}>
+                Persistent cognitive memory: semantic knowledge, autobiographical episodes, prospective intentions, reflections, workflows, and identity.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {(manifest?.memory_files ?? []).map((mem) => {
+                  const categoryColors: Record<string, { bg: string; text: string }> = {
+                    Semantic: { bg: 'rgba(59, 130, 246, 0.15)', text: '#60a5fa' },
+                    Episodic: { bg: 'rgba(236, 72, 153, 0.15)', text: '#f472b6' },
+                    Procedural: { bg: 'rgba(16, 185, 129, 0.15)', text: '#34d399' },
+                    'Working Memory': { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24' },
+                    Prospective: { bg: 'rgba(20, 184, 166, 0.15)', text: '#2dd4bf' },
+                    Reflective: { bg: 'rgba(168, 85, 247, 0.15)', text: '#c084fc' },
+                    Associative: { bg: 'rgba(99, 102, 241, 0.15)', text: '#818cf8' },
+                    Facts: { bg: 'rgba(34, 197, 94, 0.15)', text: '#4ade80' },
+                    Preferences: { bg: 'rgba(249, 115, 22, 0.15)', text: '#fb923c' },
+                    Identity: { bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171' },
+                  };
+                  const color = categoryColors[mem.category] || { bg: 'rgba(255,255,255,0.1)', text: '#fff' };
+
+                  return (
+                    <div
+                      key={mem.file}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(255, 255, 255, 0.07)',
+                        borderRadius: 8,
+                        padding: '6px 10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: color.bg,
+                            color: color.text,
+                            fontWeight: 600,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {mem.category}
+                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                          <span style={{ fontSize: 11.5, fontFamily: 'monospace', fontWeight: 600 }}>{mem.file}</span>
+                          <span style={{ fontSize: 10, opacity: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {mem.purpose}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        <span style={{ fontSize: 10, opacity: 0.5 }}>
+                          {mem.sizeBytes > 0 ? `${(mem.sizeBytes / 1024).toFixed(1)} KB` : 'empty'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setSelectedMemoryFile(mem.file);
+                            setIsEditingMemory(false);
+                            try {
+                              const res = await AgentService.fetchMemoryFile(agent.id, mem.file);
+                              setMemoryModalContent(res.content);
+                            } catch {
+                              setMemoryModalContent(mem.snippet || '');
+                            }
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.06)',
+                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                            borderRadius: 4,
+                            color: '#fff',
+                            fontSize: 10.5,
+                            padding: '2px 7px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Inspect
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Shared Cross-Agent Repository Memory */}
+            {manifest?.repository_memory && (
+              <div className="drawer-summary-card" style={{ marginTop: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div className="drawer-summary-title" style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                    <GitBranch size={14} color="#10b981" />
+                    <span>Shared Repository Memory</span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      padding: '2px 7px',
+                      borderRadius: 12,
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: '#34d399',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {manifest.repository_memory.metadata?.repo_slug || 'Linked Git Repo'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 8 }}>
+                  Cross-agent knowledge base for this Git repository. All agents working here share architectural insights, feature descriptions, explore maps, and task history.
+                </div>
+                {manifest.repository_memory.metadata?.remote_url && (
+                  <div style={{ fontSize: 10.5, opacity: 0.75, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <ExternalLink size={11} />
+                    <span style={{ fontFamily: 'monospace' }}>{manifest.repository_memory.metadata.remote_url}</span>
+                    {manifest.repository_memory.metadata.branch && (
+                      <span style={{ marginLeft: 6, opacity: 0.6 }}>({manifest.repository_memory.metadata.branch})</span>
+                    )}
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 8 }}>
+                  {[
+                    { key: 'insights', label: '🧠 insights.md', desc: 'Architecture & conventions' },
+                    { key: 'features', label: '📋 features.md', desc: 'Feature catalog & specs' },
+                    { key: 'explore', label: '🗺️ explore.md', desc: 'Codebase navigation' },
+                    { key: 'history', label: '📜 history.md', desc: 'Cross-agent task log' },
+                  ].map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedRepoFile(f.key);
+                        setIsEditingRepoFile(false);
+                        const mem = manifest.repository_memory as any;
+                        setRepoFileContent(mem?.[f.key] || '');
+                      }}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: 6,
+                        padding: '6px 8px',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2,
+                      }}
+                    >
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#34d399' }}>{f.label}</span>
+                      <span style={{ fontSize: 10, opacity: 0.55 }}>{f.desc}</span>
+                    </button>
+                  ))}
+                </div>
+                {manifest.repository_memory.metadata?.contributing_agents && manifest.repository_memory.metadata.contributing_agents.length > 0 && (
+                  <div style={{ fontSize: 10.5, opacity: 0.65, paddingTop: 4, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    Contributing Agents: {manifest.repository_memory.metadata.contributing_agents.map((a) => `${a.agent_name} (${a.task_count} runs)`).join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -2069,6 +2773,359 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
               </div>
             )}
           </div>
+        )}
+
+        {/* TAB 4: WORKSPACE FILES EXPLORER & VIEWER */}
+        {activeTab === 'files' && (
+          <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
+            <AgentFileExplorer agent={agent} onFilesCountChange={setWorkspaceFilesCount} />
+          </div>
+        )}
+
+        {/* Memory File Modal */}
+        {selectedMemoryFile && createPortal(
+          <div className="modal-overlay" onClick={() => setSelectedMemoryFile(null)}>
+            <div
+              className="modal-content"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: 780,
+                width: '92vw',
+                maxHeight: '85vh',
+                background: '#13141f',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: 12,
+                boxShadow: '0 24px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(99, 102, 241, 0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div
+                className="modal-header"
+                style={{
+                  padding: '14px 18px',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Brain size={18} color="#818cf8" />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="modal-title" style={{ fontSize: 14, fontWeight: 700, color: '#f3f4f6', fontFamily: 'monospace' }}>
+                        {selectedMemoryFile}
+                      </span>
+                      <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 10, background: 'rgba(99, 102, 241, 0.2)', color: '#a5b4fc', fontWeight: 600 }}>
+                        Cognitive Dimension
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.5)', marginTop: 2 }}>
+                      {manifest?.memory_files?.find((m) => m.file === selectedMemoryFile)?.purpose || 'Agent persistent memory'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setIsEditingMemory(!isEditingMemory)}
+                    style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px' }}
+                  >
+                    {isEditingMemory ? <FileText size={13} /> : <Edit3 size={13} />}
+                    <span>{isEditingMemory ? 'Preview' : 'Edit'}</span>
+                  </button>
+                  {isEditingMemory && (
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={isSavingMemory}
+                      onClick={handleSaveMemoryFile}
+                      style={{
+                        fontSize: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        padding: '5px 12px',
+                        background: '#4f46e5',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <Save size={13} />
+                      <span>{isSavingMemory ? 'Saving...' : 'Save'}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="modal-close-btn"
+                    onClick={() => setSelectedMemoryFile(null)}
+                    style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', padding: 4 }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="modal-body" style={{ flex: 1, minHeight: 320, maxHeight: '65vh', overflowY: 'auto', padding: 16 }}>
+                {isEditingMemory ? (
+                  <textarea
+                    value={memoryModalContent}
+                    onChange={(e) => setMemoryModalContent(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      minHeight: 360,
+                      background: '#0d0e15',
+                      color: '#e2e8f0',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 8,
+                      padding: '12px 14px',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontSize: 12.5,
+                      lineHeight: 1.5,
+                      resize: 'vertical',
+                      boxSizing: 'border-box',
+                    }}
+                    placeholder="Write memory markdown notes..."
+                  />
+                ) : (
+                  <pre
+                    style={{
+                      margin: 0,
+                      padding: 14,
+                      background: '#0d0e15',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      color: '#e2e8f0',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontSize: 12,
+                      lineHeight: 1.55,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      maxHeight: '100%',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {memoryModalContent || '/* Empty memory file. Click Edit to add context or guidance. */'}
+                  </pre>
+                )}
+              </div>
+              <div
+                style={{
+                  padding: '10px 18px',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: 11,
+                  color: 'rgba(255, 255, 255, 0.45)',
+                }}
+              >
+                <span>Stored in: <code style={{ color: '#a5b4fc' }}>.smoke-agent/memory/{selectedMemoryFile}</code></span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setSelectedMemoryFile(null)}
+                  style={{ fontSize: 11, padding: '3px 10px' }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+        {/* Shared Repository Memory Modal */}
+        {selectedRepoFile && createPortal(
+          <div className="modal-overlay" onClick={() => setSelectedRepoFile(null)}>
+            <div
+              className="modal-content"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: 780,
+                width: '92vw',
+                maxHeight: '85vh',
+                background: '#13141f',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: 12,
+                boxShadow: '0 24px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(16, 185, 129, 0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div
+                className="modal-header"
+                style={{
+                  padding: '14px 18px',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <GitBranch size={18} color="#10b981" />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="modal-title" style={{ fontSize: 14, fontWeight: 700, color: '#f3f4f6', fontFamily: 'monospace' }}>
+                        {selectedRepoFile}.md
+                      </span>
+                      <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 10, background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontWeight: 600 }}>
+                        {manifest?.repository_memory?.metadata?.repo_slug || 'Shared Repo Memory'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.5)', marginTop: 2 }}>
+                      {selectedRepoFile === 'insights'
+                        ? 'Architectural conventions, design decisions, and pitfalls'
+                        : selectedRepoFile === 'features'
+                        ? 'Feature catalog, business logic specs, and status'
+                        : selectedRepoFile === 'explore'
+                        ? 'Codebase navigation paths, entrypoints, and mental models'
+                        : 'Cross-agent chronological task log and history'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setIsEditingRepoFile(!isEditingRepoFile)}
+                    style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px' }}
+                  >
+                    {isEditingRepoFile ? <FileText size={13} /> : <Edit3 size={13} />}
+                    <span>{isEditingRepoFile ? 'Preview' : 'Edit'}</span>
+                  </button>
+                  {isEditingRepoFile && (
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={isSavingRepoFile}
+                      onClick={handleSaveRepoFile}
+                      style={{
+                        fontSize: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        padding: '5px 12px',
+                        background: '#059669',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <Save size={13} />
+                      <span>{isSavingRepoFile ? 'Saving...' : 'Save'}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="modal-close-btn"
+                    onClick={() => setSelectedRepoFile(null)}
+                    style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', padding: 4 }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="modal-body" style={{ flex: 1, minHeight: 320, maxHeight: '65vh', overflowY: 'auto', padding: 16 }}>
+                {isEditingRepoFile ? (
+                  <textarea
+                    value={repoFileContent}
+                    onChange={(e) => setRepoFileContent(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      minHeight: 360,
+                      background: '#0d0e15',
+                      color: '#e2e8f0',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 8,
+                      padding: '12px 14px',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontSize: 12.5,
+                      lineHeight: 1.5,
+                      resize: 'vertical',
+                      boxSizing: 'border-box',
+                    }}
+                    placeholder="Write repository memory markdown..."
+                  />
+                ) : (
+                  <pre
+                    style={{
+                      margin: 0,
+                      padding: 14,
+                      background: '#0d0e15',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      color: '#e2e8f0',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontSize: 12,
+                      lineHeight: 1.55,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      maxHeight: '100%',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {repoFileContent || '/* Empty repository memory file. Click Edit to add context or guidance. */'}
+                  </pre>
+                )}
+              </div>
+              <div
+                style={{
+                  padding: '10px 18px',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: 11,
+                  color: 'rgba(255, 255, 255, 0.45)',
+                }}
+              >
+                <span>Shared across all agents working on this Git repository</span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setSelectedRepoFile(null)}
+                  style={{ fontSize: 11, padding: '3px 10px' }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

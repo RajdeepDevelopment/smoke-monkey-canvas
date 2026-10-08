@@ -97,6 +97,7 @@ export class CoreDatabase {
         config_json TEXT NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'canvas',
         FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
       );
 
@@ -108,6 +109,7 @@ export class CoreDatabase {
         content TEXT NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'canvas',
         FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
       );
 
@@ -211,6 +213,16 @@ export class CoreDatabase {
     }
     try {
       this.db.exec("ALTER TABLE agents ADD COLUMN max_memory_mb INTEGER NOT NULL DEFAULT 1024");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE agent_mcps ADD COLUMN source TEXT NOT NULL DEFAULT 'canvas'");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE agent_skills ADD COLUMN source TEXT NOT NULL DEFAULT 'canvas'");
     } catch {
       // already exists
     }
@@ -467,6 +479,364 @@ export class CoreDatabase {
     ];
 
     for (const skill of enterpriseSkills) {
+      insertStmt.run(skill.id, skill.category, skill.name, skill.description, skill.content, 1, now);
+    }
+
+    // ── Expanded Enterprise Skill Catalog (domain coverage for 300 preset agents) ──
+    const expandedEnterpriseSkills = [
+      {
+        id: 'git-workflow-governance',
+        category: 'DevOps & CI/CD',
+        name: 'Git Workflow & Branch Protection Governance',
+        description: 'Branch protection rules, conventional commits, semantic release versioning, and safe rebase/merge policy enforcement.',
+        content: `# Git Workflow & Branch Protection Governance\n\n1. Enforce branch protection: require PR review, status checks, and linear history before merges to main.\n2. Conventional Commits: \`feat(scope):\`, \`fix(scope):\`, \`chore:\`, \`docs:\` with full subject under 72 characters.\n3. Semantic Versioning: derive bump from commit types (feat→minor, fix→patch, breaking→major).\n4. Never force-push to shared branches; use \`--force-with-lease\` only on feature branches.`,
+      },
+      {
+        id: 'monorepo-tooling-and-builds',
+        category: 'DevOps & CI/CD',
+        name: 'Monorepo Tooling & Build Orchestration',
+        description: 'Monorepo package graph, deterministic builds, caching, and incremental CI pipeline design.',
+        content: `# Monorepo Tooling & Build Orchestration\n\n1. Build Graph Awareness: only build, test, and lint packages affected by a change.\n2. Deterministic Outputs: pin toolchain versions, lockfiles for all package managers.\n3. Remote Caching: share build/test caches across CI runners to cut wall-clock time.\n4. Task Dependencies: model package dependents so release order is computable and safe.`,
+      },
+      {
+        id: 'infrastructure-as-code-review',
+        category: 'DevOps & CI/CD',
+        name: 'Infrastructure-as-Code Review & Drift Control',
+        description: 'Terraform plan review, module reuse, state safety, and configuration drift detection.',
+        content: `# Infrastructure-as-Code Review & Drift Control\n\n1. Review plans, not apply: every change must be validated via \`terraform plan\` before apply.\n2. Module Reuse: compose resources from curated internal modules; no inline resource sprawl.\n3. State Safety: never hand-edit state; use lock and backup, and resource import for existing infra.\n4. Drift Detection: scheduled refresh + plan to surface manual out-of-band changes.`,
+      },
+      {
+        id: 'database-schema-migration',
+        category: 'Backend & APIs',
+        name: 'Database Schema Migration & Zero-Downtime Apply',
+        description: 'Expand/contract migrations, additive-only DDL, backfilling, and rollback strategy for production databases.',
+        content: `# Database Schema Migration & Zero-Downtime Apply\n\n1. Additive DDL only: new columns nullable, new tables optional; no destructive changes in the same release.\n2. Backfill: large table backfills batched with index maintenance and progress tracking.\n3. Expand/Contract: expand (add column + dual write) → backfill → switch reads → contract (drop old).\n4. Rollback: every migration ships with an explicit revert script tested in CI.`,
+      },
+      {
+        id: 'observability-dashboards-and-alerts',
+        category: 'Observability & Debugging',
+        name: 'Observability Dashboards & Alert Design',
+        description: 'SLO-linked dashboards, alert thresholds, on-call burn-rate policies, and actionable runbooks.',
+        content: `# Observability Dashboards & Alert Design\n\n1. SLO-first: alerts map to user-facing objectives, not raw metrics noise.\n2. Burn-Rate Alerts: multi-window burn rate (5m/1h/6h/3d) to catch fast and slow burn.\n3. Actionable Pages: every alert must describe symptom, likely cause, and first runbook step.\n4. Dashboard Hygiene: golden signals (latency, traffic, errors, saturation) + only what an on-call needs.`,
+      },
+      {
+        id: 'api-security-owasp',
+        category: 'Security & Hardening',
+        name: 'API Security & OWASP API Top 10 Hardening',
+        description: 'API authorization, rate limiting, schema validation, and injection defense for REST and GraphQL APIs.',
+        content: `# API Security & OWASP API Top 10 Hardening\n\n1. Object-Level Authorization: verify entitlement on every object access; never trust client-supplied IDs.\n2. Rate Limiting: per-API-key sliding-window limits with 429 responses and retry headers.\n3. Schema Validation: strict input validation (types, lengths, enums) before processing.\n4. Injection Defense: parameterized queries, no raw string interpolation, safest defaults on parsers.`,
+      },
+      {
+        id: 'zero-trust-iam-design',
+        category: 'Security & Hardening',
+        name: 'Zero-Trust IAM & Identity Lifecycle Design',
+        description: 'SSO/SAML/OIDC federation, least-privilege roles, just-in-time access, and identity lifecycle reviews.',
+        content: `# Zero-Trust IAM & Identity Lifecycle Design\n\n1. Federate Identity: single IdP (SSO) for all apps; no local password silos.\n2. Least Privilege: role-based access with approve workflow; default-deny for sensitive actions.\n3. Just-in-Time: temporary elevated access with expiry and audit trail.\n4. Lifecycle: automated deprovisioning on offboarding, entitlement reviews quarterly.`,
+      },
+      {
+        id: 'cloud-cost-optimization-finops',
+        category: 'Finance & Accounting',
+        name: 'Cloud Cost Optimization & FinOps',
+        description: 'Cost allocation tagging, right-sizing, savings plans, and cost anomaly detection for cloud spend.',
+        content: `# Cloud Cost Optimization & FinOps\n\n1. Tag Everything: map cloud spend to teams, products, and cost centers from day one.\n2. Right-Sizing: match instance types to utilization; kill idle resources (unused clusters, orphaned volumes).\n3. Commitment Discounts: savings plans/reserved instances for steady-state predictable workloads.\n4. Anomaly Detection: daily spend change % alerting by tree/team with owner follow-up.`,
+      },
+      {
+        id: 'kpi-dashboard-design',
+        category: 'Data & Business Intelligence',
+        name: 'KPI Dashboard & Executive Metric Design',
+        description: 'North-star metric hierarchies, dashboard layout, data viz best practices, and annotation standards.',
+        content: `# KPI Dashboard & Executive Metric Design\n\n1. Metric Hierarchy: one north-star metric with supporting drivers and guardrail metrics.\n2. Definitions: every metric has an explicit formula, source table, and owners.\n3. Visualization Choice: line for trends, bar for comparison, scatter for correlation; no pie clutter.\n4. Annotations: mark launches, incidents, and holidays on trend lines to prevent false attribution.`,
+      },
+      {
+        id: 'data-warehouse-modeling',
+        category: 'Data & Business Intelligence',
+        name: 'Data Warehouse Dimensional Modeling',
+        description: 'Star schema design, conformed dimensions, slowly changing dimensions, and fact grain decisions.',
+        content: `# Data Warehouse Dimensional Modeling\n\n1. Grain First: declare fact table grain precisely before column design.\n2. Conformed Dimensions: shared dimensions used across marts with a single source of truth.\n3. SCD Handling: SCD1 (overwrite) for corrections, SCD2 (history) for tracked changes.\n4. Naming Conventions: consistent prefixes (fct_, dim_, m_) and explicit typing.`,
+      },
+      {
+        id: 'a-b-testing-experimentation',
+        category: 'Data & Business Intelligence',
+        name: 'A/B Testing & Experimentation Rigor',
+        description: 'Hypothesis framing, sample size estimation, guardrail metrics, and trustworthy experiment analysis.',
+        content: `# A/B Testing & Experimentation Rigor\n\n1. Pre-Register: hypothesis, primary metric, variance, and minimum detectable effect before launch.\n2. Sample Size: compute required sample (power 80%, alpha 5%) before the experiment starts.\n3. Guardrails: track counter-metrics (latency, errors, engagement) beyond the primary target.\n4. Report Honestly: confidence intervals, not just p-values; call out peeking and novelty effects.`,
+      },
+      {
+        id: 'customer-api-support-playbook',
+        category: 'Customer Support & Success',
+        name: 'Customer-Facing API Support Playbook',
+        description: 'API troubleshooting triage, SDK bug reproduction, authentication issues, and escalation criteria.',
+        content: `# Customer-Facing API Support Playbook\n\n1. Reproduce First: get exact request/response pairs before hypothesizing.\n2. Scope: validate auth (key/scope), rate limits, payload schema, and environment in isolation.\n3. SDK vs API: isolate whether SDK or raw API misbehaves.\n4. Escalate: clear criteria (platform outage, data loss, security) with repro package ready.`,
+      },
+      {
+        id: 'customer-announcement-communication',
+        category: 'Customer Support & Success',
+        name: 'Customer-Facing Announcement Communication',
+        description: 'Status pages, incident updates, feature announcements, and proactive notification drafting.',
+        content: `# Customer-Facing Announcement Communication\n\n1. Incident Updates: lead with impact and ETA; plain language; no jargon burying.\n2. Feature Announcements: benefits-first framing with migration note if behavior changes.\n3. Channels: match severity to channel (status page → email → in-app toast).\n4. Tone: honest, calm, and specific; avoid corporate boilerplate.`,
+      },
+      {
+        id: 'demand-generation-playbook',
+        category: 'Sales & Marketing',
+        name: 'Demand Generation & Campaign Playbook',
+        description: 'Multi-channel campaign orchestration, funnel metrics, UTM governance, and budget allocation.',
+        content: `# Demand Generation & Campaign Playbook\n\n1. Funnel Definition: TOFU/MOFU/BOFU with conversion baselines per stage.\n2. Channel Mix: align channel to funnel stage; measure blended CAC not single-channel vanity.\n3. UTM Governance: standardized UTM schema so analytics attribution stays clean.\n4. Budget Allocation: shift budget to highest ROI channels monthly with a documented logic.`,
+      },
+      {
+        id: 'b2b-outbound-sequencing',
+        category: 'Sales & Marketing',
+        name: 'B2B Outbound Sales Sequencing',
+        description: 'Multi-touch outbound cadences, personalization hooks, reply handling, and pipeline qualification.',
+        content: `# B2B Outbound Sales Sequencing\n\n1. Multi-Touch Cadence: diverse channels (email, LinkedIn, call) staggered over days.\n2. Personalization Hooks: reference company-specific signal (funding, hiring, tech stack) per touch.\n3. Short & Specific: one clear ask per message; no walls of value props.\n4. Qualification: BANT/CHAMP framework to pass only qualified leads to AE stage.`,
+      },
+      {
+        id: 'competitor-intelligence-playbook',
+        category: 'Sales & Marketing',
+        name: 'Competitor Intelligence & Win-Loss Analysis',
+        description: 'Competitive landscape mapping, feature comparison matrices, battlecards, and win-loss interviews.',
+        content: `# Competitor Intelligence & Win-Loss Analysis\n\n1. Landscape Map: categorize competitors (direct, partial, adjacent) with positioning lines.\n2. Battlecards: objection → evidence-backed response for the top 5 competitive scenarios.\n3. Win-Loss Interviews: bias-free surveys of recent closed deals; quantify why lost weigh vs won.\n4. GTM Signals: map competitor launches to response plans for sales enablement.`,
+      },
+      {
+        id: 'contract-review-checklist',
+        category: 'Legal & Compliance',
+        name: 'Commercial Contract Review Checklist',
+        description: 'MSA/SOW/DPA red-flag review, liability caps, indemnification, termination, and data processing terms.',
+        content: `# Commercial Contract Review Checklist\n\n1. Define Scope: services, deliverables, acceptance criteria, and change control.\n2. Liability Caps: cap alignment with risk; carve-outs for confidentiality, IP, indemnity.\n3. Termination: for-cause, for-convenience notice periods, and post-termination obligations.\n4. Data: DPA alignment, processing purposes, sub-processor regime, and security obligations.`,
+      },
+      {
+        id: 'privacy-impact-assessment',
+        category: 'Legal & Compliance',
+        name: 'Privacy Impact Assessment (PIA) Framework',
+        description: 'DPIA/PIA workflows, data inventory, lawful basis mapping, and records of processing activities.',
+        content: `# Privacy Impact Assessment (PIA) Framework\n\n1. Data Inventory: map categories of personal data, sources, flows, and retention.\n2. Lawful Basis: document basis per processing activity (consent, contract, legitimate interest).\n3. DPIA Triggers: high-risk processing (profiling, sensitive data, large scale) auto-triggers DPIA.\n4. Transfer: assess cross-border transfers and adequacy/appropriate safeguards.`,
+      },
+      {
+        id: 'recruiting-sourcing-metrics',
+        category: 'HR & People Operations',
+        name: 'Recruiting Sourcing & Pipeline Metrics',
+        description: 'Sourcing channel ROI, pipeline funnel metrics, offer acceptance optimization, and hiring SLA tracking.',
+        content: `# Recruiting Sourcing & Pipeline Metrics\n\n1. Channel ROI: track cost-per-hire and quality-of-hire per source, not just volume.\n2. Funnel Health: application → screen → interview → offer → accept conversion with drop reasons.\n3. Offer Yield: monitor acceptance rate and time-to-accept; address gaps with the hiring manager.\n4. Hiring SLA: track time-to-fill by role and flag requisitions breaching targets.`,
+      },
+      {
+        id: 'onboarding-offboarding-playbook',
+        category: 'HR & People Operations',
+        name: 'Employee Onboarding & Offboarding Playbook',
+        description: 'First-day readiness, 30-60-90 plan, access provisioning checklist, and exit knowledge transfer.',
+        content: `# Employee Onboarding & Offboarding Playbook\n\n1. Pre-Day-One: accounts, hardware, and workspace ready before the new hire arrives.\n2. 30-60-90 Plan: mapped expectations, stakeholders, and success criteria for each milestone.\n3. Technical Onboarding: environment, access, and first-commit guidance with a buddy.\n4. Offboarding: access revocation, knowledge transfer, exit survey, and return of assets on day one.`,
+      },
+      {
+        id: 'performance-review-calibration',
+        category: 'HR & People Operations',
+        name: 'Performance Review & Calibration Framework',
+        description: 'Review cycle design, rating calibration sessions, feedback quality, and development plan mapping.',
+        content: `# Performance Review & Calibration Framework\n\n1. Continuous Input: gather feedback quarterly, not just once a year.\n2. Calibration Sessions: normalize ratings across managers to avoid inflation and bias.\n3. Feedback Quality: specific, observable, behavior-based; balanced and actionable.\n4. Development Plans: tie ratings to growth plans with concrete milestones and check-ins.`,
+      },
+      {
+        id: 'compensation-benchmarking',
+        category: 'HR & People Operations',
+        name: 'Compensation Benchmarking & Equity Design',
+        description: 'Market pay benchmarking, band design, equity philosophy, and promotion pay alignment.',
+        content: `# Compensation Benchmarking & Equity Design\n\n1. Benchmark: use current market data by level/geo; refresh annually.\n2. Pay Bands: define min/mid/max per level with transparent promotion increments.\n3. Equity Philosophy: target grant value by level with refresh process and cliff/vesting schedule.\n4. Equity Audit: periodic pay-equity review across gender/ethnicity with corrective action.`,
+      },
+      {
+        id: 'payroll-and-benefits-compliance',
+        category: 'Finance & Accounting',
+        name: 'Payroll & Benefits Compliance',
+        description: 'Payroll run verification, statutory deductions, benefits enrollment windows, and compliance filings.',
+        content: `# Payroll & Benefits Compliance\n\n1. Run Verification: reconcile hours, additions, deductions, and net pay before submission.\n2. Statutory Compliance: maintain correct tax tables, social security, and filing schedules.\n3. Benefits Enrollment: aligned windows, eligibility rules, and open-enrollment communications.\n4. Audit Trail: store payroll registers and approvals per jurisdiction requirements.`,
+      },
+      {
+        id: 'budget-forecasting-fpna',
+        category: 'Finance & Accounting',
+        name: 'Budgeting & FP&A Forecasting',
+        description: 'Bottom-up budgets, rolling forecasts, variance analysis, and scenario modeling.',
+        content: `# Budgeting & FP&A Forecasting\n\n1. Bottom-Up Budget: department build with driver-based assumptions, not last-year + 10%.\n2. Rolling Forecast: 12-month forward view refreshed monthly with variance explanation.\n3. Variance Analysis: explain budget vs actual by driver (volume, price, mix) with ownership.\n4. Scenarios: base / upside / downside scenarios with explicit assumption deltas.`,
+      },
+      {
+        id: 'stripe-billing-and-reconciliation',
+        category: 'Finance & Accounting',
+        name: 'Stripe Billing & Revenue Reconciliation',
+        description: 'Subscription billing lifecycle, dunning, refunds, and revenue reconciliation with the general ledger.',
+        content: `# Stripe Billing & Revenue Reconciliation\n\n1. Billing Lifecycle: trial → subscribe → invoice → payment → retry → churn with clear states.\n2. Dunning: smart retry schedules and recovery webhooks, not raw charge retries.\n3. Reconciliation: match Stripe payout summary to GL entries; flag discrepancies monthly.\n4. Refunds & Credits: auditable approval flow with reason codes and tax handling.`,
+      },
+      {
+        id: 'enterprise-saas-contract-review',
+        category: 'Legal & Compliance',
+        name: 'Enterprise SaaS Contract Negotiation Review',
+        description: 'SaaS subscription terms review, SLAs, data residency, renewal terms, and enterprise-specific addenda.',
+        content: `# Enterprise SaaS Contract Negotiation Review\n\n1. Subscription Terms: license scope, user definition, and overage handling.\n2. Service Levels: uptime SLA tied to credits matrix; support tiers defined.\n3. Data & Security: data residency, encryption, access, audit rights, and breach notification.\n4. Renewal & Expansion: notice periods, price protection, and enterprise commitments.`,
+      },
+      {
+        id: 'product-analytics-funnels',
+        category: 'Data & Business Intelligence',
+        name: 'Product Analytics & Funnel Optimization',
+        description: 'Event taxonomy, funnel analysis, activation loops, retention cohorts, and product instrumentation.',
+        content: `# Product Analytics & Funnel Optimization\n\n1. Event Taxonomy: consistent naming (verb_noun) with properties schema governed centrally.\n2. Funnel Steps: define each step unambiguously with entry/exit criteria.\n3. Activation: identify the first-value moment and its time-to-activation.\n4. Retention Cohorts: weekly/batch cohorts to spot where activation quality decays.`,
+      },
+      {
+        id: 'experimentation-analysis',
+        category: 'Data & Business Intelligence',
+        name: 'Experiment Analysis & Causal Inference',
+        description: 'Proper experiment analysis, regression control, heterogeneity, and long-term effect estimation.',
+        content: `# Experiment Analysis & Causal Inference\n\n1. Guardrail First: check invariant and guardrail metrics before primary lift.\n2. CUPED/Regression: control for pre-experiment covariates to reduce variance.\n3. Heterogeneity: analyze treatment effect by segment only when pre-specified.\n4. Long-Term Effects: plan delayed-outcome follow-up; don't ship on short-term only.`,
+      },
+      {
+        id: 'access-reviews-recertification',
+        category: 'Security & Hardening',
+        name: 'Access Reviews & Recertification',
+        description: 'Structured access certification campaigns, orphan account cleanup, and privileged access reviews.',
+        content: `# Access Reviews & Recertification\n\n1. Campaign Design: scope (systems, groups), owners, and review cadence per data sensitivity.\n2. Reviewer Support: role-context dashboards so reviewers act on evidence, not memory.\n3. Cleanup Enforcement: remove unreviewed/orphaned entitlements automatically after deadline.\n4. Privileged Access: dedicated review with mandatory approval and session recording.`,
+      },
+      {
+        id: 'incident-response-playbook',
+        category: 'Security & Hardening',
+        name: 'Security Incident Response Playbook',
+        description: 'Incident classification, containment, eradication, evidence preservation, and post-incident review.',
+        content: `# Security Incident Response Playbook\n\n1. Triage: classify severity (P1-P4) and gather initial scope, blast radius, and impact.\n2. Contain: isolate affected systems with minimal user disruption; preserve evidence (logs, snapshots).\n3. Eradicate & Recover: remove root cause, rotate credentials, restore from clean state.\n4. Post-Incident: timeline, root cause, action items, and retro with measurable owners.`,
+      },
+      {
+        id: 'red-team-pentest-scoping',
+        category: 'Security & Hardening',
+        name: 'Red Team & Penetration Test Scoping',
+        description: 'Test scope definition, rules of engagement, asset inventory, findings taxonomy, and report quality.',
+        content: `# Red Team & Penetration Test Scoping\n\n1. Scope: define in-scope assets, out-of-scope systems, and allowed techniques explicitly.\n2. Rules of Engagement: hours, notification channels, and stop conditions.\n3. Findings: severity-rated (CVSS), reproducible steps, and business impact per finding.\n4. Report: executive summary + technical detail + prioritized remediation roadmap.`,
+      },
+      {
+        id: 'threat-modeling-stride',
+        category: 'Security & Hardening',
+        name: 'Threat Modeling & STRIDE Analysis',
+        description: 'Data flow modeling, STRIDE per element, attack tree construction, and countermeasure mapping.',
+        content: `# Threat Modeling & STRIDE Analysis\n\n1. Data Flows: draw system context and trust boundaries; enumerate assets per flow.\n2. STRIDE: apply Spoofing/Tampering/Repudiation/Info Disclosure/DoS/Elevation per element.\n3. Attack Trees: enumerate attacker paths to each key asset.\n4. Countermeasures: map mitigations to threats; prioritize by likelihood × impact.`,
+      },
+      {
+        id: 'ci-cd-security-gates',
+        category: 'DevOps & CI/CD',
+        name: 'CI/CD Security & Supply-Chain Gates',
+        description: 'Pipeline hardening, secret scanning, dependency auditing, SBOM, and artifact signing.',
+        content: `# CI/CD Security & Supply-Chain Gates\n\n1. Secret Scanning: block secrets in code at push/PR time; rotate on exposure.\n2. Dependency Audit: fail builds on critical CVEs; pin transitive deps with lockfiles.\n3. SBOM & Signing: generate SBOMs and sign artifacts; verify on deploy.\n4. Pipeline Privilege: least-privilege CI runners; never embed long-lived credentials.`,
+      },
+      {
+        id: 'vulnerability-management-triage',
+        category: 'Security & Hardening',
+        name: 'Vulnerability Management & Triage',
+        description: 'CVE triage, exposure scoring, patch prioritization, and remediation SLAs.',
+        content: `# Vulnerability Management & Triage\n\n1. Exposure Score: prioritize by reachability/exploitability, not CVSS alone.\n2. Triage Queue: SLA by severity (critical 24h, high 7d, medium 30d).\n3. Patch Management: track patch availability vs deployed versions.\n4. Verification: confirm remediation with rescan and evidence snapshot.`,
+      },
+      {
+        id: 'customer-onboarding-experience',
+        category: 'Customer Support & Success',
+        name: 'Customer Onboarding Experience Design',
+        description: 'Onboarding journey mapping, activation KPIs, milestone-based success plans, and time-to-value.',
+        content: `# Customer Onboarding Experience Design\n\n1. Journey Map: step-by-step onboarding with friction points and support touchpoints.\n2. Activation KPI: define the first-value moment and measure time-to-value.\n3. Success Plan: milestone-based plan (setup → integrate → configure → launch).\n4. Proactive Check-ins: scheduled touchpoints at critical milestones, not ad hoc.`,
+      },
+      {
+        id: 'csat-nps-improvement',
+        category: 'Customer Support & Success',
+        name: 'CSAT & NPS Improvement Program',
+        description: 'Survey design, response bias control, driver analysis, and closed-loop customer feedback.',
+        content: `# CSAT & NPS Improvement Program\n\n1. Survey Cadence: transactional (post-ticket) + relational (quarterly) surveys.\n2. Bias Control: consistent sampling, avoid only-ask-on-positive-outcome bias.\n3. Driver Analysis: correlate scores with touchpoint, journey stage, and product usage.\n4. Closed-Loop: respond to detractors with a concrete action plan and re-measure.`,
+      },
+      {
+        id: 'knowledge-base-authoring',
+        category: 'Customer Support & Success',
+        name: 'Knowledge Base & Help Center Authoring',
+        description: 'Help article structure, search optimization, self-service coverage, and content maintenance.',
+        content: `# Knowledge Base & Help Center Authoring\n\n1. Article Structure: symptom → cause → fix; single answer per article, example-led.\n2. Self-Service ROI: track deflection rate and update high-traffic articles first.\n3. Search Optimization: mirror customer vocabulary in titles; add synonyms and FAQs.\n4. Maintenance: regular content audits; deprecated steps marked and purged.`,
+      },
+      {
+        id: 'social-media-engagement',
+        category: 'Sales & Marketing',
+        name: 'Social Media & Community Engagement',
+        description: 'Platform-native content, community management, sentiment monitoring, and engagement analytics.',
+        content: `# Social Media & Community Engagement\n\n1. Platform-Native: tailor format/cadence per platform; no cross-post spam.\n2. Community Management: response SLAs, brand voice, and escalation for crisis posts.\n3. Sentiment Monitoring: track brand mentions and sentiment trends weekly.\n4. Content Calibration: double down on what resonates; pause what flops.`,
+      },
+      {
+        id: 'email-deliverability-optimization',
+        category: 'Sales & Marketing',
+        name: 'Email Deliverability & Inbox Placement',
+        description: 'SPF/DKIM/DMARC, warmup, list hygiene, engagement metrics, and sender reputation monitoring.',
+        content: `# Email Deliverability & Inbox Placement\n\n1. Authentication: align SPF, DKIM, and DMARC (p=quarantine+); monitor DNS.\n2. List Hygiene: remove inactive/unengaged subscribers; honor suppression files.\n3. Engagement Signals: high opens/clicks with low spam complaints and unsubscribes.\n4. Reputation: monitor sender score and blocklist status; dip-response plan ready.`,
+      },
+      {
+        id: 'technical-writing-architecture',
+        category: 'Backend & APIs',
+        name: 'Technical Writing & API Documentation',
+        description: 'API reference structure, getting-started guides, code samples, and docs-as-code workflows.',
+        content: `# Technical Writing & API Documentation\n\n1. Reference Structure: endpoints, auth, errors, rate limits; consistent parameter tables.\n2. Getting Started: 5-minute value path with cut-paste working example first.\n3. Docs-as-Code: version docs with code; lint and build in CI.\n4. Accuracy: samples are tested in CI; deprecations marked and migrated.`,
+      },
+      {
+        id: 'website-optimization-seo',
+        category: 'Sales & Marketing',
+        name: 'Website Copy & SEO On-Page Optimization',
+        description: 'On-page SEO, meta/data structure, content intent mapping, and search-leading copywriting.',
+        content: `# Website Copy & SEO On-Page Optimization\n\n1. Intent Mapping: match page type to search intent (informational/navigational/transactional).\n2. On-Page: title/meta/H1 alignment, internal linking, schema structured data.\n3. Copy: benefit-led headings, scannable structure, clear CTAs.\n4. Performance: Core Web Vitals gate; technical issues surfaced before content investment.`,
+      },
+      {
+        id: 'people-analytics-reporting',
+        category: 'HR & People Operations',
+        name: 'People Analytics & Workforce Reporting',
+        description: 'Headcount planning, attrition analysis, time-to-hire, and org health metric reporting.',
+        content: `# People Analytics & Workforce Reporting\n\n1. Headcount: plan vs actual by team, level, and location; attrition factored.\n2. Attrition: voluntary vs involuntary with exit themes; retention risk heatmap.\n3. Pipeline: time-to-hire, offer acceptance, and source quality by role.\n4. Org Health: span of control, tenure distribution, and engagement correlation.`,
+      },
+      {
+        id: 'learning-development-programs',
+        category: 'HR & People Operations',
+        name: 'Learning & Development Program Design',
+        description: 'Skills taxonomy, learning paths, program ROI, and career progression mapping.',
+        content: `# Learning & Development Program Design\n\n1. Skills Taxonomy: map required skills per role with proficiency levels.\n2. Learning Paths: practical, project-based paths tied to career progression.\n3. Program ROI: participation, completion, and behavior change metrics.\n4. Career Mapping: transparent criteria connecting L&D to promotion readiness.`,
+      },
+      {
+        id: 'employee-engagement-surveys',
+        category: 'HR & People Operations',
+        name: 'Employee Engagement & Pulse Survey Program',
+        description: 'Survey design, response analysis, action planning, and follow-through measurement.',
+        content: `# Employee Engagement & Pulse Survey Program\n\n1. Survey Design: valid scales, benchmarked dimensions, and minimal fatigue.\n2. Response Analysis: segment by team/tenure; look at themes, not just scores.\n3. Action Plans: every workgroup owns one actionable theme with an owner.\n4. Follow-Through: re-measure and report what changed after each cycle.`,
+      },
+      {
+        id: 'generative-ai-governance',
+        category: 'Legal & Compliance',
+        name: 'Generative AI & Usage Governance',
+        description: 'AI usage policies, data handling in LLM tools, model documentation, and acceptable-use controls.',
+        content: `# Generative AI & Usage Governance\n\n1. Acceptable Use: clear policy for internal vs external-facing AI use and data classes.\n2. Data Handling: prohibit sensitive data in third-party AI tools; maintain allowlist.\n3. Documentation: published model purpose/limitations/applicability per use case.\n4. Controls: human review requirements, logging, and periodic compliance audits.`,
+      },
+      {
+        id: 'vendor-security-assessment',
+        category: 'Security & Hardening',
+        name: 'Vendor Security Assessment & Due Diligence',
+        description: 'Vendor risk questionnaire, evidence review, SLA security terms, and ongoing monitoring.',
+        content: `# Vendor Security Assessment & Due Diligence\n\n1. Questionnaires: tiered by data processed; standard + light versions.\n2. Evidence Review: SOC2, pentest reports, certifications, and exception acceptance.\n3. Contract Terms: security addenda aligned to data sensitivity (encryption, breach notification, audit rights).\n4. Ongoing Monitoring: reassess on material changes and periodically for critical vendors.`,
+      },
+      {
+        id: 'it-asset-lifecycle-management',
+        category: 'Operations & IT Admin',
+        name: 'IT Asset Lifecycle Management',
+        description: 'Hardware provisioning, asset tracking, refresh cycles, and disposal compliance.',
+        content: `# IT Asset Lifecycle Management\n\n1. Provision: standard hardware bundles per role with preconfigured MDM enrollment.\n2. Track: real-time asset inventory (serial, owner, location, status) with audits.\n3. Refresh: predictable replacement cycles; critical hardware flagged for early swap.\n4. Disposal: secure data wipe, certified recycling, and compliance records.`,
+      },
+      {
+        id: 'helpdesk-sla-optimization',
+        category: 'Operations & IT Admin',
+        name: 'Helpdesk SLA & Ticket Optimization',
+        description: 'Tier routing, first-response SLA, resolution paths, and IT satisfaction measurement.',
+        content: `# Helpdesk SLA & Ticket Optimization\n\n1. Tier Routing: L1 triage, L2 deep troubleshooting, L3/infra escalation rules.\n2. SLA Adherence: first-response and resolution SLAs with hourly breach alerts.\n3. Resolution Paths: standard runbooks for top ticket categories.\n4. Satisfaction: post-resolution CSAT with driver feedback loop.`,
+      },
+      {
+        id: 'system-admin-hardening',
+        category: 'Operations & IT Admin',
+        name: 'Mac/Windows System Administration & Hardening',
+        description: 'OS provisioning, patch management, backup verification, and end-user troubleshooting.',
+        content: `# Mac/Windows System Administration & Hardening\n\n1. Provisioning: image/deploy with standard security baseline (FileVault/BitLocker, firewall, updates).\n2. Patch Management: automated update deployment with staged rollout and rollback.\n3. Backups: verified backups for critical user data with restore test cadence.\n4. Troubleshooting: systematic triage (hardware → OS → app → network) before reinstalling.`,
+      },
+      {
+        id: 'proofreader-quality-gate',
+        category: 'Review & Code Quality',
+        name: 'Proofreading & Quality Gate Review',
+        description: 'Grammar, tone, accuracy, and consistency review across docs, copy, and communications.',
+        content: `# Proofreading & Quality Gate Review\n\n1. Accuracy: verify facts, numbers, and names against the source of truth.\n2. Style: consistent tone/tense; remove jargon, passive clutter, and redundancy.\n3. Consistency: terminology, acronyms, and formatting follow the style guide.\n4. Structure: logical flow, clear headings, and scannable formatting.`,
+      },
+    ];
+
+    for (const skill of expandedEnterpriseSkills) {
       insertStmt.run(skill.id, skill.category, skill.name, skill.description, skill.content, 1, now);
     }
   }
