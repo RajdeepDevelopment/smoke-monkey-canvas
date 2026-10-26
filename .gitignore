@@ -29,8 +29,8 @@ token.json
 *.sqlite3
 smoke_canvas.db
 .smoke-monkey/
-data/
-storage/
+/data/
+/storage/
 
 # Build & Cache Outputs
 dist/
