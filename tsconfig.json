@@ -20,6 +20,7 @@
     "server/features/**/*",
     // Railway IaC. Typechecked so a bad DSL call fails in CI instead of
     // `railway config plan`. Needs the `railway` devDependency (npm i -D railway).
-    ".railway/railway.ts"
+    ".railway/railway.ts",
+    "tests/**/*"
   ]
 }

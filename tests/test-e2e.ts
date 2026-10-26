@@ -1,4 +1,4 @@
-import { startAppServer } from './server/app.server.js';
+import { startAppServer } from '../server/app.server.js';
 
 async function runTest() {
   console.log('Testing Smoke Monkey Canvas Full-Stack Server...');
@@ -18,7 +18,7 @@ async function runTest() {
     // 2. Test Space Entities GET
     const resSpace = await fetch(`http://localhost:${port}/api/space`);
     console.log('2. Space entities status:', resSpace.status);
-    const spaceData = await resSpace.json();
+    const spaceData: any = await resSpace.json();
     console.log('   Current space entities count:', spaceData.length);
 
     // 3. Test Agent Creation in Space
@@ -37,7 +37,7 @@ async function runTest() {
       }),
     });
     console.log('3. Create agent status:', resCreate.status);
-    const newAgent = await resCreate.json();
+    const newAgent: any = await resCreate.json();
     console.log('   Created agent ID:', newAgent.id, 'at pos:', newAgent.pos_x, newAgent.pos_y);
 
     // 4. Test Stock MCP Attachment
@@ -78,7 +78,7 @@ async function runTest() {
 
     // 7. Verify aggregated Space Entity
     const resSpaceUpdated = await fetch(`http://localhost:${port}/api/space`);
-    const updatedEntities = await resSpaceUpdated.json();
+    const updatedEntities: any = await resSpaceUpdated.json();
     const retrieved = updatedEntities.find((e: any) => e.id === newAgent.id);
     console.log('7. Space entity verified:');
     console.log('   Name:', retrieved.name);

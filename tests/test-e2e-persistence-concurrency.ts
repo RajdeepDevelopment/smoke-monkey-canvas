@@ -1,7 +1,7 @@
-import { startAppServer } from './server/app.server.js';
-import { AgentRunner } from './server/features/agent/agent.runner.js';
-import { AgentDb } from './server/features/agent/agent.db.js';
-import WebSocket from 'ws';
+import { startAppServer } from '../server/app.server.js';
+import { AgentRunner } from '../server/features/agent/agent.runner.js';
+import { AgentDb } from '../server/features/agent/agent.db.js';
+import { WebSocket } from 'ws';
 
 async function runTest() {
   console.log('Testing Chat History Persistence, Reconnection & Cron Concurrency...');
@@ -26,7 +26,7 @@ async function runTest() {
         cron_schedule: '*/10 * * * *',
       }),
     });
-    const agent = await resCreate.json();
+    const agent: any = await resCreate.json();
     console.log('✓ Created agent:', agent.id);
 
     // 2. Test Multi-Turn Session Creation & Persistence
@@ -35,7 +35,7 @@ async function runTest() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'Multi-turn Test Discussion' }),
     });
-    const session = await resSession.json();
+    const session: any = await resSession.json();
     console.log('✓ Created chat session:', session.id);
 
     // Insert user turn
@@ -77,7 +77,7 @@ async function runTest() {
 
     // Verify session messages endpoint returns complete parsed parts
     const resMsgs = await fetch(`http://localhost:${port}/api/agents/${agent.id}/sessions/${session.id}/messages`);
-    const fetchedMsgs = await resMsgs.json();
+    const fetchedMsgs: any = await resMsgs.json();
     if (fetchedMsgs.length !== 2) throw new Error(`Expected 2 messages, got ${fetchedMsgs.length}`);
     const fetchedAsst = fetchedMsgs[1];
     const parsedParts = JSON.parse(fetchedAsst.parts_json);
@@ -145,7 +145,7 @@ async function runTest() {
 
     // Test GET /api/agents/:id/active-runs
     const resActive = await fetch(`http://localhost:${port}/api/agents/${agent.id}/active-runs`);
-    const activeData = await resActive.json();
+    const activeData: any = await resActive.json();
     console.log('✓ Query active runs count:', activeData.length);
     if (activeData.length !== 2) {
       throw new Error(`Expected 2 concurrent active runs, got ${activeData.length}`);
@@ -171,7 +171,7 @@ async function runTest() {
     });
 
     const resInFlight = await fetch(`http://localhost:${port}/api/agents/${agent.id}/sessions/${session.id}/messages`);
-    const inFlightMsgs = await resInFlight.json();
+    const inFlightMsgs: any = await resInFlight.json();
     const lastMsg = inFlightMsgs[inFlightMsgs.length - 1];
     if (lastMsg.content !== 'Hello from chat!') {
       throw new Error(`In-flight message content not enriched. Got: ${lastMsg.content}`);
@@ -188,7 +188,7 @@ async function runTest() {
     console.log('✓ Stop cron run response status:', resStopCron.status);
 
     const resActiveAfterStop = await fetch(`http://localhost:${port}/api/agents/${agent.id}/active-runs`);
-    const activeAfterStop = await resActiveAfterStop.json();
+    const activeAfterStop: any = await resActiveAfterStop.json();
     if (activeAfterStop.length !== 1 || activeAfterStop[0].runId !== chatRunRecord.id) {
       throw new Error('Stopping cron run should NOT kill concurrent chat run!');
     }

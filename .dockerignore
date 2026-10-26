@@ -9,6 +9,7 @@ web/node_modules
 # Build artifacts
 dist
 web/dist
+tests
 *.tsbuildinfo
 
 # Sensitive files & environments

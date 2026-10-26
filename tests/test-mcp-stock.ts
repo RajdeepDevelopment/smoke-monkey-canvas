@@ -1,9 +1,9 @@
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
-import { STOCK_MCPS } from './server/features/mcp/mcp.stock.js';
-import { CoreDatabase } from './server/features/core/database.db.js';
-import { computeReadiness, recordProbe, clearProbe } from './server/features/mcp/mcp.readiness.js';
+import { STOCK_MCPS } from '../server/features/mcp/mcp.stock.js';
+import { CoreDatabase } from '../server/features/core/database.db.js';
+import { computeReadiness, recordProbe, clearProbe } from '../server/features/mcp/mcp.readiness.js';
 
 // Packages that look like MCP servers but are libraries / squatted placeholders
 // with no executable. These previously made stock entries advertise "Ready"

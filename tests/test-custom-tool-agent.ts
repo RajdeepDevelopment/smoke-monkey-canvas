@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { createAgent } from 'smoke-monkey-harness';
-import { CUSTOM_AGENT_TOOLS } from './server/features/agent/agent.custom-tools.js';
+import { CUSTOM_AGENT_TOOLS } from '../server/features/agent/agent.custom-tools.js';
 
 /**
  * End-to-end proof that an agent built through the real agent API can actually

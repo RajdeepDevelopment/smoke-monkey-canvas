@@ -1,16 +1,16 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CoreDatabase } from './server/features/core/database.db.js';
-import { AgentDb } from './server/features/agent/agent.db.js';
-import { SpaceDb } from './server/features/space/space.db.js';
+import { CoreDatabase } from '../server/features/core/database.db.js';
+import { AgentDb } from '../server/features/agent/agent.db.js';
+import { SpaceDb } from '../server/features/space/space.db.js';
 import {
   ensureAgentWorkspace,
   readAgentMcpManifest,
   readAgentSkillManifest,
   reconcileAgentWorkspaceRuntime,
-} from './server/features/agent/agent.manifest.js';
-import { setupAgentWorkspaceWatcher, unwatchAgentWorkspace } from './server/features/agent/agent.files.js';
+} from '../server/features/agent/agent.manifest.js';
+import { setupAgentWorkspaceWatcher, unwatchAgentWorkspace } from '../server/features/agent/agent.files.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-sync-'));
 const coreDb = new CoreDatabase(path.join(root, 'canvas.db'));
@@ -27,6 +27,12 @@ const mkAgent = (id: string, name: string, dir: string) =>
     system_prompt: 'original prompt',
     status: 'idle',
     working_dir: dir,
+    cron_schedule: null,
+    cron_enabled: 0,
+    pos_x: 0,
+    pos_y: 0,
+    last_run_at: null,
+    next_run_at: null,
     created_at: created,
   });
 
@@ -92,9 +98,9 @@ async function main() {
   const c = mkAgent('agent_c', 'Agent C', dirC);
   const wsC = ensureAgentWorkspace(dirC, c.id, c.name, c.system_prompt);
 
-  agentDb.addAgentSkill({ id: 'c_s1', agent_id: c.id, skill_name: 'skill-alpha', content: '', enabled: 1 });
-  agentDb.addAgentSkill({ id: 'c_s2', agent_id: c.id, skill_name: 'skill-beta', content: '', enabled: 1 });
-  agentDb.addAgentSkill({ id: 'c_s3', agent_id: c.id, skill_name: 'skill-gamma', content: '', enabled: 1 });
+  agentDb.addAgentSkill({ id: 'c_s1', agent_id: c.id, skill_name: 'skill-alpha', description: null, content: '', enabled: 1 });
+  agentDb.addAgentSkill({ id: 'c_s2', agent_id: c.id, skill_name: 'skill-beta', description: null, content: '', enabled: 1 });
+  agentDb.addAgentSkill({ id: 'c_s3', agent_id: c.id, skill_name: 'skill-gamma', description: null, content: '', enabled: 1 });
 
   // Agent edits skills.json, keeping ONLY skill-gamma (removing skill-alpha and skill-beta)
   fs.writeFileSync(
@@ -125,8 +131,8 @@ async function main() {
   const dirE = path.join(root, 'agent-e');
   const e = mkAgent('agent_e', 'Agent E', dirE);
   const wsE = ensureAgentWorkspace(dirE, e.id, e.name, e.system_prompt);
-  agentDb.addAgentSkill({ id: 'e_s1', agent_id: e.id, skill_name: 'live-skill-1', content: '', enabled: 1 });
-  agentDb.addAgentSkill({ id: 'e_s2', agent_id: e.id, skill_name: 'live-skill-2', content: '', enabled: 1 });
+  agentDb.addAgentSkill({ id: 'e_s1', agent_id: e.id, skill_name: 'live-skill-1', description: null, content: '', enabled: 1 });
+  agentDb.addAgentSkill({ id: 'e_s2', agent_id: e.id, skill_name: 'live-skill-2', description: null, content: '', enabled: 1 });
 
   let liveBroadcastFired = false;
   const liveWsServer = {

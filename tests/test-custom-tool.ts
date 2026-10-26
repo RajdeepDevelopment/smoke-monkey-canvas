@@ -2,7 +2,7 @@ import { buildToolRegistry, createAgent } from 'smoke-monkey-harness';
 import {
   CUSTOM_AGENT_TOOLS,
   CUSTOM_AGENT_TOOL_NAMES,
-} from './server/features/agent/agent.custom-tools.js';
+} from '../server/features/agent/agent.custom-tools.js';
 
 async function main() {
   // ── Runtime path #1: the exact API the runner uses ─────────────────────────

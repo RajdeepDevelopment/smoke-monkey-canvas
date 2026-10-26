@@ -1,4 +1,5 @@
 """Helper utilities for constructing and validating hierarchical chains."""
+from typing import Optional, List, Dict, Any
 
 LEVEL_COLORS = {
     0: "#8b5cf6", # Executive / C-level (Purple)
@@ -15,12 +16,12 @@ def node(
     roleTitle: str,
     name: str,
     level: int,
-    parentId: str or None,
+    parentId: Optional[str],
     responsibilities: str,
     workflowInstructions: str,
     delegationPolicy: str = "auto",
-    color: str = None
-):
+    color: Optional[str] = None
+) -> Dict[str, Any]:
     if not color:
         color = LEVEL_COLORS.get(level, "#3b82f6")
     return {
@@ -43,9 +44,9 @@ def chain(
     domain: str,
     color: str,
     icon: str,
-    nodes: list,
-    companyName: str = None
-):
+    nodes: List[Dict[str, Any]],
+    companyName: Optional[str] = None
+) -> Dict[str, Any]:
     return {
         "id": id,
         "name": name,
@@ -57,3 +58,4 @@ def chain(
         "icon": icon,
         "nodes": nodes
     }
+

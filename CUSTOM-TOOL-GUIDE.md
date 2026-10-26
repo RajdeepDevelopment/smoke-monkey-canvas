@@ -223,8 +223,8 @@ writes to `agent.disabled_tools`, which the runner turns into a permission denia
 ```
 M server/features/agent/agent.runner.ts            import + registerTool loop + presentation forwarding
 A server/features/agent/agent.custom-tools.ts      the dummy tool (new)
-A test-custom-tool.ts                              registry-level operation test (new)
-A test-custom-tool-agent.ts                        agent-API end-to-end test vs mock LLM (new)
+A tests/test-custom-tool.ts                        registry-level operation test (new)
+A tests/test-custom-tool-agent.ts                  agent-API end-to-end test vs mock LLM (new)
 M web/src/features/common/tools-and-policies.ts    BUILTIN_TOOLS + canvas_ping entry
 M web/src/features/tools/tools.modal.tsx           tooltip text "Enable all tools" (cosmetic)
 ```
@@ -233,21 +233,21 @@ M web/src/features/tools/tools.modal.tsx           tooltip text "Enable all tool
 
 Prereqs: repo deps installed. No provider key needed (tests use a mock LLM).
 
-### 6.1 Registry/operation test — `test-custom-tool.ts`
+### 6.1 Registry/operation test — `tests/test-custom-tool.ts`
 
 Mirrors the runner: `buildToolRegistry()` (default built-ins) + `register()` each
 canvas tool, then asserts registration, built-ins preserved, presentation present,
 and `execute()` output. Run:
 
 ```bash
-npx tsx test-custom-tool.ts
+npx tsx tests/test-custom-tool.ts
 ```
 
 Expected (all PASS): custom tool registered / built-ins preserved / presentation
 exposed to UI / execute succeeded / echoed message / workspace path returned.
 Logs `total tools registered: 21` (20 built-ins + canvas_ping).
 
-### 6.2 Agent-API end-to-end test — `test-custom-tool-agent.ts` (strongest proof)
+### 6.2 Agent-API end-to-end test — `tests/test-custom-tool-agent.ts` (strongest proof)
 
 Starts a mock OpenAI/Ollama-compatible HTTP server, creates a REAL harness agent
 via `createAgent({ provider: 'ollama', model: 'mock-model', ... })`, registers the
@@ -263,7 +263,7 @@ end the run cleanly. Assertions:
 - `result.status === 'completed'`
 
 ```bash
-npx tsx test-custom-tool-agent.ts
+npx tsx tests/test-custom-tool-agent.ts
 ```
 
 Expected: `LLM was told about canvas_ping / agent actually called canvas_ping /

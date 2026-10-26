@@ -34,7 +34,7 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 | ✨ New feature | [Request first](.github/ISSUE_TEMPLATE/feature_request.md) to discuss scope |
 | 📝 Documentation | Edit `.md` files directly, open a PR |
 | 🔌 New MCP server | Add to `server/features/mcp/mcp.stock.ts` |
-| 🧪 Tests | Add E2E or unit tests (see `test-e2e.ts`) |
+| 🧪 Tests | Add E2E or unit tests (see `tests/test-e2e.ts`) |
 | 🎨 UI improvements | Work in `web/src/` |
 
 ---

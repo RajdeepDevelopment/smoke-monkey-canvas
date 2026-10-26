@@ -25,6 +25,8 @@
     "build": "npm --prefix web run build",
     "start": "node ./bin/cli.js",
     "dev": "node ./bin/cli.js",
+    "test": "tsx tests/test-custom-tool.ts",
+    "test:e2e": "tsx tests/test-e2e.ts",
     "desktop:dev": "npm --prefix desktop run dev",
     "desktop:build": "npm --prefix desktop run build",
     "desktop:build:mac": "npm --prefix desktop run build:mac",

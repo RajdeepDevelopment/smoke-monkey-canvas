@@ -2,6 +2,7 @@
 # This file prevents npm from falling back to .gitignore which ignores web/dist/.
 
 # Tests & benchmarks
+tests/
 *.test.ts
 test-*
 *.tsbuildinfo
