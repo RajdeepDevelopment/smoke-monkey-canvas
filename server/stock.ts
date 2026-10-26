@@ -9,6 +9,7 @@ export interface StockMcp {
   envKeys: string[];
   keyGetUrl?: string;
   keyGetLabel?: string;
+  iconUrl?: string;
 }
 
 export const STOCK_MCPS: StockMcp[] = [

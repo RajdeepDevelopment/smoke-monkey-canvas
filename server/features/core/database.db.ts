@@ -49,9 +49,13 @@ export class CoreDatabase {
       mkdirSync(dir, { recursive: true });
     }
     this.db = new DatabaseSync(resolvedPath);
+    try {
+      this.db.exec('PRAGMA journal_mode = WAL;');
+    } catch {}
     this.bootstrapTables();
     this.seedDefaultSettings();
     this.seedBundledSkills();
+    this.backfillAgentProfileDetails();
   }
 
   static getInstance(customPath?: string): CoreDatabase {
@@ -172,6 +176,77 @@ export class CoreDatabase {
         FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS agent_connections (
+        id TEXT PRIMARY KEY,
+        source_agent_id TEXT NOT NULL,
+        target_agent_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(source_agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+        FOREIGN KEY(target_agent_id) REFERENCES agents(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS space_zones (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role_title TEXT NOT NULL DEFAULT 'Team Member',
+        description TEXT,
+        responsibilities TEXT,
+        workflow_instructions TEXT,
+        level INTEGER NOT NULL DEFAULT 0,
+        parent_zone_id TEXT,
+        space_id TEXT,
+        color TEXT NOT NULL DEFAULT '#3b82f6',
+        shape TEXT NOT NULL DEFAULT 'rectangle',
+        width REAL NOT NULL DEFAULT 420,
+        height REAL NOT NULL DEFAULT 320,
+        x REAL NOT NULL DEFAULT 0,
+        y REAL NOT NULL DEFAULT 0,
+        repo_url TEXT,
+        working_dir TEXT,
+        project_brief TEXT,
+        delegation_policy TEXT NOT NULL DEFAULT 'auto',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS space_workspace_prompts (
+        space_id TEXT PRIMARY KEY,
+        name TEXT,
+        prompt TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS space_agent_memberships (
+        space_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (space_id, agent_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_cron_jobs (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        cron_schedule TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        last_run_at TEXT,
+        next_run_at TEXT,
+        created_by TEXT NOT NULL DEFAULT 'user',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_file_compaction (
+        agent_id TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        last_compacted_at TEXT NOT NULL,
+        last_mtime REAL NOT NULL,
+        line_count INTEGER NOT NULL,
+        PRIMARY KEY (agent_id, file_path)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_agent_mcps ON agent_mcps(agent_id);
       CREATE INDEX IF NOT EXISTS idx_agent_skills ON agent_skills(agent_id);
       CREATE INDEX IF NOT EXISTS idx_runs_agent ON runs(agent_id);
@@ -179,8 +254,25 @@ export class CoreDatabase {
       CREATE INDEX IF NOT EXISTS idx_stock_skills_cat ON stock_skills(category);
       CREATE INDEX IF NOT EXISTS idx_chat_sessions_agent ON chat_sessions(agent_id);
       CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_connections_src ON agent_connections(source_agent_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_connections_tgt ON agent_connections(target_agent_id);
+      CREATE INDEX IF NOT EXISTS idx_space_zones_parent ON space_zones(parent_zone_id);
+      CREATE INDEX IF NOT EXISTS idx_space_zones_level ON space_zones(level);
+      CREATE INDEX IF NOT EXISTS idx_space_agent_memberships_agent ON space_agent_memberships(agent_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_cron_jobs_agent ON agent_cron_jobs(agent_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_cron_jobs_next ON agent_cron_jobs(next_run_at);
     `);
 
+    try {
+      this.db.exec("ALTER TABLE space_zones ADD COLUMN space_id TEXT");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_space_zones_space ON space_zones(space_id)");
+    } catch {
+      // index already exists or column unavailable
+    }
     try {
       this.db.exec("ALTER TABLE runs ADD COLUMN session_id TEXT");
     } catch {
@@ -217,6 +309,21 @@ export class CoreDatabase {
       // already exists
     }
     try {
+      this.db.exec("ALTER TABLE agents ADD COLUMN role TEXT");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE agents ADD COLUMN description TEXT");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE agents ADD COLUMN specialty TEXT");
+    } catch {
+      // already exists
+    }
+    try {
       this.db.exec("ALTER TABLE agent_mcps ADD COLUMN source TEXT NOT NULL DEFAULT 'canvas'");
     } catch {
       // already exists
@@ -225,6 +332,37 @@ export class CoreDatabase {
       this.db.exec("ALTER TABLE agent_skills ADD COLUMN source TEXT NOT NULL DEFAULT 'canvas'");
     } catch {
       // already exists
+    }
+  }
+
+  private backfillAgentProfileDetails(): void {
+    try {
+      const candidates = [
+        join(__dirname, '../agent/agent.stock-templates.json'),
+        join(__dirname, '../../server/features/agent/agent.stock-templates.json'),
+        join(process.cwd(), 'server/features/agent/agent.stock-templates.json'),
+      ];
+      const jsonPath = candidates.find((p) => existsSync(p));
+      if (!jsonPath) return;
+
+      const raw = readFileSync(jsonPath, 'utf-8');
+      const templates = JSON.parse(raw);
+      if (!Array.isArray(templates) || templates.length === 0) return;
+
+      const stmt = this.db.prepare(`
+        UPDATE agents
+        SET role = COALESCE(role, ?),
+            specialty = COALESCE(specialty, ?),
+            description = COALESCE(description, ?)
+        WHERE (role IS NULL OR specialty IS NULL OR description IS NULL)
+          AND (LOWER(name) = LOWER(?) OR id = ?)
+      `);
+
+      for (const t of templates) {
+        stmt.run(t.role, t.specialty, t.description, t.name, t.id);
+      }
+    } catch (e) {
+      console.warn('[database] Failed to backfill stock agent profile details:', e);
     }
   }
 

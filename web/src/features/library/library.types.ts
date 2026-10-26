@@ -1,7 +1,7 @@
 import type { StockMcp } from '../mcp/mcp.types.js';
 import type { AgentTemplate } from '../agent/agent.templates.js';
 
-export type LibraryTab = 'mcp' | 'skills' | 'agents' | 'tools' | 'personality' | 'output';
+export type LibraryTab = 'mcp' | 'spaces' | 'zones' | 'skills' | 'agents' | 'tools' | 'personality' | 'output';
 
 export type PluginCategory =
   | 'Skills'
@@ -46,6 +46,10 @@ export interface LibraryPlugin {
   npmPackage?: string;
   /** Short, concrete note on what attaching this gives the agent. */
   usage: string;
+  /** Explicit owner or repo avatar URL fetched from GitHub API */
+  avatarUrl?: string;
+  /** Snapshot date this row's star count was verified from the GitHub API. */
+  verified?: string;
 }
 
 export interface StockSkillItem {
@@ -73,8 +77,89 @@ export interface ToolKit {
   isCustom?: boolean;
 }
 
+/** Preset specification for a visual Office Space / team room. */
+export interface WorkspaceZonePreset {
+  id?: string;
+  name: string;
+  description?: string;
+  category?: string;
+  width: number;
+  height: number;
+  color: string;
+  shape: 'rectangle' | 'circle';
+  icon?: string;
+  workflowPrompt?: string;
+  responsibilities?: string;
+  workflowInstructions?: string;
+  delegationPolicy?: 'auto' | 'down' | 'up' | 'both' | 'peers';
+  repoUrl?: string;
+  workingDir?: string;
+  projectBrief?: string;
+}
+
+/** Preset specification for a hierarchical designation (role) zone. */
+export interface RoleZonePreset {
+  id?: string;
+  name: string;
+  description?: string;
+  category?: string;
+  roleTitle: string;
+  level: number;
+  parentZoneId?: string | null;
+  responsibilities?: string;
+  workflowInstructions?: string;
+  delegationPolicy?: 'auto' | 'down' | 'up' | 'both' | 'peers';
+  repoUrl?: string;
+  workingDir?: string;
+  projectBrief?: string;
+  width: number;
+  height: number;
+  color: string;
+  shape: 'rectangle' | 'circle';
+  icon?: string;
+}
+
+/** Node in a company hierarchical chain (org chart) */
+export interface HierarchicalChainNode {
+  id: string;
+  roleTitle: string;
+  name: string;
+  level: number;
+  parentId?: string | null;
+  responsibilities?: string;
+  workflowInstructions?: string;
+  delegationPolicy?: 'auto' | 'down' | 'up' | 'both' | 'peers';
+  color?: string;
+  width?: number;
+  height?: number;
+}
+
+/** Pre-packaged multi-level company hierarchical chain (org chart tree) */
+export interface HierarchicalChainPreset {
+  id: string;
+  name: string;
+  companyName?: string;
+  description: string;
+  category: string;
+  industryCategory?: string;
+  domain: string;
+  icon?: string;
+  color: string;
+  industryColor?: string;
+  nodes: HierarchicalChainNode[];
+}
+
 /** Discriminant for what is being dragged out of the library. */
-export type LibItemKind = 'mcp' | 'skill' | 'agent' | 'toolkit' | 'personality' | 'outputStyle';
+export type LibItemKind =
+  | 'mcp'
+  | 'skill'
+  | 'agent'
+  | 'toolkit'
+  | 'personality'
+  | 'outputStyle'
+  | 'workspace_zone'
+  | 'role_zone'
+  | 'hierarchical_chain';
 
 /** A personality or output-style option from the server preset catalogue. */
 export interface PromptPreset {
@@ -93,6 +178,9 @@ export interface LibDragPayload {
   agent?: AgentTemplate;
   toolkit?: ToolKit;
   preset?: PromptPreset;
+  zonePreset?: WorkspaceZonePreset;
+  roleZonePreset?: RoleZonePreset;
+  hierarchicalChainPreset?: HierarchicalChainPreset;
 }
 
 /**
@@ -181,7 +269,7 @@ export function readLibDragPayload(dt: DataTransfer | null): LibDragPayload | nu
   try {
     const parsed = JSON.parse(raw) as LibDragPayload;
     if (!parsed || typeof parsed !== 'object') return null;
-    if (!['mcp', 'skill', 'agent', 'toolkit', 'personality', 'outputStyle'].includes(parsed.kind)) return null;
+    if (!['mcp', 'skill', 'agent', 'toolkit', 'personality', 'outputStyle', 'workspace_zone', 'role_zone', 'hierarchical_chain'].includes(parsed.kind)) return null;
     return parsed;
   } catch {
     return null;

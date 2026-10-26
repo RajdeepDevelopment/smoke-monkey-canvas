@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { CoreDatabase } from '../core/database.db.js';
+import { MCP_ALIASES } from './mcp.aliases.js';
 
 // ── MCP OAuth (authorization-code + PKCE, spec 2025-06-18) ─────────────────
 // Implements the flow an MCP client is expected to perform against a remote
@@ -21,6 +22,12 @@ const KEY = {
   scope: (n: string) => `MCP_OAUTH_SCOPE__${n}`,
   issuer: (n: string) => `MCP_OAUTH_ISSUER__${n}`,
   endpoint: (n: string) => `MCP_OAUTH_ENDPOINT__${n}`,
+  // The callback URI the client was registered with. Providers compare
+  // redirect URIs exactly, so this has to be remembered.
+  clientRedirect: (n: string) => `MCP_OAUTH_CLIENT_REDIRECT__${n}`,
+  // '1' when the client came from a user-registered OAuth App rather than
+  // from dynamic client registration (only the user can change those).
+  clientIsUserApp: (n: string) => `MCP_OAUTH_CLIENT_IS_USER_APP__${n}`,
 };
 
 export type OAuthTokens = {
@@ -32,6 +39,44 @@ export type OAuthTokens = {
 
 function db() {
   return CoreDatabase.getInstance();
+}
+
+// ── The callback URI ───────────────────────────────────────────────────────
+// OAuth servers compare redirect URIs exactly, so `http://localhost:3333/x`
+// and `http://127.0.0.1:3333/x` are different URIs to them. The URI that
+// reaches the provider therefore has to be identical every single time,
+// no matter how the caller reached this server: the browser, the Vite dev
+// proxy, a LAN address or a tunnel all spell the host differently.
+//
+// A client registered with one spelling and an authorize request sent with
+// another fails with "Invalid redirect URI" (Cloudflare) or "redirect_uri not
+// registered for client" (Grafana). So the loopback spelling is pinned here,
+// and a public deployment pins its own origin with PUBLIC_BASE_URL.
+
+export function serverPort(): number {
+  return Number(process.env.PORT || 3333);
+}
+
+/**
+ * The one callback URL this server ever uses.
+ *
+ * `host` is the host the request arrived with; loopback spellings collapse to
+ * `127.0.0.1` and any other host (LAN IP, public domain) is kept as-is,
+ * because only the local machine can be reached through a loopback alias.
+ */
+export function canonicalRedirectUri(proto = 'http', host?: string): string {
+  const publicBase = (process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (publicBase) return `${publicBase}/api/mcp/oauth/callback`;
+
+  const raw = (host || '').trim();
+  const hostname = raw.replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
+  const isLoopback =
+    !hostname || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+
+  if (isLoopback) {
+    return `http://127.0.0.1:${serverPort()}/api/mcp/oauth/callback`;
+  }
+  return `${proto}://${raw}/api/mcp/oauth/callback`;
 }
 
 // ── PKCE ───────────────────────────────────────────────────────────────────
@@ -255,7 +300,7 @@ export async function registerClient(
   d: Discovery,
   redirectUri: string,
   clientName: string
-): Promise<string> {
+): Promise<ClientCreds> {
   if (!d.registrationEndpoint) {
     throw new Error(
       'Authorization server does not support dynamic client registration, so this app ' +
@@ -286,7 +331,9 @@ export async function registerClient(
   }
   const json = (await res.json()) as { client_id?: string; client_secret?: string };
   if (!json.client_id) throw new Error('Client registration returned no client_id.');
-  return json.client_id;
+  // Some providers issue a secret, some do not. Keep it when it is there --
+  // the token endpoint then treats us as the confidential client it expects.
+  return { clientId: json.client_id, clientSecret: json.client_secret || undefined };
 }
 
 
@@ -301,33 +348,65 @@ export function storedClientCreds(mcpName: string): ClientCreds | null {
 }
 
 /**
- * Resolve the client_id to authorize with.
+ * Resolve the client_id to authorize with, and the redirect URI that client
+ * is actually allowed to use.
  *
  * Preference order:
  *  1. an OAuth App the user registered and pasted in (GitHub and other
  *     providers that publish no registration_endpoint require this),
  *  2. a client_id we registered dynamically earlier for this same issuer,
  *  3. dynamic client registration.
+ *
+ * A dynamically registered client is bound to exactly one redirect URI, so it
+ * is thrown away and registered again when this server's callback moves.
+ * A user-registered OAuth App cannot be re-registered -- only its owner can --
+ * so the URI captured when the app was saved keeps winning for it.
  */
 export async function ensureClient(
   mcpName: string,
   d: Discovery,
   redirectUri: string
-): Promise<ClientCreds> {
+): Promise<ClientCreds & { redirectUri: string }> {
   const stored = storedClientCreds(mcpName);
+  const isUserApp = db().getSetting(KEY.clientIsUserApp(mcpName)) === '1';
+
   if (stored) {
     const sameIssuer = db().getSetting(KEY.endpoint(mcpName)) === d.issuer;
-    // A user-supplied secret always wins; a DCR id is only reused for its own issuer.
-    if (stored.clientSecret || sameIssuer) {
+    const storedRedirect = db().getSetting(KEY.clientRedirect(mcpName)) || '';
+
+    if (isUserApp) {
+      const effective = storedRedirect || redirectUri;
+      if (!storedRedirect) db().setSetting(KEY.clientRedirect(mcpName), effective);
       db().setSetting(KEY.endpoint(mcpName), d.issuer);
-      return stored;
+      return {
+        clientId: stored.clientId,
+        clientSecret: stored.clientSecret,
+        redirectUri: effective,
+      };
+    }
+
+    // No recorded redirect URI means the client predates this bookkeeping and
+    // its URI cannot be verified -- register a fresh one rather than risk an
+    // "invalid redirect URI" rejection at the provider.
+    if (storedRedirect && storedRedirect === redirectUri && (stored.clientSecret || sameIssuer)) {
+      db().setSetting(KEY.endpoint(mcpName), d.issuer);
+      return {
+        clientId: stored.clientId,
+        clientSecret: stored.clientSecret,
+        redirectUri,
+      };
     }
   }
 
-  const clientId = await registerClient(d, redirectUri, 'Smoke Monkey Canvas');
-  db().setSetting(KEY.clientId(mcpName), clientId);
+  const client = await registerClient(d, redirectUri, 'Smoke Monkey Canvas');
+  db().setSetting(KEY.clientId(mcpName), client.clientId);
+  if (client.clientSecret) {
+    db().setSetting(KEY.clientSecret(mcpName), client.clientSecret);
+  }
   db().setSetting(KEY.endpoint(mcpName), d.issuer);
-  return { clientId };
+  db().setSetting(KEY.clientRedirect(mcpName), redirectUri);
+  db().setSetting(KEY.clientIsUserApp(mcpName), '0');
+  return { clientId: client.clientId, clientSecret: client.clientSecret, redirectUri };
 }
 
 
@@ -474,6 +553,7 @@ export function credentialLabel(key: string): string {
     JIRA_HOST: 'Jira Host (e.g. https://you.atlassian.net)',
     JIRA_API_TOKEN: 'Jira API Token',
     ZENDESK_SUBDOMAIN: 'Zendesk Subdomain',
+    ZENDESK_EMAIL: 'Zendesk Agent Email',
     ZENDESK_API_TOKEN: 'Zendesk API Token',
     INTERCOM_ACCESS_TOKEN: 'Intercom Access Token',
     CHARGEBEE_API_KEY: 'Chargebee API Key',
@@ -552,18 +632,24 @@ export function validateCredentials(
   return { ok: Object.keys(errors).length === 0, values, errors };
 }
 
-// ── Storage ───────────────────────────────────────────────────────────────
+export { MCP_ALIASES } from './mcp.aliases.js';
 
 export function saveTokens(mcpName: string, t: OAuthTokens) {
-  db().setSetting(KEY.access(mcpName), t.accessToken);
-  if (t.refreshToken) db().setSetting(KEY.refresh(mcpName), t.refreshToken);
-  if (t.expiresAt) db().setSetting(KEY.expires(mcpName), String(t.expiresAt));
-  if (t.scope) db().setSetting(KEY.scope(mcpName), t.scope);
+  const names = [mcpName, ...(MCP_ALIASES[mcpName] ?? [])];
+  for (const name of names) {
+    db().setSetting(KEY.access(name), t.accessToken);
+    if (t.refreshToken) db().setSetting(KEY.refresh(name), t.refreshToken);
+    if (t.expiresAt) db().setSetting(KEY.expires(name), String(t.expiresAt));
+    if (t.scope) db().setSetting(KEY.scope(name), t.scope);
+  }
 }
 
 export function clearTokens(mcpName: string) {
-  for (const k of [KEY.access, KEY.refresh, KEY.expires, KEY.scope]) {
-    db().setSetting(k(mcpName), '');
+  const names = [mcpName, ...(MCP_ALIASES[mcpName] ?? [])];
+  for (const name of names) {
+    for (const k of [KEY.access, KEY.refresh, KEY.expires, KEY.scope]) {
+      db().setSetting(k(name), '');
+    }
   }
 }
 
@@ -575,14 +661,19 @@ export type StoredAuth = {
 
 /** True only when a real token is present and not past its expiry. */
 export function authStatus(mcpName: string): StoredAuth {
-  const access = db().getSetting(KEY.access(mcpName));
-  if (!access) return { connected: false };
-  const exp = Number(db().getSetting(KEY.expires(mcpName)) || 0);
-  return {
-    connected: true,
-    expired: exp ? Date.now() > exp : false,
-    scope: db().getSetting(KEY.scope(mcpName)) ?? undefined,
-  };
+  const names = [mcpName, ...(MCP_ALIASES[mcpName] ?? [])];
+  for (const name of names) {
+    const access = db().getSetting(KEY.access(name));
+    if (access) {
+      const exp = Number(db().getSetting(KEY.expires(name)) || 0);
+      return {
+        connected: true,
+        expired: exp ? Date.now() > exp : false,
+        scope: db().getSetting(KEY.scope(name)) ?? undefined,
+      };
+    }
+  }
+  return { connected: false };
 }
 
 /**

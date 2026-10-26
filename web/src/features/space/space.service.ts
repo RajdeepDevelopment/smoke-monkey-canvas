@@ -1,7 +1,15 @@
 import type { SpaceAgentEntity } from '../agent/agent.types.js';
-import { getWsUrl } from '../../config/desktop.bridge.ts';
+import type { RoleZone, SpaceWorkflow, SpaceWorkspacePrompt } from './space.types.js';
+import { getWsUrl, getApiBaseUrl } from '../../config/desktop.bridge.ts';
 
-const API_BASE = '/api';
+const API_BASE = {
+  toString() {
+    return getApiBaseUrl();
+  },
+  [Symbol.toPrimitive]() {
+    return getApiBaseUrl();
+  },
+};
 
 export class SpaceService {
   static async fetchSpaceAgents(): Promise<SpaceAgentEntity[]> {
@@ -12,12 +20,111 @@ export class SpaceService {
     return res.json();
   }
 
-  static async updateNodePosition(id: string, posX: number, posY: number): Promise<void> {
+  static async updateNodePosition(
+    id: string,
+    posX: number,
+    posY: number,
+    spaceId?: string | null,
+  ): Promise<void> {
     await fetch(`${API_BASE}/space/nodes/${id}/position`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ posX, posY }),
+      body: JSON.stringify({ posX, posY, ...(spaceId !== undefined ? { spaceId } : {}) }),
     });
+  }
+
+  static async setWorkspaceAgents(spaceId: string, agentIds: string[]): Promise<void> {
+    const res = await fetch(`${API_BASE}/space/workspaces/${encodeURIComponent(spaceId)}/agents`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentIds }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to sync workspace agents: ${res.statusText}`);
+    }
+  }
+
+  static async fetchZones(): Promise<RoleZone[]> {
+    const res = await fetch(`${API_BASE}/space/zones`);
+    if (!res.ok) {
+      throw new Error(`Failed to load workspace zones: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async createZone(zone: RoleZone): Promise<RoleZone> {
+    const res = await fetch(`${API_BASE}/space/zones`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(zone),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to create workspace zone: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async createZonesBatch(zones: Partial<RoleZone>[]): Promise<RoleZone[]> {
+    const res = await fetch(`${API_BASE}/space/zones/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zones }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to batch create workspace zones: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async updateZone(id: string, updates: Partial<RoleZone>): Promise<RoleZone> {
+    const res = await fetch(`${API_BASE}/space/zones/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to update workspace zone: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async deleteZone(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/space/zones/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      throw new Error(`Failed to delete workspace zone: ${res.statusText}`);
+    }
+  }
+
+  static async fetchWorkflow(): Promise<SpaceWorkflow> {
+    const res = await fetch(`${API_BASE}/space/workflow`);
+    if (!res.ok) {
+      throw new Error(`Failed to load workspace workflow: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async fetchWorkspacePrompt(spaceId: string): Promise<SpaceWorkspacePrompt> {
+    const res = await fetch(`${API_BASE}/space/workspaces/${encodeURIComponent(spaceId)}/prompt`);
+    if (!res.ok) {
+      throw new Error(`Failed to load workspace prompt: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async saveWorkspacePrompt(
+    spaceId: string,
+    name: string,
+    prompt: string,
+  ): Promise<SpaceWorkspacePrompt> {
+    const res = await fetch(`${API_BASE}/space/workspaces/${encodeURIComponent(spaceId)}/prompt`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, prompt }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to save workspace prompt: ${res.statusText}`);
+    }
+    return res.json();
   }
 
   static connectWebSocket(onMessage: (msg: { type: string; agentId?: string; runId?: string; data?: unknown }) => void): () => void {

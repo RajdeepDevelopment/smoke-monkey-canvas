@@ -17,8 +17,27 @@ export function isTauri(): boolean {
 
 export const DESKTOP_API_BASE = 'http://localhost:3333';
 
+/**
+ * True when running inside Tauri but served from the dev server, where no
+ * bundled Info.plist exists. macOS terminates a process that touches the
+ * speech or microphone services without their usage-description keys, so
+ * privacy-sensitive Web APIs must be skipped in this state.
+ */
+export function isTauriDevShell(): boolean {
+  if (typeof window === 'undefined') return false;
+  // Packaged builds resolve to `tauri://localhost` / `http://tauri.localhost`.
+  return isTauri() && !window.location.origin.includes('tauri');
+}
+
 export function getApiBaseUrl(): string {
   if (isTauri()) {
+    return `${DESKTOP_API_BASE}/api`;
+  }
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+    window.location.port !== '3333'
+  ) {
     return `${DESKTOP_API_BASE}/api`;
   }
   return '/api';
@@ -26,6 +45,13 @@ export function getApiBaseUrl(): string {
 
 export function getWsUrl(): string {
   if (isTauri()) {
+    return `ws://localhost:3333/ws`;
+  }
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+    window.location.port !== '3333'
+  ) {
     return `ws://localhost:3333/ws`;
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

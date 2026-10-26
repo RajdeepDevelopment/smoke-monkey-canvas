@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { ensureAgentWorkspace, reconcileAgentWorkspaceRuntime } from './agent.manifest.js';
+import { resolveAgentWorkspace } from './agent.prompt.js';
 
 export type WorkspaceFileCategory =
   | 'image'
@@ -22,6 +24,7 @@ export interface WorkspaceFileItem {
   isDirectory: boolean;
   category: WorkspaceFileCategory;
   mimeType: string;
+  isDeliverable?: boolean;
 }
 
 export interface WorkspaceFilesResult {
@@ -63,7 +66,13 @@ const MIME_TYPES: Record<string, string> = {
   txt: 'text/plain; charset=utf-8',
   log: 'text/plain; charset=utf-8',
   rtf: 'application/rtf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  doc: 'application/msword',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ppt: 'application/vnd.ms-powerpoint',
   // Code & Data
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xls: 'application/vnd.ms-excel',
   json: 'application/json; charset=utf-8',
   jsonl: 'application/x-ndjson; charset=utf-8',
   csv: 'text/csv; charset=utf-8',
@@ -99,7 +108,7 @@ const CATEGORIES: Record<WorkspaceFileCategory, string[]> = {
     'toml', 'xml', 'dockerfile', 'java', 'c', 'cpp', 'h'
   ],
   data: ['csv', 'tsv', 'xlsx', 'xls', 'parquet', 'jsonl'],
-  document: ['doc', 'docx', 'txt', 'rtf', 'log'],
+  document: ['doc', 'docx', 'txt', 'rtf', 'log', 'pptx', 'ppt'],
   other: [],
 };
 
@@ -130,7 +139,165 @@ export function safeResolveWorkspacePath(workspaceRoot: string, relativePath: st
   return targetPath;
 }
 
-const IGNORED_NAMES = new Set(['.git', 'node_modules', '.DS_Store', 'Thumbs.db']);
+const IGNORED_NAMES = new Set(['.git', 'node_modules', '.DS_Store', 'Thumbs.db', '.smoke']);
+
+/**
+ * Filenames that are internal to the agent harness/framework and should
+ * NEVER be considered user-facing deliverables.
+ */
+const INTERNAL_SYSTEM_FILENAMES = new Set([
+  'session.md',
+  'manifest.json',
+  'mcp.json',
+  'policies.json',
+  'skills.json',
+  'runtime.json',
+  'checkpoints.json',
+  'system_prompt.md',
+  'connections.md',
+  'policies.md',
+  'project.md',
+  'user.md',
+  'semantic.md',
+  'episodic.md',
+  'working.md',
+  'facts.md',
+  'preferences.md',
+  'procedural.md',
+  'associative.md',
+  'identity.md',
+  'prospective.md',
+  'reflective.md',
+  'index.json',
+  'index.md',
+  'readme.md',
+  'contributing.md',
+  'license.md',
+  'changelog.md',
+  'code_of_conduct.md',
+  'package.json',
+  'package-lock.json',
+  'tsconfig.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+]);
+
+const INTERNAL_DIR_NAMES = new Set([
+  'memory',
+  'context',
+  'state',
+  'mcp',
+  'skills',
+  'policies',
+  'automation',
+  'logs',
+  'node_modules',
+]);
+
+const DELIVERABLE_EXTENSIONS = new Set([
+  // Spreadsheets and data exports (Excel, CSV, TSV)
+  'xlsx', 'xls', 'csv', 'tsv', 'parquet',
+  // Documents and presentations
+  'docx', 'doc', 'pdf', 'rtf', 'pptx', 'ppt',
+  // Images, charts, visual diagrams
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif',
+  // Media deliverables
+  'mp4', 'webm', 'mov', 'avi', 'mp3', 'wav',
+  // Markdown reports/deliverables
+  'md', 'markdown',
+  // Data formats (conditionally)
+  'json', 'jsonl', 'txt',
+]);
+
+/**
+ * Identifies whether a file is a user-facing deliverable / output asset
+ * created by the agent for the user, rather than internal configuration,
+ * framework plumbing, memory, prompts, or repository code.
+ */
+export function isDeliverableAsset(file: {
+  path: string;
+  name: string;
+  dir?: string;
+  extension?: string;
+}): boolean {
+  const name = (file.name || '').toLowerCase();
+  const ext = (file.extension || '').toLowerCase().replace(/^\./, '');
+  const normPath = (file.path || '').replace(/\\/g, '/').toLowerCase();
+
+  // 1. Exclude dotfiles (e.g. .gitignore, .DS_Store, .env)
+  if (name.startsWith('.')) return false;
+
+  // 2. Exclude known internal framework filenames
+  if (INTERNAL_SYSTEM_FILENAMES.has(name)) return false;
+
+  // 3. Exclude paths inside execution run logs, tool dumps, etc.
+  if (normPath.includes('/runs/') || normPath.startsWith('.smoke/') || normPath.includes('/logs/') || normPath.startsWith('logs/')) {
+    return false;
+  }
+
+  // 4. Check segments for internal agent directories
+  const segments = normPath.split('/');
+  const isInsideArtifacts =
+    segments.includes('artifacts') ||
+    segments.includes('deliverables') ||
+    segments.includes('output') ||
+    segments.includes('outputs') ||
+    segments.includes('exports') ||
+    segments.includes('reports');
+
+  for (const seg of segments) {
+    if (INTERNAL_DIR_NAMES.has(seg)) {
+      return false;
+    }
+  }
+
+  // If inside `.smoke-agent` but not inside `artifacts`, it is an internal file
+  if (segments.includes('.smoke-agent') && !isInsideArtifacts) {
+    return false;
+  }
+
+  // 5. Must have an allowed extension
+  if (!DELIVERABLE_EXTENSIONS.has(ext)) {
+    return false;
+  }
+
+  // 6. JSON files are only deliverables if inside artifacts/output directories,
+  // or named as data/report/export/layout/metrics
+  if (ext === 'json') {
+    if (!isInsideArtifacts) {
+      const isDataExport =
+        name.includes('export') ||
+        name.includes('report') ||
+        name.includes('data') ||
+        name.includes('layout') ||
+        name.includes('metrics') ||
+        name.includes('result') ||
+        name.includes('chart');
+      if (!isDataExport) return false;
+    }
+  }
+
+  // 7. Markdown files inside .smoke-agent must be in artifacts
+  if (ext === 'md' || ext === 'markdown') {
+    if (segments.includes('.smoke-agent') && !isInsideArtifacts) {
+      return false;
+    }
+  }
+
+  // 8. Plain text files (.txt) must be inside artifacts or look like a report/summary
+  if (ext === 'txt') {
+    if (!isInsideArtifacts) {
+      const isDoc =
+        name.includes('report') ||
+        name.includes('summary') ||
+        name.includes('notes') ||
+        name.includes('export');
+      if (!isDoc) return false;
+    }
+  }
+
+  return true;
+}
 
 export function scanAgentWorkspaceFiles(workspaceRoot: string): WorkspaceFilesResult {
   const result: WorkspaceFileItem[] = [];
@@ -168,6 +335,12 @@ export function scanAgentWorkspaceFiles(workspaceRoot: string): WorkspaceFilesRe
           const ext = path.extname(entry.name).toLowerCase().replace(/^\./, '');
           const category = getFileCategory(ext);
           const mimeType = getFileMimeType(ext);
+          const isDeliverable = isDeliverableAsset({
+            path: relPath,
+            name: entry.name,
+            dir: relDir === '.' ? '' : relDir,
+            extension: ext,
+          });
 
           result.push({
             path: relPath,
@@ -179,6 +352,7 @@ export function scanAgentWorkspaceFiles(workspaceRoot: string): WorkspaceFilesRe
             isDirectory: false,
             category,
             mimeType,
+            isDeliverable,
           });
         } catch {}
       }
@@ -187,11 +361,15 @@ export function scanAgentWorkspaceFiles(workspaceRoot: string): WorkspaceFilesRe
 
   walk(normalizedRoot);
 
-  // Sort files: artifacts and markdown first, then by modified time descending
+  // Sort files: deliverables first, then artifacts, then by modified time descending
   result.sort((a, b) => {
-    // Put artifacts folder at the top
-    const aIsArtifact = a.dir.startsWith('artifacts');
-    const bIsArtifact = b.dir.startsWith('artifacts');
+    // Deliverables at the top
+    if (a.isDeliverable && !b.isDeliverable) return -1;
+    if (!a.isDeliverable && b.isDeliverable) return 1;
+
+    // Artifacts folder next
+    const aIsArtifact = a.dir.includes('artifacts');
+    const bIsArtifact = b.dir.includes('artifacts');
     if (aIsArtifact && !bIsArtifact) return -1;
     if (!aIsArtifact && bIsArtifact) return 1;
 
@@ -255,5 +433,57 @@ export function unwatchAgentWorkspace(agentId: string): void {
       entry.watcher.close();
     } catch {}
     activeWatchers.delete(agentId);
+  }
+}
+
+/**
+ * Setup a proactive file watcher on an agent's workspace.
+ * When files are changed (via agent tool execution, peer agent write, or manual terminal operation),
+ * it reconciles runtime changes (system prompt, skills, MCPs) and broadcasts live websocket updates.
+ */
+export function setupAgentWorkspaceWatcher(
+  agentId: string,
+  db: any,
+  wsServer: { broadcast: (msg: any) => void },
+): void {
+  const agent = db.getAgent(agentId);
+  if (!agent) return;
+  const workspaceRoot = resolveAgentWorkspace(agent);
+  if (!workspaceRoot) return;
+
+  try {
+    if (!fs.existsSync(workspaceRoot)) {
+      fs.mkdirSync(workspaceRoot, { recursive: true });
+    }
+  } catch {}
+
+  watchAgentWorkspace(agent.id, workspaceRoot, () => {
+    try {
+      const ws = ensureAgentWorkspace(workspaceRoot, agent.id, agent.name, agent.system_prompt);
+      reconcileAgentWorkspaceRuntime({ agentId: agent.id, ws, db, wsServer });
+    } catch (err) {
+      console.warn(`[agent.files] Live watcher reconciliation error for ${agent.id}:`, err);
+    }
+    try {
+      wsServer.broadcast({
+        type: 'agent_files_updated',
+        agentId: agent.id,
+        data: { timestamp: new Date().toISOString() },
+      });
+    } catch {}
+  });
+}
+
+/**
+ * Initialize file watchers for all existing agents on startup.
+ */
+export function initAllAgentWatchers(db: any, wsServer: { broadcast: (msg: any) => void }): void {
+  try {
+    const agents = db.getAllAgents();
+    for (const agent of agents) {
+      setupAgentWorkspaceWatcher(agent.id, db, wsServer);
+    }
+  } catch (err) {
+    console.warn('[agent.files] Failed to initialize agent workspace watchers:', err);
   }
 }

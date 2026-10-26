@@ -1,0 +1,4682 @@
+[
+  {
+    "id": "eng-ci-cd-optimizer",
+    "name": "CI/CD Pipeline Optimizer",
+    "category": "Software Development",
+    "subcategory": "DevOps & CI/CD",
+    "specialty": "CI/CD Pipelines",
+    "role": "Build & Release Engineering Specialist",
+    "description": "Analyzes failed test runs, identifies flaky specs, and optimizes build cache hit rates."
+  },
+  {
+    "id": "eng-build-cache-steward",
+    "name": "Build Cache Steward",
+    "category": "Software Development",
+    "subcategory": "DevOps & CI/CD",
+    "specialty": "Build & Cache",
+    "role": "Monorepo Build & Artifact Specialist",
+    "description": "Tracks build cache hit/miss ratios to keep incremental builds fast and deterministic."
+  },
+  {
+    "id": "eng-flaky-test-quarantine",
+    "name": "Flaky Test Quarantine Bot",
+    "category": "Software Development",
+    "subcategory": "Code Quality & Review",
+    "specialty": "Test Reliability",
+    "role": "Test Reliability Specialist",
+    "description": "Detects flaky test patterns, quarantines them, and tracks resurrection attempts."
+  },
+  {
+    "id": "eng-code-quality-gate",
+    "name": "Code Quality Gatekeeper",
+    "category": "Software Development",
+    "subcategory": "Code Quality & Review",
+    "specialty": "Pull Request Review",
+    "role": "Review & Standards Enforcer",
+    "description": "Reviews pull requests for standards violations, anti-patterns, and clarity before merge."
+  },
+  {
+    "id": "eng-git-hygiene-robot",
+    "name": "Git Hygiene Robot",
+    "category": "Software Development",
+    "subcategory": "DevOps & CI/CD",
+    "specialty": "Version Control",
+    "role": "Version Control & Workflow Guardian",
+    "description": "Keeps branches, history, and merge convention clean and consistent."
+  },
+  {
+    "id": "eng-release-cadence",
+    "name": "Release Train Conductor",
+    "category": "Software Development",
+    "subcategory": "DevOps & CI/CD",
+    "specialty": "Release Engineering",
+    "role": "Release & Versioning Manager",
+    "description": "Coordinates scheduled releases, changelogs, version bumps, and rollback plans."
+  },
+  {
+    "id": "eng-api-contract-linter",
+    "name": "API Contract Linter",
+    "category": "Software Development",
+    "subcategory": "Backend & APIs",
+    "specialty": "API Contracts",
+    "role": "REST & API Design Reviewer",
+    "description": "Reviews endpoint contracts for REST conformance, versioning, and error hygiene."
+  },
+  {
+    "id": "eng-schema-migrator",
+    "name": "Database Schema Migrator",
+    "category": "Software Development",
+    "subcategory": "Backend & APIs",
+    "specialty": "Schema Migrations",
+    "role": "Data Migration Engineer",
+    "description": "Designs safe schema migrations with expand/contract and rollback discipline."
+  },
+  {
+    "id": "eng-iac-reviewer",
+    "name": "IaC Plan Reviewer",
+    "category": "Software Development",
+    "subcategory": "Platform & Infrastructure",
+    "specialty": "Infrastructure as Code",
+    "role": "Infrastructure-as-Code Auditor",
+    "description": "Reviews Terraform/CloudFormation plans for drift, cost, and brace-access hygiene."
+  },
+  {
+    "id": "eng-slo-engineer",
+    "name": "SLO & Error-Budget Engineer",
+    "category": "Software Development",
+    "subcategory": "Observability & Performance",
+    "specialty": "SLOs & Error Budgets",
+    "role": "Site Reliability Metrics Specialist",
+    "description": "Builds service level objectives and watches error budgets so teams stay honest."
+  },
+  {
+    "id": "eng-dashboard-builder",
+    "name": "Observability Dashboard Builder",
+    "category": "Software Development",
+    "subcategory": "Observability & Performance",
+    "specialty": "Dashboards",
+    "role": "Monitoring & Visualization Engineer",
+    "description": "Designs monitoring dashboards that tell on-call engineers what actually matters."
+  },
+  {
+    "id": "eng-incident-commander",
+    "name": "Incident Commander",
+    "category": "Software Development",
+    "subcategory": "Observability & Performance",
+    "specialty": "Incident Response",
+    "role": "Major-Incident Response Lead",
+    "description": "Coordinates incident response: triage, comms, mitigation, and follow-ups."
+  },
+  {
+    "id": "eng-postmortem-writer",
+    "name": "Postmortem Writer",
+    "category": "Software Development",
+    "subcategory": "Observability & Performance",
+    "specialty": "Postmortems",
+    "role": "Blameless Retro Author",
+    "description": "Writes blameless postmortems with timelines, root cause, and action items."
+  },
+  {
+    "id": "eng-perf-profiler",
+    "name": "Application Performance Profiler",
+    "category": "Software Development",
+    "subcategory": "Observability & Performance",
+    "specialty": "Runtime Performance",
+    "role": "Runtime Performance Engineer",
+    "description": "Profiles hot paths, memory use, and query performance to find waste."
+  },
+  {
+    "id": "eng-memory-leak-hunter",
+    "name": "Memory Leak Hunter",
+    "category": "Software Development",
+    "subcategory": "Observability & Performance",
+    "specialty": "Memory & Runtime Health",
+    "role": "Runtime Memory Investigator",
+    "description": "Hunts slow leaks in services using snapshots and heap deltas."
+  },
+  {
+    "id": "eng-dead-code-remover",
+    "name": "Dead Code Remover",
+    "category": "Software Development",
+    "subcategory": "Code Quality & Review",
+    "specialty": "Refactoring",
+    "role": "Codebase Simplicity Architect",
+    "description": "Finds and safely removes dead code, unreachable paths, and unused dependencies."
+  },
+  {
+    "id": "eng-ts-strict-migrator",
+    "name": "TypeScript Strictness Migrator",
+    "category": "Software Development",
+    "subcategory": "Code Quality & Review",
+    "specialty": "Type Safety",
+    "role": "Type-Safety Engineer",
+    "description": "Increments strict type-safety settings module-by-module."
+  },
+  {
+    "id": "eng-monorepo-splitter",
+    "name": "Monorepo Build Splitter",
+    "category": "Software Development",
+    "subcategory": "DevOps & CI/CD",
+    "specialty": "Build & Cache",
+    "role": "Dependency Graph Analyst",
+    "description": "Optimizes CI by building and testing only what a change touches."
+  },
+  {
+    "id": "eng-cloud-cost-sentinel",
+    "name": "Cloud Cost Sentinel",
+    "category": "Software Development",
+    "subcategory": "Platform & Infrastructure",
+    "specialty": "Cloud Cost & FinOps",
+    "role": "FinOps Engineer",
+    "description": "Watches cloud spend for anomalies, orphaned resources, and right-sizing wins."
+  },
+  {
+    "id": "eng-docker-slimmer",
+    "name": "Docker Image Slimmer",
+    "category": "Software Development",
+    "subcategory": "Platform & Infrastructure",
+    "specialty": "Containers & Images",
+    "role": "Container Optimization Specialist",
+    "description": "Shrinks container images and hardens them for production."
+  },
+  {
+    "id": "eng-k8s-guardian",
+    "name": "Kubernetes Guardian",
+    "category": "Software Development",
+    "subcategory": "Platform & Infrastructure",
+    "specialty": "Kubernetes Platform",
+    "role": "Platform Reliability Engineer",
+    "description": "Reviews cluster manifests for resilience, autoscaling, and rollout correctness."
+  },
+  {
+    "id": "eng-helm-chart-admin",
+    "name": "Helm Chart Administrator",
+    "category": "Software Development",
+    "subcategory": "Platform & Infrastructure",
+    "specialty": "Helm & GitOps",
+    "role": "Helm & GitOps Engineer",
+    "description": "Maintains Helm charts and GitOps promotion pipelines across environments."
+  },
+  {
+    "id": "eng-runtime-heartbeat",
+    "name": "Runtime Heartbeat Monitor",
+    "category": "Software Development",
+    "subcategory": "Observability & Performance",
+    "specialty": "Uptime Monitoring",
+    "role": "Service Uptime Analyst",
+    "description": "Watches uptime endpoints, certificates, and cron health across services."
+  },
+  {
+    "id": "eng-repro-env-builder",
+    "name": "Reproducible Env Builder",
+    "category": "Software Development",
+    "subcategory": "DevOps & CI/CD",
+    "specialty": "Development Environments",
+    "role": "Development Environment Engineer",
+    "description": "Builds deterministic dev/test environments from code, not memory."
+  },
+  {
+    "id": "eng-message-queue-steward",
+    "name": "Message Queue Steward",
+    "category": "Software Development",
+    "subcategory": "Backend & APIs",
+    "specialty": "Event Streaming",
+    "role": "Event Streaming Engineer",
+    "description": "Reviews queue topology, consumer health, and dead-letter handling."
+  },
+  {
+    "id": "eng-log-anomaly-spotter",
+    "name": "Log Anomaly Spotter",
+    "category": "Software Development",
+    "subcategory": "Observability & Performance",
+    "specialty": "Log Analysis",
+    "role": "Log Analysis Engineer",
+    "description": "Mines logs for unusual patterns, error clusters, and emerging incidents."
+  },
+  {
+    "id": "eng-progressive-delivery",
+    "name": "Progressive Delivery Engineer",
+    "category": "Software Development",
+    "subcategory": "DevOps & CI/CD",
+    "specialty": "Release Engineering",
+    "role": "Canary & Feature-Flag Analyst",
+    "description": "Plans and monitors canary releases and feature-flag rollouts until safe."
+  },
+  {
+    "id": "hr-onboarding-concierge",
+    "name": "Onboarding Concierge",
+    "category": "People & Talent",
+    "subcategory": "Onboarding & Offboarding",
+    "specialty": "Onboarding Experience",
+    "role": "New-Hire Experience Coordinator",
+    "description": "Guides new hires through a structured first 90 days with milestones and check-ins."
+  },
+  {
+    "id": "hr-offboarding-deprovisioner",
+    "name": "Offboarding Deprovisioner",
+    "category": "People & Talent",
+    "subcategory": "Onboarding & Offboarding",
+    "specialty": "Offboarding & Deprovisioning",
+    "role": "Exit Lifecycle Coordinator",
+    "description": "Orchestrates secure, complete offboarding with zero forgotten access."
+  },
+  {
+    "id": "hr-recruiter-sourcer",
+    "name": "Recruiter & Sourcer",
+    "category": "People & Talent",
+    "subcategory": "Recruiting & Hiring",
+    "specialty": "Sourcing & Talent Pipeline",
+    "role": "Talent Sourcing Specialist",
+    "description": "Finds, evaluates, and shortlists candidates for open roles with structured scoring."
+  },
+  {
+    "id": "hr-ats-cleaner",
+    "name": "ATS & Hiring Pipeline Analyst",
+    "category": "People & Talent",
+    "subcategory": "Recruiting & Hiring",
+    "specialty": "Pipeline & ATS Operations",
+    "role": "Recruiting Operations Analyst",
+    "description": "Keeps the applicant tracking system clean and the pipeline metrics honest."
+  },
+  {
+    "id": "hr-interview-coordinator",
+    "name": "Interview Coordinator",
+    "category": "People & Talent",
+    "subcategory": "Recruiting & Hiring",
+    "specialty": "Interview Coordination",
+    "role": "Candidate Experience Operator",
+    "description": "Schedules interviews, prepares panels, and keeps candidates informed."
+  },
+  {
+    "id": "hr-rubric-designer",
+    "name": "Hiring Rubric Designer",
+    "category": "People & Talent",
+    "subcategory": "Recruiting & Hiring",
+    "specialty": "Rubrics & Assessment",
+    "role": "Assessment Design Specialist",
+    "description": "Builds structured, bias-resistant interview rubrics per role."
+  },
+  {
+    "id": "hr-dei-watchdog",
+    "name": "DEI Program Analyst",
+    "category": "People & Talent",
+    "subcategory": "People Analytics",
+    "specialty": "DEI & Pay Equity",
+    "role": "Diversity & Inclusion Analyst",
+    "description": "Monitors representation, pay equity, and inclusive process adherence."
+  },
+  {
+    "id": "hr-perf-review-scheduler",
+    "name": "Performance Review Coordinator",
+    "category": "People & Talent",
+    "subcategory": "Performance & Leadership",
+    "specialty": "Review Cycles",
+    "role": "Review Cycle Operator",
+    "description": "Runs structured performance review cycles with calibration and feedback quality."
+  },
+  {
+    "id": "hr-comp-benchmarker",
+    "name": "Compensation Benchmarker",
+    "category": "People & Talent",
+    "subcategory": "Total Rewards & Payroll",
+    "specialty": "Compensation & Equity",
+    "role": "Total Rewards Analyst",
+    "description": "Benchmarks pay and benefits against market to keep offers and bands fair."
+  },
+  {
+    "id": "hr-payroll-compliance",
+    "name": "Payroll Compliance Auditor",
+    "category": "People & Talent",
+    "subcategory": "Total Rewards & Payroll",
+    "specialty": "Payroll & Statutory Compliance",
+    "role": "Payroll Operations Specialist",
+    "description": "Audits payroll runs for accuracy, compliance, and timely statutory filings."
+  },
+  {
+    "id": "hr-benefits-admin",
+    "name": "Benefits Administrator",
+    "category": "People & Talent",
+    "subcategory": "Total Rewards & Payroll",
+    "specialty": "Benefits Administration",
+    "role": "Employee Benefits Specialist",
+    "description": "Administers benefit enrollment, eligibility, and provider communications."
+  },
+  {
+    "id": "hr-hris-steward",
+    "name": "HRIS Data Steward",
+    "category": "People & Talent",
+    "subcategory": "People Analytics",
+    "specialty": "HRIS Data Governance",
+    "role": "People Data Governance Analyst",
+    "description": "Keeps the HRIS accurate, deduplicated, and audit-ready."
+  },
+  {
+    "id": "hr-engagement-survey",
+    "name": "Engagement Survey Analyst",
+    "category": "People & Talent",
+    "subcategory": "Culture & Engagement",
+    "specialty": "Engagement Surveys",
+    "role": "People Insights Specialist",
+    "description": "Designs and analyzes engagement surveys with action-ready insights."
+  },
+  {
+    "id": "hr-ld-program-lead",
+    "name": "L&D Program Designer",
+    "category": "People & Talent",
+    "subcategory": "Performance & Leadership",
+    "specialty": "Learning & Development",
+    "role": "Learning & Development Specialist",
+    "description": "Builds practical learning paths tied to skills and career progression."
+  },
+  {
+    "id": "hr-compliance-trainer",
+    "name": "Compliance Training Coordinator",
+    "category": "People & Talent",
+    "subcategory": "Performance & Leadership",
+    "specialty": "Compliance Training",
+    "role": "HR Compliance Officer",
+    "description": "Schedules and validates compliance training completion across the company."
+  },
+  {
+    "id": "hr-policy-writer",
+    "name": "HR Policy Writer",
+    "category": "People & Talent",
+    "subcategory": "People Ops & Policy",
+    "specialty": "HR Policy Authoring",
+    "role": "People Policy Drafter",
+    "description": "Drafts clear, compliant HR policies from first principles."
+  },
+  {
+    "id": "hr-employee-relations",
+    "name": "Employee Relations Advisor",
+    "category": "People & Talent",
+    "subcategory": "People Ops & Policy",
+    "specialty": "Employee Relations",
+    "role": "People Conflict & Support Specialist",
+    "description": "Provides structured, empathetic guidance on workplace issues and conflict."
+  },
+  {
+    "id": "hr-workforce-planner",
+    "name": "Workforce Planner",
+    "category": "People & Talent",
+    "subcategory": "Performance & Leadership",
+    "specialty": "Workforce Planning",
+    "role": "Headcount & Capacity Analyst",
+    "description": "Models headcount plans against budget, hiring pipeline, and retention."
+  },
+  {
+    "id": "hr-exit-interviewer",
+    "name": "Exit Interview Analyst",
+    "category": "People & Talent",
+    "subcategory": "People Analytics",
+    "specialty": "Exit & Turnover",
+    "role": "Retention Insights Specialist",
+    "description": "Analyzes exit interviews and turnover themes into retention actions."
+  },
+  {
+    "id": "hr-absenteeism-analyst",
+    "name": "Absenteeism & Leave Analyst",
+    "category": "People & Talent",
+    "subcategory": "People Analytics",
+    "specialty": "Leave & Absenteeism",
+    "role": "Workforce Health Analyst",
+    "description": "Tracks leave and absenteeism patterns while protecting employee privacy."
+  },
+  {
+    "id": "hr-talent-review-lead",
+    "name": "Talent Review Facilitator",
+    "category": "People & Talent",
+    "subcategory": "Performance & Leadership",
+    "specialty": "Succession Planning",
+    "role": "Succession Planning Analyst",
+    "description": "Runs talent review conversations and builds succession plans."
+  },
+  {
+    "id": "hr-internship-coordinator",
+    "name": "Internship Program Coordinator",
+    "category": "People & Talent",
+    "subcategory": "Recruiting & Hiring",
+    "specialty": "Early-Career Programs",
+    "role": "Early-Career Program Lead",
+    "description": "Runs intern and early-career programs with mentorship and structure."
+  },
+  {
+    "id": "hr-org-chart-admin",
+    "name": "Org Chart Administrator",
+    "category": "People & Talent",
+    "subcategory": "Culture & Engagement",
+    "specialty": "Org Design",
+    "role": "Organizational Design Analyst",
+    "description": "Maintains accurate org charts and models restructuring scenarios."
+  },
+  {
+    "id": "hr-culture-program",
+    "name": "Culture Program Lead",
+    "category": "People & Talent",
+    "subcategory": "Culture & Engagement",
+    "specialty": "Culture & Events",
+    "role": "Company Culture Architect",
+    "description": "Designs and tracks culture programs, events, and rituals."
+  },
+  {
+    "id": "hr-remote-work-policy",
+    "name": "Hybrid & Remote Work Policy Lead",
+    "category": "People & Talent",
+    "subcategory": "People Ops & Policy",
+    "specialty": "Remote & Hybrid Policy",
+    "role": "Workplace Policy Analyst",
+    "description": "Maintains hybrid/remote policies and FAQ with consistent guidance."
+  },
+  {
+    "id": "hr-reference-checker",
+    "name": "Reference & Background Check Coordinator",
+    "category": "People & Talent",
+    "subcategory": "Recruiting & Hiring",
+    "specialty": "Reference & Background Checks",
+    "role": "Due-Diligence Operator",
+    "description": "Runs reference checks and background verifications inside policy bounds."
+  },
+  {
+    "id": "hr-hire-decision-memo",
+    "name": "Hire Decision Memo Writer",
+    "category": "People & Talent",
+    "subcategory": "Recruiting & Hiring",
+    "specialty": "Hire Decisions",
+    "role": "Recruiting Insights Analyst",
+    "description": "Writes evidence-based hire/no-hire memos from structured interview data."
+  },
+  {
+    "id": "hr-people-ops-bot",
+    "name": "People Ops Concierge",
+    "category": "People & Talent",
+    "subcategory": "People Ops & Policy",
+    "specialty": "HR Self-Service Concierge",
+    "role": "Employee Self-Service Answer Desk",
+    "description": "Answers employee questions about policies, benefits, and process with accurate references."
+  },
+  {
+    "id": "hr-pulse-checker",
+    "name": "Pulse Survey Runner",
+    "category": "People & Talent",
+    "subcategory": "Culture & Engagement",
+    "specialty": "Pulse Surveys",
+    "role": "Employee Sentiment Analyst",
+    "description": "Runs short pulse surveys and turns sentiment into quick action."
+  },
+  {
+    "id": "hr-retention-risk",
+    "name": "Retention Risk Scout",
+    "category": "People & Talent",
+    "subcategory": "People Analytics",
+    "specialty": "Retention & Flight Risk",
+    "role": "Flight-Risk Analyst",
+    "description": "Flags flight-risk signals early so managers can act before resignation."
+  },
+  {
+    "id": "fin-ar-collections",
+    "name": "AR & Collections Lead",
+    "category": "Finance & Accounting",
+    "subcategory": "Accounting & Close",
+    "specialty": "Receivables & Collections",
+    "role": "Accounts Receivable Specialist",
+    "description": "Tracks receivables aging and drives collections without burning relationships."
+  },
+  {
+    "id": "fin-ap-clerk",
+    "name": "AP & Vendor Payments Clerk",
+    "category": "Finance & Accounting",
+    "subcategory": "Accounting & Close",
+    "specialty": "Payables & Vendor Payments",
+    "role": "Accounts Payable Specialist",
+    "description": "Processes vendor invoices, approvals, and scheduled payments accurately."
+  },
+  {
+    "id": "fin-close-automator",
+    "name": "Month-End Close Automator",
+    "category": "Finance & Accounting",
+    "subcategory": "Accounting & Close",
+    "specialty": "Month-End Close",
+    "role": "Financial Close Specialist",
+    "description": "Automates and verifies the monthly close with checklists and reconciliations."
+  },
+  {
+    "id": "fin-bank-reconciler",
+    "name": "Bank Reconciliation Analyst",
+    "category": "Finance & Accounting",
+    "subcategory": "Accounting & Close",
+    "specialty": "Bank Reconciliation",
+    "role": "Cash Reconciliation Specialist",
+    "description": "Matches bank statements to ledger entries and researches discrepancies."
+  },
+  {
+    "id": "fin-cfo-analyst",
+    "name": "FP&A Analyst",
+    "category": "Finance & Accounting",
+    "subcategory": "Planning & Forecasting",
+    "specialty": "Budgets & Rolling Forecasts",
+    "role": "Financial Planning & Analysis Specialist",
+    "description": "Builds budgets, rolling forecasts, and variance analyses that guide decisions."
+  },
+  {
+    "id": "fin-runway-guard",
+    "name": "Runway & Cash Guard",
+    "category": "Finance & Accounting",
+    "subcategory": "Planning & Forecasting",
+    "specialty": "Runway & Cash",
+    "role": "Cash Runway Forecast Analyst",
+    "description": "Forecasts cash runway and burn under multiple scenarios."
+  },
+  {
+    "id": "fin-revenue-recognizer",
+    "name": "Revenue Recognition Analyst",
+    "category": "Finance & Accounting",
+    "subcategory": "Revenue & Billing",
+    "specialty": "Revenue Recognition",
+    "role": "ASC 606 Compliance Specialist",
+    "description": "Validates revenue recognition against ASC 606 for subscription revenue."
+  },
+  {
+    "id": "fin-expense-auditor",
+    "name": "Expense Auditor",
+    "category": "Finance & Accounting",
+    "subcategory": "Internal Audit & Controls",
+    "specialty": "Expense & Spend Policy",
+    "role": "Spend Compliance Reviewer",
+    "description": "Reviews expense reports for policy compliance and anomalies."
+  },
+  {
+    "id": "fin-billing-systems",
+    "name": "Billing Systems Analyst",
+    "category": "Finance & Accounting",
+    "subcategory": "Revenue & Billing",
+    "specialty": "Subscription Billing",
+    "role": "Subscription Billing Specialist",
+    "description": "Monitors billing health: invoices, dunning, retries, and recovery."
+  },
+  {
+    "id": "fin-tax-calendar",
+    "name": "Tax Calendar & Filing Tracker",
+    "category": "Finance & Accounting",
+    "subcategory": "Payroll & Tax",
+    "specialty": "Tax Calendar & Filings",
+    "role": "Tax Compliance Coordinator",
+    "description": "Tracks tax obligations, deadlines, and filing readiness across jurisdictions."
+  },
+  {
+    "id": "fin-vat-expert",
+    "name": "VAT & Sales Tax Analyst",
+    "category": "Finance & Accounting",
+    "subcategory": "Payroll & Tax",
+    "specialty": "VAT & Sales Tax",
+    "role": "Indirect Tax Specialist",
+    "description": "Validates VAT/sales-tax handling for customers, products, and refunds."
+  },
+  {
+    "id": "fin-pricing-analyst",
+    "name": "Pricing & Packaging Analyst",
+    "category": "Finance & Accounting",
+    "subcategory": "Revenue & Billing",
+    "specialty": "Pricing & Packaging",
+    "role": "Monetization Strategist",
+    "description": "Models pricing and packaging scenarios with demand and competitive inputs."
+  },
+  {
+    "id": "fin-cio",
+    "name": "Cash Flow Forecaster",
+    "category": "Finance & Accounting",
+    "subcategory": "Planning & Forecasting",
+    "specialty": "Cash Flow Forecasting",
+    "role": "Treasury & Liquidity Analyst",
+    "description": "Forecasts daily cash flows and flags liquidity pressure points."
+  },
+  {
+    "id": "fin-treasury-compliance",
+    "name": "Treasury Compliance Officer",
+    "category": "Finance & Accounting",
+    "subcategory": "Internal Audit & Controls",
+    "specialty": "Treasury Controls",
+    "role": "Bank & GL Controls Analyst",
+    "description": "Monitors bank controls, dual approval, and treasury hygiene."
+  },
+  {
+    "id": "fin-boost-payroll",
+    "name": "Payroll Accuracy Boost",
+    "category": "Finance & Accounting",
+    "subcategory": "Payroll & Tax",
+    "specialty": "Payroll Validation",
+    "role": "Payroll Validation Analyst",
+    "description": "Cross-checks payroll inputs for errors before funds move."
+  },
+  {
+    "id": "fin-committee-secretary",
+    "name": "Finance Committee Secretary",
+    "category": "Finance & Accounting",
+    "subcategory": "Planning & Forecasting",
+    "specialty": "Board & Investor Reporting",
+    "role": "Board Reporting Analyst",
+    "description": "Prepares board and investor financial packs with clean narratives."
+  },
+  {
+    "id": "fin-close-checklist",
+    "name": "Close Checklist Enforcer",
+    "category": "Finance & Accounting",
+    "subcategory": "Accounting & Close",
+    "specialty": "Close Governance",
+    "role": "Close Process Auditor",
+    "description": "Enforces the month-end close checklist with owners and evidence."
+  },
+  {
+    "id": "fin-audit-support",
+    "name": "Financial Audit Support",
+    "category": "Finance & Accounting",
+    "subcategory": "Internal Audit & Controls",
+    "specialty": "External Audit Support",
+    "role": "External Audit Liaison",
+    "description": "Prepares schedules, evidence, and responses for external audits."
+  },
+  {
+    "id": "fin-forensic-flag",
+    "name": "Financial Anomaly Scout",
+    "category": "Finance & Accounting",
+    "subcategory": "Internal Audit & Controls",
+    "specialty": "Fraud & Anomaly Detection",
+    "role": "Internal Audit Analyst",
+    "description": "Scans transactions for anomalies, duplicate payments, and fraud signals."
+  },
+  {
+    "id": "fin-use-of-funds",
+    "name": "Use-of-Funds Reporter",
+    "category": "Finance & Accounting",
+    "subcategory": "Planning & Forecasting",
+    "specialty": "Spend Accountability",
+    "role": "Spend Accountability Analyst",
+    "description": "Maps spend to budget categories and funding initiatives."
+  },
+  {
+    "id": "fin-currency-risk",
+    "name": "Currency & FX Risk Analyst",
+    "category": "Finance & Accounting",
+    "subcategory": "Treasury & Risk",
+    "specialty": "FX & Currency Risk",
+    "role": "Treasury FX Specialist",
+    "description": "Monitors FX exposure and hedging for international operations."
+  },
+  {
+    "id": "fin-procurement-analyst",
+    "name": "Procurement & Spend Analyst",
+    "category": "Finance & Accounting",
+    "subcategory": "Treasury & Risk",
+    "specialty": "Procurement & Spend",
+    "role": "Vendor Spend Specialist",
+    "description": "Analyzes vendor spend for consolidation, renegotiation, and savings."
+  },
+  {
+    "id": "fin-cap-table-owner",
+    "name": "Cap Table & Equity Analyst",
+    "category": "Finance & Accounting",
+    "subcategory": "Treasury & Risk",
+    "specialty": "Cap Table & Equity",
+    "role": "Equity Administration Specialist",
+    "description": "Maintains the cap table and models dilution scenarios accurately."
+  },
+  {
+    "id": "fin-revenue-lag-watch",
+    "name": "Revenue Leakage Watch",
+    "category": "Finance & Accounting",
+    "subcategory": "Revenue & Billing",
+    "specialty": "Revenue Leakage",
+    "role": "Subscription Revenue Auditor",
+    "description": "Hunts revenue leakage across plans, add-ons, and billing edge cases."
+  },
+  {
+    "id": "fin-initial-revenue-model",
+    "name": "Unit Economics Modeler",
+    "category": "Finance & Accounting",
+    "subcategory": "Planning & Forecasting",
+    "specialty": "Unit Economics",
+    "role": "SaaS Metric Modeler",
+    "description": "Models CAC, LTV, NRR, and payback to guide growth spend."
+  },
+  {
+    "id": "fin-statement-writer",
+    "name": "Financial Statement Writer",
+    "category": "Finance & Accounting",
+    "subcategory": "Planning & Forecasting",
+    "specialty": "Financial Narratives",
+    "role": "Reporting & Narrative Analyst",
+    "description": "Writes MD&A-style narratives around financial statements."
+  },
+  {
+    "id": "fin-subsidiary-reconciler",
+    "name": "Intercompany & Subsidiary Reconciler",
+    "category": "Finance & Accounting",
+    "subcategory": "Accounting & Close",
+    "specialty": "Intercompany Reconciliation",
+    "role": "Consolidation Analyst",
+    "description": "Reconciles intercompany accounts and prepares consolidation inputs."
+  },
+  {
+    "id": "fin-commission-calc",
+    "name": "Commission Calculator",
+    "category": "Finance & Accounting",
+    "subcategory": "Revenue & Billing",
+    "specialty": "Sales Commissions",
+    "role": "Sales Compensation Analyst",
+    "description": "Validates sales commission accruals and reconciles payouts."
+  },
+  {
+    "id": "fin-credit-memo",
+    "name": "Credit Memo Processor",
+    "category": "Finance & Accounting",
+    "subcategory": "Accounting & Close",
+    "specialty": "Refunds & Adjustments",
+    "role": "Refund & Adjustment Specialist",
+    "description": "Processes refunds and credit memos with policy and tax checks."
+  },
+  {
+    "id": "fin-budget-drilldown",
+    "name": "Budget-to-Actual Drilldown",
+    "category": "Finance & Accounting",
+    "subcategory": "Planning & Forecasting",
+    "specialty": "Variance Analysis",
+    "role": "Variance Explainer",
+    "description": "Explains budget variances at department and line-item granularity."
+  },
+  {
+    "id": "sm-outbound-sdr",
+    "name": "Outbound SDR",
+    "category": "Sales & Marketing",
+    "subcategory": "Sales Development",
+    "specialty": "Outbound Sequencing",
+    "role": "Outbound Sales Development Rep",
+    "description": "Builds and runs multi-touch personalized outbound sequences."
+  },
+  {
+    "id": "sm-crm-hygiene",
+    "name": "CRM Data Hygienist",
+    "category": "Sales & Marketing",
+    "subcategory": "Revenue Operations",
+    "specialty": "CRM Hygiene",
+    "role": "Revenue Operations Analyst",
+    "description": "Keeps the CRM accurate, deduplicated, and pipeline-forecasting-ready."
+  },
+  {
+    "id": "sm-abm-campaigner",
+    "name": "ABM Campaign Architect",
+    "category": "Sales & Marketing",
+    "subcategory": "Demand Generation",
+    "specialty": "ABM Campaigns",
+    "role": "Account-Based Marketing Specialist",
+    "description": "Designs target-account campaigns across channels and tracks influence."
+  },
+  {
+    "id": "sm-content-marketer",
+    "name": "Content Marketer",
+    "category": "Sales & Marketing",
+    "subcategory": "Brand & Content",
+    "specialty": "Content Strategy",
+    "role": "B2B Content Strategist",
+    "description": "Plans and drafts content aligned to funnel intent and SEO."
+  },
+  {
+    "id": "sm-seo-specialist",
+    "name": "SEO Specialist",
+    "category": "Sales & Marketing",
+    "subcategory": "Growth Engine",
+    "specialty": "SEO & Organic",
+    "role": "Organic Growth Engineer",
+    "description": "Runs keyword research, on-page audits, and content architecture."
+  },
+  {
+    "id": "sm-campaign-analyst",
+    "name": "Campaign Performance Analyst",
+    "category": "Sales & Marketing",
+    "subcategory": "Marketing Analysis",
+    "specialty": "Campaign Analytics",
+    "role": "Marketing Analytics Specialist",
+    "description": "Measures campaign performance with clean attribution and UTM governance."
+  },
+  {
+    "id": "sm-lifecycle-email",
+    "name": "Lifecycle Email Programmer",
+    "category": "Sales & Marketing",
+    "subcategory": "Demand Generation",
+    "specialty": "Lifecycle Email",
+    "role": "Email Marketing Specialist",
+    "description": "Builds and audits lifecycle email programs from onboarding to win-back."
+  },
+  {
+    "id": "sm-social-media",
+    "name": "Social Media Manager",
+    "category": "Sales & Marketing",
+    "subcategory": "Brand & Content",
+    "specialty": "Social Content",
+    "role": "Community Engagement Specialist",
+    "description": "Plans and schedules platform-native social content with engagement follow-up."
+  },
+  {
+    "id": "sm-product-marketer",
+    "name": "Product Marketer",
+    "category": "Sales & Marketing",
+    "subcategory": "Brand & Content",
+    "specialty": "Positioning & Launch",
+    "role": "Positioning & Launch Specialist",
+    "description": "Crafts positioning, messaging, and launch narratives for features."
+  },
+  {
+    "id": "sm-sales-enablement",
+    "name": "Sales Enablement Lead",
+    "category": "Sales & Marketing",
+    "subcategory": "Sales Development",
+    "specialty": "Enablement & Battlecards",
+    "role": "Enablement & Battlecard Builder",
+    "description": "Builds battlecards, objection handling, and enablement content for reps."
+  },
+  {
+    "id": "sm-win-loss-lead",
+    "name": "Win/Loss Analyst",
+    "category": "Sales & Marketing",
+    "subcategory": "Revenue Operations",
+    "specialty": "Win/Loss Analysis",
+    "role": "Deal Forensics Specialist",
+    "description": "Runs win/loss interviews and synthesizes deal outcomes into GTM signals."
+  },
+  {
+    "id": "sm-jc-analyst",
+    "name": "Competitive Intelligence Analyst",
+    "category": "Sales & Marketing",
+    "subcategory": "Go-to-Market",
+    "specialty": "Competitive Intelligence",
+    "role": "Market & Competitor Analyst",
+    "description": "Tracks competitor moves and updates the competitive landscape."
+  },
+  {
+    "id": "sm-account-insight",
+    "name": "Account Insight Researcher",
+    "category": "Sales & Marketing",
+    "subcategory": "Sales Development",
+    "specialty": "Account Research",
+    "role": "Sales Research Specialist",
+    "description": "Builds deep account intelligence for sellers before outreach."
+  },
+  {
+    "id": "sm-demo-scripter",
+    "name": "Demo & Webinar Scripter",
+    "category": "Sales & Marketing",
+    "subcategory": "Sales Development",
+    "specialty": "Demo & Discovery",
+    "role": "Sales Storytelling Specialist",
+    "description": "Writes demo scripts, discovery frameworks, and webinar narratives."
+  },
+  {
+    "id": "sm-quote-designer",
+    "name": "Quote & Pricing Proposal Designer",
+    "category": "Sales & Marketing",
+    "subcategory": "Sales Development",
+    "specialty": "Quotes & Pricing Proposals",
+    "role": "Sales Proposal Specialist",
+    "description": "Assembles accurate quotes, pricing proposals, and commercial terms."
+  },
+  {
+    "id": "sm-pipeline-forecaster",
+    "name": "Pipeline Forecaster",
+    "category": "Sales & Marketing",
+    "subcategory": "Revenue Operations",
+    "specialty": "Pipeline Forecasting",
+    "role": "Sales Forecast Analyst",
+    "description": "Forecasts sales from pipeline with stage probabilities and historical win rates."
+  },
+  {
+    "id": "sm-partner-channel",
+    "name": "Partner & Channel Manager",
+    "category": "Sales & Marketing",
+    "subcategory": "Revenue Operations",
+    "specialty": "Partners & Channels",
+    "role": "Partnerships Specialist",
+    "description": "Develops partner and channel programs with co-selling motions."
+  },
+  {
+    "id": "sm-events-webinar",
+    "name": "Events & Webinar Planner",
+    "category": "Sales & Marketing",
+    "subcategory": "Demand Generation",
+    "specialty": "Events & Webinars",
+    "role": "Field Marketing Coordinator",
+    "description": "Plans, runs, and follows up webinars and events end-to-end."
+  },
+  {
+    "id": "sm-pr-reputation",
+    "name": "PR & Reputation Analyst",
+    "category": "Sales & Marketing",
+    "subcategory": "Brand & Content",
+    "specialty": "PR & Reputation",
+    "role": "Communications Specialist",
+    "description": "Drafts press materials and monitors brand reputation signals."
+  },
+  {
+    "id": "sm-landing-page-auditor",
+    "name": "Landing Page Conversion Auditor",
+    "category": "Sales & Marketing",
+    "subcategory": "Growth Engine",
+    "specialty": "CRO & Landing Pages",
+    "role": "CRO Specialist",
+    "description": "Audits landing pages for conversion resistance and CRO opportunities."
+  },
+  {
+    "id": "sm-brand-assets",
+    "name": "Brand Messaging Guardian",
+    "category": "Sales & Marketing",
+    "subcategory": "Brand & Content",
+    "specialty": "Brand Voice",
+    "role": "Brand Voice Consistency Analyst",
+    "description": "Reviews all customer-facing copy for brand voice and tone consistency."
+  },
+  {
+    "id": "sm-fashion-plp",
+    "name": "Product Listing Copywriter",
+    "category": "Sales & Marketing",
+    "subcategory": "Brand & Content",
+    "specialty": "Ecommerce Copy",
+    "role": "Ecommerce & Catalog Copywriter",
+    "description": "Writes product listings and catalog copy that convert."
+  },
+  {
+    "id": "sm-display-ad-analyst",
+    "name": "Paid Ads Performance Analyst",
+    "category": "Sales & Marketing",
+    "subcategory": "Growth Engine",
+    "specialty": "Paid Ads",
+    "role": "Performance Marketing Specialist",
+    "description": "Monitors paid campaigns for spend efficiency and wasted budget."
+  },
+  {
+    "id": "sm-customer-voice",
+    "name": "Customer Voice Miner",
+    "category": "Sales & Marketing",
+    "subcategory": "Marketing Analysis",
+    "specialty": "Voice of Customer",
+    "role": "Market Research Analyst",
+    "description": "Mines reviews, social, and support signals for customer sentiment."
+  },
+  {
+    "id": "sm-webinar-postproducer",
+    "name": "Webinar Follow-Up Producer",
+    "category": "Sales & Marketing",
+    "subcategory": "Demand Generation",
+    "specialty": "Event Follow-Up",
+    "role": "Demand-Funnel Operator",
+    "description": "Runs structured follow-up journeys for every event attendee."
+  },
+  {
+    "id": "sm-slack-bytes",
+    "name": "Marketing Ops Reporter",
+    "category": "Sales & Marketing",
+    "subcategory": "Marketing Analysis",
+    "specialty": "Marketing Operations",
+    "role": "Marketing Operations Analyst",
+    "description": "Watches marketing ops calendars, approvals, and asset readiness."
+  },
+  {
+    "id": "sm-market-link-scan",
+    "name": "Market Signal Scanner",
+    "category": "Sales & Marketing",
+    "subcategory": "Marketing Analysis",
+    "specialty": "Market Intelligence",
+    "role": "Market Intelligence Scout",
+    "description": "Scans news, funding, and hiring signals for market opportunities."
+  },
+  {
+    "id": "sm-landing-audit",
+    "name": "Landing Page Readiness Auditor",
+    "category": "Sales & Marketing",
+    "subcategory": "Growth Engine",
+    "specialty": "Pre-Launch QA",
+    "role": "Pre-Launch QA Specialist",
+    "description": "Checks landing pages and campaigns for correctness before launch."
+  },
+  {
+    "id": "sm-cold-email-validator",
+    "name": "Cold Email Deliverability Analyst",
+    "category": "Sales & Marketing",
+    "subcategory": "Demand Generation",
+    "specialty": "Deliverability",
+    "role": "Sender Reputation Auditor",
+    "description": "Validates DNS, warmup, and engagement so cold emails actually land."
+  },
+  {
+    "id": "sm-content-repurposer",
+    "name": "Content Repurposer",
+    "category": "Sales & Marketing",
+    "subcategory": "Brand & Content",
+    "specialty": "Content Repurposing",
+    "role": "Channel-Native Content Strategist",
+    "description": "Turns one strong asset into channel-native content across the business."
+  },
+  {
+    "id": "cs-triage-router",
+    "name": "Support Triage Router",
+    "category": "Customer Experience",
+    "subcategory": "Support Operations",
+    "specialty": "Triage & Routing",
+    "role": "Tier-1 Triage Specialist",
+    "description": "Triages tickets by severity and routes with an SLA-aware queue."
+  },
+  {
+    "id": "cs-sla-watchdog",
+    "name": "SLA Compliance Watchdog",
+    "category": "Customer Experience",
+    "subcategory": "Support Operations",
+    "specialty": "SLA Monitoring",
+    "role": "Support Operations Monitor",
+    "description": "Watches ticket SLAs and escalates at-risk tickets in time."
+  },
+  {
+    "id": "cs-empathy-coach",
+    "name": "Empathy & De-escalation Coach",
+    "category": "Customer Experience",
+    "subcategory": "Voice of Customer",
+    "specialty": "Empathy & De-escalation",
+    "role": "Customer Experience Specialist",
+    "description": "Drafts empathetic, de-escalating responses for frustrated customers."
+  },
+  {
+    "id": "cs-api-support-engineer",
+    "name": "API Support Engineer",
+    "category": "Customer Experience",
+    "subcategory": "Technical Support",
+    "specialty": "API & SDK Support",
+    "role": "Developer-Facing Support Specialist",
+    "description": "Debug customer API issues with reproduction and SDK isolation."
+  },
+  {
+    "id": "cs-bug-liaison",
+    "name": "Bug & Escalation Liaison",
+    "category": "Customer Experience",
+    "subcategory": "Technical Support",
+    "specialty": "Bug Triage & Escalation",
+    "role": "Product-Feedback Bridge",
+    "description": "Marshals verified bugs to engineering with reproducer packages."
+  },
+  {
+    "id": "cs-kb-writer",
+    "name": "Knowledge Base Writer",
+    "category": "Customer Experience",
+    "subcategory": "Content & Learning",
+    "specialty": "Knowledge Base",
+    "role": "Self-Service Content Author",
+    "description": "Writes help articles that deflect tickets and are searchable."
+  },
+  {
+    "id": "cs-announcement-drafter",
+    "name": "Outage & Announcement Drafter",
+    "category": "Customer Experience",
+    "subcategory": "Voice of Customer",
+    "specialty": "Announcements & Outages",
+    "role": "Incident Communication Specialist",
+    "description": "Drafts clear incident updates and feature announcements for customers."
+  },
+  {
+    "id": "cs-csat-analyst",
+    "name": "CSAT & NPS Analyst",
+    "category": "Customer Experience",
+    "subcategory": "Insights & Reporting",
+    "specialty": "CSAT & NPS",
+    "role": "Customer Satisfaction Analyst",
+    "description": "Analyzes CSAT/NPS drivers and closes the loop with detractors."
+  },
+  {
+    "id": "cs-onboarding-specialist",
+    "name": "Onboarding Success Specialist",
+    "category": "Customer Experience",
+    "subcategory": "Onboarding & Retention",
+    "specialty": "Customer Onboarding",
+    "role": "Customer Onboarding Manager",
+    "description": "Runs structured onboarding toward activation milestones."
+  },
+  {
+    "id": "cs-health-scorer",
+    "name": "Account Health Scorer",
+    "category": "Customer Experience",
+    "subcategory": "Onboarding & Retention",
+    "specialty": "Account Health",
+    "role": "Customer Success Analytics",
+    "description": "Scores account health from usage, sentiment, and support signals."
+  },
+  {
+    "id": "cs-churn-preventer",
+    "name": "Churn Prevention Analyst",
+    "category": "Customer Experience",
+    "subcategory": "Onboarding & Retention",
+    "specialty": "Churn Prevention",
+    "role": "Retention Specialist",
+    "description": "Builds retention plays for at-risk accounts with executive escalation."
+  },
+  {
+    "id": "cs-renewal-specialist",
+    "name": "Renewal & Expansion Specialist",
+    "category": "Customer Experience",
+    "subcategory": "Onboarding & Retention",
+    "specialty": "Renewals & Expansion",
+    "role": "Account Expansion Analyst",
+    "description": "Runs renewal plays and identifies expansion opportunities."
+  },
+  {
+    "id": "cs-qbr-builder",
+    "name": "QBR & Executive Report Builder",
+    "category": "Customer Experience",
+    "subcategory": "Onboarding & Retention",
+    "specialty": "QBRs & Executive Reviews",
+    "role": "Business Review Producer",
+    "description": "Builds business review decks that show value and roadmap alignment."
+  },
+  {
+    "id": "cs-community-manager",
+    "name": "Community & Forum Manager",
+    "category": "Customer Experience",
+    "subcategory": "Voice of Customer",
+    "specialty": "Community & Forums",
+    "role": "Community Support Specialist",
+    "description": "Moderates forums, answers questions, and routes power users."
+  },
+  {
+    "id": "cs-training-producer",
+    "name": "Customer Training Producer",
+    "category": "Customer Experience",
+    "subcategory": "Content & Learning",
+    "specialty": "Customer Training",
+    "role": "Enablement Content Specialist",
+    "description": "Creates structured training paths and tutorials for customers."
+  },
+  {
+    "id": "cs-voice-of-customer",
+    "name": "Voice of Customer Miner",
+    "category": "Customer Experience",
+    "subcategory": "Voice of Customer",
+    "specialty": "VoC Mining",
+    "role": "Feedback Insights Analyst",
+    "description": "Aggregates support and product feedback into thematic insights."
+  },
+  {
+    "id": "cs-security-support",
+    "name": "Security & Privacy Support",
+    "category": "Customer Experience",
+    "subcategory": "Technical Support",
+    "specialty": "Security & Privacy Support",
+    "role": "Trust-Desk Specialist",
+    "description": "Handles security questionnaires and privacy requests accurately."
+  },
+  {
+    "id": "cs-billing-support",
+    "name": "Billing & Refund Support",
+    "category": "Customer Experience",
+    "subcategory": "Support Operations",
+    "specialty": "Billing & Refunds",
+    "role": "Finance-Facing Support Specialist",
+    "description": "Handles billing disputes, refunds, and invoice questions."
+  },
+  {
+    "id": "cs-macros-writer",
+    "name": "Support Macro & Canned Reply Writer",
+    "category": "Customer Experience",
+    "subcategory": "Support Operations",
+    "specialty": "Macros & Canned Replies",
+    "role": "Support Efficiency Specialist",
+    "description": "Writes high-quality canned responses and macros that feel human."
+  },
+  {
+    "id": "cs-quality-assurer",
+    "name": "Support Quality Auditor",
+    "category": "Customer Experience",
+    "subcategory": "Support Operations",
+    "specialty": "Quality Assurance",
+    "role": "QA Analyst for Support",
+    "description": "Reviews support interactions for quality, tone, and accuracy."
+  },
+  {
+    "id": "cs-agent-coach",
+    "name": "Support Agent Coach",
+    "category": "Customer Experience",
+    "subcategory": "Content & Learning",
+    "specialty": "Agent Coaching",
+    "role": "Agent Enablement Specialist",
+    "description": "Coaches support agents with structured feedback and drills."
+  },
+  {
+    "id": "cs-rtv-stall-finder",
+    "name": "Time-to-Value Stall Finder",
+    "category": "Customer Experience",
+    "subcategory": "Onboarding & Retention",
+    "specialty": "Time-to-Value",
+    "role": "Activation Analyst",
+    "description": "Finds customers stuck before activation and drives unstuck plays."
+  },
+  {
+    "id": "cs-data-export-specialist",
+    "name": "Data Export & Migration Specialist",
+    "category": "Customer Experience",
+    "subcategory": "Technical Support",
+    "specialty": "Data Export & Migration",
+    "role": "Data Operations Support",
+    "description": "Handles data exports, imports, and migration requests safely."
+  },
+  {
+    "id": "cs-weekly-support-brief",
+    "name": "Weekly Support Brief Producer",
+    "category": "Customer Experience",
+    "subcategory": "Insights & Reporting",
+    "specialty": "Support Briefings",
+    "role": "Support Reporting Analyst",
+    "description": "Compiles the weekly support health brief for leadership."
+  },
+  {
+    "id": "cs-critical-ticket-sentinel",
+    "name": "Critical Ticket Sentinel",
+    "category": "Customer Experience",
+    "subcategory": "Support Operations",
+    "specialty": "Critical Ticket Monitoring",
+    "role": "Hot-Issue Monitor",
+    "description": "Watches for high-severity ticket clusters and raises the alarm."
+  },
+  {
+    "id": "cs-voice-to-product",
+    "name": "Support-to-Product Bridge",
+    "category": "Customer Experience",
+    "subcategory": "Voice of Customer",
+    "specialty": "Support-to-Product",
+    "role": "Product Feedback Analyst",
+    "description": "Transforms recurring support themes into prioritized product requests."
+  },
+  {
+    "id": "cs-helpdesk-ops",
+    "name": "Helpdesk Ops Analyst",
+    "category": "Customer Experience",
+    "subcategory": "Support Operations",
+    "specialty": "Helpdesk Ops",
+    "role": "CX Tooling & Routing Specialist",
+    "description": "Keeps the helpdesk tooling clean: routing, macros, and SLA hygiene."
+  },
+  {
+    "id": "cs-docs-gap-hunter",
+    "name": "Docs Gap Hunter",
+    "category": "Customer Experience",
+    "subcategory": "Content & Learning",
+    "specialty": "Docs Coverage",
+    "role": "Knowledge Base Gap Analyst",
+    "description": "Finds KB gaps by mining ticket deflection and search misses."
+  },
+  {
+    "id": "cs-feedback-to-product",
+    "name": "Feedback-to-Product Liaison",
+    "category": "Customer Experience",
+    "subcategory": "Voice of Customer",
+    "specialty": "Feedback to Product",
+    "role": "Support-to-Product Translator",
+    "description": "Turns recurring support voice into ranked product insights."
+  },
+  {
+    "id": "cs-escalation-coordinator",
+    "name": "Escalation Coordinator",
+    "category": "Customer Experience",
+    "subcategory": "Support Operations",
+    "specialty": "Escalations",
+    "role": "Executive Escalation Operator",
+    "description": "Runs executive escalations end-to-end with SLAs and calm communication."
+  },
+  {
+    "id": "lg-contract-reviewer",
+    "name": "Contract Reviewer",
+    "category": "Legal & Compliance",
+    "subcategory": "Contracts & Commercial",
+    "specialty": "Contract Review",
+    "role": "Commercial Contracts Analyst",
+    "description": "Reviews contracts for key terms, risk flags, and negotiable gaps."
+  },
+  {
+    "id": "lg-msa-negotiatior",
+    "name": "MSA & SOW Negotiator",
+    "category": "Legal & Compliance",
+    "subcategory": "Contracts & Commercial",
+    "specialty": "MSA & SOW Negotiation",
+    "role": "Commercial Deal Drafter",
+    "description": "Drafts and negotiates MSAs, SOWs, and addenda aligned to standard positions."
+  },
+  {
+    "id": "lg-nda-queue",
+    "name": "NDA & Paperwork Processor",
+    "category": "Legal & Compliance",
+    "subcategory": "Contracts & Commercial",
+    "specialty": "NDA & Paperwork",
+    "role": "Transactional Legal Processor",
+    "description": "Processes NDAs and standard paperwork quickly with version control."
+  },
+  {
+    "id": "lg-dpa-reviewer",
+    "name": "DPA & Data Protection Reviewer",
+    "category": "Legal & Compliance",
+    "subcategory": "Privacy & Data Protection",
+    "specialty": "DPA Review",
+    "role": "Data Protection Counsel Analyst",
+    "description": "Reviews data processing agreements against GDPR/CCPA requirements."
+  },
+  {
+    "id": "lg-dsar-processor",
+    "name": "DSAR Processing Assistant",
+    "category": "Legal & Compliance",
+    "subcategory": "Privacy & Data Protection",
+    "specialty": "DSAR Processing",
+    "role": "Privacy Rights Coordinator",
+    "description": "Processes data subject access requests accurately within deadlines."
+  },
+  {
+    "id": "lg-pia-facilitator",
+    "name": "Privacy Impact Assessor",
+    "category": "Legal & Compliance",
+    "subcategory": "Privacy & Data Protection",
+    "specialty": "Privacy Impact Assessments",
+    "role": "DPIA Coordinator",
+    "description": "Runs privacy impact assessments for new features and vendors."
+  },
+  {
+    "id": "lg-vendor-risk-reviewer",
+    "name": "Vendor Risk Reviewer",
+    "category": "Legal & Compliance",
+    "subcategory": "Governance & Regulatory",
+    "specialty": "Vendor Risk",
+    "role": "Third-Party Due Diligence Analyst",
+    "description": "Assesses vendor security and privacy posture against policy."
+  },
+  {
+    "id": "lg-compliance-program",
+    "name": "Compliance Program Builder",
+    "category": "Legal & Compliance",
+    "subcategory": "Governance & Regulatory",
+    "specialty": "Compliance Programs",
+    "role": "Compliance Program Architect",
+    "description": "Builds and maintains compliance programs with policies and evidence."
+  },
+  {
+    "id": "lg-reg-change-monitor",
+    "name": "Regulatory Change Monitor",
+    "category": "Legal & Compliance",
+    "subcategory": "Governance & Regulatory",
+    "specialty": "Regulatory Monitoring",
+    "role": "Legal-Jurisdiction Scanner",
+    "description": "Tracks regulatory changes affecting the business and summarizes action needed."
+  },
+  {
+    "id": "lg-policy-drafter",
+    "name": "Policy & Procedure Drafter",
+    "category": "Legal & Compliance",
+    "subcategory": "Legal Operations",
+    "specialty": "Policy Drafting",
+    "role": "Legal Policy Writer",
+    "description": "Drafts clear corporate policies from requirements to final wording."
+  },
+  {
+    "id": "lg-training-completeness",
+    "name": "Legal Training Completeness Monitor",
+    "category": "Legal & Compliance",
+    "subcategory": "Legal Operations",
+    "specialty": "Compliance Training",
+    "role": "Compliance Training Guard",
+    "description": "Tracks legal-mandated training completion across teams."
+  },
+  {
+    "id": "lg-litigation-hold",
+    "name": "Litigation Hold Coordinator",
+    "category": "Legal & Compliance",
+    "subcategory": "Legal Operations",
+    "specialty": "Litigation Holds",
+    "role": "eDiscovery & Hold Specialist",
+    "description": "Manages litigation holds and preservation obligations accurately."
+  },
+  {
+    "id": "lg-os-license-reviewer",
+    "name": "Open Source License Reviewer",
+    "category": "Legal & Compliance",
+    "subcategory": "Employment & IP",
+    "specialty": "Open Source Licenses",
+    "role": "OSS Compliance Specialist",
+    "description": "Reviews dependency licenses and flags compliance obligations."
+  },
+  {
+    "id": "lg-copyright-sentinel",
+    "name": "Copyright & Trademark Sentinel",
+    "category": "Legal & Compliance",
+    "subcategory": "Employment & IP",
+    "specialty": "Trademarks & Copyright",
+    "role": "IP Infringement Monitor",
+    "description": "Scans for brand/trademark misuse and copyright risk signals."
+  },
+  {
+    "id": "lg-terms-writer",
+    "name": "Terms & Policy Page Writer",
+    "category": "Legal & Compliance",
+    "subcategory": "Contracts & Commercial",
+    "specialty": "Terms & Policy Pages",
+    "role": "Customer-Facing Legal Content",
+    "description": "Drafts product terms, privacy notices, and policy pages."
+  },
+  {
+    "id": "lg-dispute-intake",
+    "name": "Dispute & Claim Intake",
+    "category": "Legal & Compliance",
+    "subcategory": "Legal Operations",
+    "specialty": "Dispute Intake",
+    "role": "Legal Intake Coordinator",
+    "description": "Tracks disputes and claims into a structured matter pipeline."
+  },
+  {
+    "id": "lg-records-retention",
+    "name": "Records Retention Manager",
+    "category": "Legal & Compliance",
+    "subcategory": "Legal Operations",
+    "specialty": "Records Retention",
+    "role": "Data Lifecycle Compliance Analyst",
+    "description": "Enforces retention schedules and destruction obligations."
+  },
+  {
+    "id": "lg-coi-register",
+    "name": "Conflict-of-Interest Register Keeper",
+    "category": "Legal & Compliance",
+    "subcategory": "Governance & Regulatory",
+    "specialty": "Conflict of Interest",
+    "role": "Corporate Governance Analyst",
+    "description": "Maintains the COI register and annual disclosure cycle."
+  },
+  {
+    "id": "lg-employ-law-review",
+    "name": "Employment Law Review Analyst",
+    "category": "Legal & Compliance",
+    "subcategory": "Employment & IP",
+    "specialty": "Employment Law",
+    "role": "HR Legal Risk Reviewer",
+    "description": "Reviews HR practices and policies for employment-law risk."
+  },
+  {
+    "id": "lg-data-mapping",
+    "name": "Data Mapping & Inventory Lead",
+    "category": "Legal & Compliance",
+    "subcategory": "Privacy & Data Protection",
+    "specialty": "Data Mapping & Inventory",
+    "role": "Privacy Data Architect",
+    "description": "Maintains the data inventory and processing map."
+  },
+  {
+    "id": "lg-incident-privacy",
+    "name": "Breach & Incident Privacy Liaison",
+    "category": "Legal & Compliance",
+    "subcategory": "Privacy & Data Protection",
+    "specialty": "Breach & Incident Privacy",
+    "role": "Privacy Incident Responder",
+    "description": "Supports privacy obligations during security incidents."
+  },
+  {
+    "id": "lg-export-control",
+    "name": "Export Control Reviewer",
+    "category": "Legal & Compliance",
+    "subcategory": "Governance & Regulatory",
+    "specialty": "Export Controls",
+    "role": "Trade Compliance Analyst",
+    "description": "Reviews transactions and tech for export-control risk."
+  },
+  {
+    "id": "lg-ai-governance",
+    "name": "AI Governance Reviewer",
+    "category": "Legal & Compliance",
+    "subcategory": "Governance & Regulatory",
+    "specialty": "AI Governance",
+    "role": "Responsible-AI Compliance Analyst",
+    "description": "Reviews AI features for governance, transparency, and acceptable use."
+  },
+  {
+    "id": "lg-board-minutes",
+    "name": "Board & Committee Minute Taker",
+    "category": "Legal & Compliance",
+    "subcategory": "Governance & Regulatory",
+    "specialty": "Board Minutes",
+    "role": "Corporate Secretary Support",
+    "description": "Drafts board meeting minutes and tracks resolutions."
+  },
+  {
+    "id": "lg-legal-kb",
+    "name": "Legal Knowledge Base Curator",
+    "category": "Legal & Compliance",
+    "subcategory": "Legal Operations",
+    "specialty": "Legal KB & FAQs",
+    "role": "Legal Self-Service Author",
+    "description": "Maintains a lawyer-approved FAQ and playbook library."
+  },
+  {
+    "id": "lg-anti-money-laundering",
+    "name": "AML Screening Reviewer",
+    "category": "Legal & Compliance",
+    "subcategory": "Governance & Regulatory",
+    "specialty": "AML Screening",
+    "role": "Anti-Money-Laundering Analyst",
+    "description": "Runs and reviews AML screening hits with documentation."
+  },
+  {
+    "id": "lg-subprocessor-track",
+    "name": "Subprocessor Register Keeper",
+    "category": "Legal & Compliance",
+    "subcategory": "Privacy & Data Protection",
+    "specialty": "Subprocessor Register",
+    "role": "Privacy Vendor Registry Lead",
+    "description": "Maintains the subprocessor register and keeps it customer-visible."
+  },
+  {
+    "id": "lg-contract-clause-lib",
+    "name": "Contract Clause Library Curator",
+    "category": "Legal & Compliance",
+    "subcategory": "Contracts & Commercial",
+    "specialty": "Clause Library",
+    "role": "Legal Playbook Architect",
+    "description": "Builds a searchable clause library from approved playbooks."
+  },
+  {
+    "id": "lg-ip-trademark-watch",
+    "name": "IP & Trademark Watch",
+    "category": "Legal & Compliance",
+    "subcategory": "Employment & IP",
+    "specialty": "IP Watch",
+    "role": "Intellectual Property Analyst",
+    "description": "Watches trademark filings and public misuse so the brand stays protected."
+  },
+  {
+    "id": "lg-cookie-consent-auditor",
+    "name": "Cookie & Consent Auditor",
+    "category": "Legal & Compliance",
+    "subcategory": "Privacy & Data Protection",
+    "specialty": "Consent & Cookies",
+    "role": "Privacy Compliance Auditor",
+    "description": "Audits cookie banners and consent flows against regulation."
+  },
+  {
+    "id": "bi-sql-optimizer",
+    "name": "SQL Query Optimizer",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Query Performance",
+    "role": "Query Performance Engineer",
+    "description": "Audits and rewrites slow queries against EXPLAIN plans."
+  },
+  {
+    "id": "bi-data-modeler",
+    "name": "Data Warehouse Modeler",
+    "category": "Data & Analytics",
+    "subcategory": "Modeling & Warehousing",
+    "specialty": "Data Warehousing",
+    "role": "Dimensional Modeling Engineer",
+    "description": "Designs star schemas with correct grains and conformed dimensions."
+  },
+  {
+    "id": "bi-dashboard-designer",
+    "name": "KPI Dashboard Designer",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Dashboard Design",
+    "role": "Metrics & Visualization Specialist",
+    "description": "Builds metric hierarchies and executive dashboards that drive action."
+  },
+  {
+    "id": "bi-experiment-analyst",
+    "name": "Experiment Analyst",
+    "category": "Data & Analytics",
+    "subcategory": "ML & Experimentation",
+    "specialty": "Experiment Analysis",
+    "role": "A/B Testing Statistician",
+    "description": "Designs and analyzes experiments with rigor and honesty."
+  },
+  {
+    "id": "bi-pipeline-engineer",
+    "name": "Data Pipeline Engineer",
+    "category": "Data & Analytics",
+    "subcategory": "Data Engineering",
+    "specialty": "ETL & Pipelines",
+    "role": "ETL/ELT Builder",
+    "description": "Designs and reviews data pipelines for reliability and freshness."
+  },
+  {
+    "id": "bi-quality-sentinel",
+    "name": "Data Quality Sentinel",
+    "category": "Data & Analytics",
+    "subcategory": "Data Quality & Reliability",
+    "specialty": "Data Quality",
+    "role": "Data Reliability Analyst",
+    "description": "Monitors data quality rules and flags silent breakage."
+  },
+  {
+    "id": "bi-catalog-curator",
+    "name": "Data Catalog Curator",
+    "category": "Data & Analytics",
+    "subcategory": "Modeling & Warehousing",
+    "specialty": "Catalog & Lineage",
+    "role": "Metadata & Lineage Analyst",
+    "description": "Builds and maintains a searchable data catalog with lineage."
+  },
+  {
+    "id": "bi-warehouse-freshness",
+    "name": "Warehouse Freshness Guard",
+    "category": "Data & Analytics",
+    "subcategory": "Data Quality & Reliability",
+    "specialty": "Freshness",
+    "role": "Data Pipeline Health Monitor",
+    "description": "Tracks table freshness and alerts on stale data."
+  },
+  {
+    "id": "bi-metrics-ordinator",
+    "name": "Metrics Layer Owner",
+    "category": "Data & Analytics",
+    "subcategory": "Modeling & Warehousing",
+    "specialty": "Metrics Layer",
+    "role": "Metric Definition Steward",
+    "description": "Maintains one source of truth for metric definitions."
+  },
+  {
+    "id": "bi-forecaster",
+    "name": "Forecasting Analyst",
+    "category": "Data & Analytics",
+    "subcategory": "ML & Experimentation",
+    "specialty": "Forecasting",
+    "role": "Predictive Analytics Modeler",
+    "description": "Builds forecasts from historical trends with scenario ranges."
+  },
+  {
+    "id": "bi-funnel-analyst",
+    "name": "Product Funnel Analyst",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Funnel Analysis",
+    "role": "Activation & Conversion Analyst",
+    "description": "Analyzes activation, retention, and funnel drop-off."
+  },
+  {
+    "id": "bi-embedding-architect",
+    "name": "Embeddings & RAG Architect",
+    "category": "Data & Analytics",
+    "subcategory": "ML & Experimentation",
+    "specialty": "Embeddings & RAG",
+    "role": "Vector Search Engineer",
+    "description": "Designs embeddings and retrieval pipelines for search/RAG."
+  },
+  {
+    "id": "bi-realtime-stream",
+    "name": "Real-Time Stream Architect",
+    "category": "Data & Analytics",
+    "subcategory": "Data Engineering",
+    "specialty": "Real-Time Streaming",
+    "role": "Streaming Data Engineer",
+    "description": "Designs and monitors real-time data streams for correctness."
+  },
+  {
+    "id": "bi-analytics-reporter",
+    "name": "Executive Analytics Reporter",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Executive Reporting",
+    "role": "Board & C-Suite Analyst",
+    "description": "Compiles executive metric narratives for business reviews."
+  },
+  {
+    "id": "bi-model-governance",
+    "name": "ML Model Governance Analyst",
+    "category": "Data & Analytics",
+    "subcategory": "ML & Experimentation",
+    "specialty": "ML Governance",
+    "role": "MLOps Compliance Reviewer",
+    "description": "Tracks model versions, evals, and drift for governance."
+  },
+  {
+    "id": "bi-geo-analyst",
+    "name": "Geospatial & Regional Analyst",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Geospatial Analysis",
+    "role": "Regional Data Specialist",
+    "description": "Analyzes data by geography and regional clusters."
+  },
+  {
+    "id": "bi-raw-log-analyst",
+    "name": "Raw Log & Event Analyst",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Log & Event Analysis",
+    "role": "Event Data Specialist",
+    "description": "Audits event ingestion for schema, drop, and naming consistency."
+  },
+  {
+    "id": "bi-csv-reporter",
+    "name": "CSV & Scratchpad Report Builder",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Ad-Hoc Reporting",
+    "role": "Self-Serve Query Analyst",
+    "description": "Turns ad-hoc questions into clean, correct data extracts."
+  },
+  {
+    "id": "bi-drift-watch",
+    "name": "Data Drift Watch",
+    "category": "Data & Analytics",
+    "subcategory": "Data Quality & Reliability",
+    "specialty": "Drift Detection",
+    "role": "Training/Production Comparer",
+    "description": "Watches feature/prediction drift between environments."
+  },
+  {
+    "id": "bi-backfill-coordinator",
+    "name": "Backfill Coordinator",
+    "category": "Data & Analytics",
+    "subcategory": "Data Engineering",
+    "specialty": "Backfills & Repair",
+    "role": "Data Repair Planner",
+    "description": "Plans and runs safe data backfills with validation."
+  },
+  {
+    "id": "bi-tag-taxonomy",
+    "name": "Tag & Taxonomy Designer",
+    "category": "Data & Analytics",
+    "subcategory": "Data Quality & Reliability",
+    "specialty": "Tagging & Taxonomy",
+    "role": "Upsert Governance Analyst",
+    "description": "Maintains consistent tag/taxonomy across analytics and catalog."
+  },
+  {
+    "id": "bi-dbt-health",
+    "name": "dbt Project Health Analyst",
+    "category": "Data & Analytics",
+    "subcategory": "Data Quality & Reliability",
+    "specialty": "dbt Project Health",
+    "role": "Analytics Engineering Reviewer",
+    "description": "Audits dbt models for quality, freshness, and documentation."
+  },
+  {
+    "id": "bi-abhoc-funnel",
+    "name": "Ad-Hoc Funnel Explainer",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Ad-Hoc Funnel Explainer",
+    "role": "B2B Funnel Interpreter",
+    "description": "Explains funnel anomalies with root-cause hypotheses."
+  },
+  {
+    "id": "bi-user-cohorts",
+    "name": "Cohort & Retention Analyst",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Cohorts & Retention",
+    "role": "Retention Modeler",
+    "description": "Builds and interprets user cohorts for retention and LTV."
+  },
+  {
+    "id": "bi-vector-health",
+    "name": "Vector Index Health Monitor",
+    "category": "Data & Analytics",
+    "subcategory": "Data Quality & Reliability",
+    "specialty": "Vector Index Health",
+    "role": "Search Relevance Tester",
+    "description": "Monitors vector index freshness and retrieval quality."
+  },
+  {
+    "id": "bi-kpi-definition-audit",
+    "name": "KPI Definition Audit",
+    "category": "Data & Analytics",
+    "subcategory": "Data Quality & Reliability",
+    "specialty": "KPI Definitions",
+    "role": "Metric Consistency Auditor",
+    "description": "Audits reports for silent metric definition drift."
+  },
+  {
+    "id": "bi-semantic-layer",
+    "name": "Semantic Layer Architect",
+    "category": "Data & Analytics",
+    "subcategory": "Modeling & Warehousing",
+    "specialty": "Semantic Layer",
+    "role": "Metric Definition Steward",
+    "description": "Keeps metric definitions consistent across tools and teams."
+  },
+  {
+    "id": "bi-query-latency-siren",
+    "name": "Query Latency Siren",
+    "category": "Data & Analytics",
+    "subcategory": "Data Quality & Reliability",
+    "specialty": "Query Latency",
+    "role": "Warehouse Performance Analyst",
+    "description": "Watches for slow queries draining warehouse budget and user patience."
+  },
+  {
+    "id": "bi-data-cleaner",
+    "name": "Data Cleaner",
+    "category": "Data & Analytics",
+    "subcategory": "Data Engineering",
+    "specialty": "Data Cleansing",
+    "role": "Raw Data Quality Specialist",
+    "description": "Dedupes and validates raw tables before they become trusted output."
+  },
+  {
+    "id": "bi-exec-dashboard",
+    "name": "Exec Dashboard Storyteller",
+    "category": "Data & Analytics",
+    "subcategory": "Analytics & Insights",
+    "specialty": "Executive View",
+    "role": "Leadership Metrics Narrative",
+    "description": "Turns metrics dashboards into clear narratives for leadership."
+  },
+  {
+    "id": "eng-dependency-supply-chain",
+    "name": "Dependency & Supply-Chain Auditor",
+    "category": "Security & SecOps",
+    "subcategory": "Application Security",
+    "specialty": "Supply Chain",
+    "role": "Software Supply-Chain Security Analyst",
+    "description": "Audits dependency trees for vulnerabilities, license issues, and untrusted sources."
+  },
+  {
+    "id": "eng-sbom-archivist",
+    "name": "SBOM & Artifact Archivist",
+    "category": "Security & SecOps",
+    "subcategory": "Application Security",
+    "specialty": "SBOM & Provenance",
+    "role": "SLSA & Artifact Signing Engineer",
+    "description": "Generates and verifies SBOMs and signed artifacts for every release."
+  },
+  {
+    "id": "eng-vuln-triage",
+    "name": "Vulnerability Triage Analyst",
+    "category": "Security & SecOps",
+    "subcategory": "Vulnerability Management",
+    "specialty": "Triage & Prioritization",
+    "role": "Security Vulnerability Manager",
+    "description": "Ticks vulnerability reports by real exploitation risk and tracks fixes."
+  },
+  {
+    "id": "sec-cloud-posture",
+    "name": "Cloud Posture Reviewer",
+    "category": "Security & SecOps",
+    "subcategory": "Cloud & Infrastructure Security",
+    "specialty": "Cloud Posture",
+    "role": "Cloud Security Engineer",
+    "description": "Reviews cloud configurations against benchmarks and flags drift."
+  },
+  {
+    "id": "sec-iam-reviewer",
+    "name": "IAM Reviewer",
+    "category": "Security & SecOps",
+    "subcategory": "Identity & Access",
+    "specialty": "Access Design",
+    "role": "Identity & Access Engineer",
+    "description": "Reviews entitlements and roles for least-privilege."
+  },
+  {
+    "id": "sec-secret-scanner",
+    "name": "Secret Scanner",
+    "category": "Security & SecOps",
+    "subcategory": "Vulnerability Management",
+    "specialty": "Secrets & Credentials",
+    "role": "Credential Leak Hunter",
+    "description": "Scans repos, logs, and configs for leaked secrets."
+  },
+  {
+    "id": "sec-vuln-triage",
+    "name": "Vulnerability Triage Lead",
+    "category": "Security & SecOps",
+    "subcategory": "Vulnerability Management",
+    "specialty": "Triage & Prioritization",
+    "role": "Vuln Management Analyst",
+    "description": "Prioritizes vulnerabilities by reachability and exploitability."
+  },
+  {
+    "id": "sec-threat-mtg",
+    "name": "Threat Model Reviewer",
+    "category": "Security & SecOps",
+    "subcategory": "Security Governance",
+    "specialty": "Threat Modeling",
+    "role": "STRIDE Analyst",
+    "description": "Runs threat modeling on features and systems with STRIDE."
+  },
+  {
+    "id": "sec-pentest-plan",
+    "name": "Pentest Scoping Planner",
+    "category": "Security & SecOps",
+    "subcategory": "Security Governance",
+    "specialty": "Penetration Testing",
+    "role": "Red-Team Engagement Coordinator",
+    "description": "Prepares penetration test scopes and rules of engagement."
+  },
+  {
+    "id": "sec-ir-coordinator",
+    "name": "Incident Response Coordinator",
+    "category": "Security & SecOps",
+    "subcategory": "Detection & Response",
+    "specialty": "Incident Response",
+    "role": "SOC Incident Lead",
+    "description": "Coordinates containment, eradication, and evidence during incidents."
+  },
+  {
+    "id": "sec-logs-threat",
+    "name": "Log & SIEM Threat Hunter",
+    "category": "Security & SecOps",
+    "subcategory": "Detection & Response",
+    "specialty": "SIEM & Threat Hunting",
+    "role": "Detection Engineer",
+    "description": "Hunts for threats in logs with detection queries."
+  },
+  {
+    "id": "sec-vendor-security",
+    "name": "Vendor Security Assessor",
+    "category": "Security & SecOps",
+    "subcategory": "Security Governance",
+    "specialty": "Vendor Security",
+    "role": "Third-Party Risk Analyst",
+    "description": "Assesses vendor security posture and monitors ongoing risk."
+  },
+  {
+    "id": "sec-access-review",
+    "name": "Access Review Runner",
+    "category": "Security & SecOps",
+    "subcategory": "Identity & Access",
+    "specialty": "Access Reviews",
+    "role": "Recertification Campaign Analyst",
+    "description": "Runs access certification campaigns and cleanup."
+  },
+  {
+    "id": "sec-dlp-monitor",
+    "name": "DLP & Data Loss Monitor",
+    "category": "Security & SecOps",
+    "subcategory": "Detection & Response",
+    "specialty": "Data Loss Prevention",
+    "role": "Data Exfiltration Analyst",
+    "description": "Watches for unusual outbound data flows and exfiltration risk."
+  },
+  {
+    "id": "sec-endpoint-hardener",
+    "name": "Endpoint Hardening Engineer",
+    "category": "Security & SecOps",
+    "subcategory": "Cloud & Infrastructure Security",
+    "specialty": "Endpoint Hardening",
+    "role": "Device Security Analyst",
+    "description": "Audits endpoint configs against hardening benchmarks."
+  },
+  {
+    "id": "sec-network-firewall",
+    "name": "Network & Firewall Reviewer",
+    "category": "Security & SecOps",
+    "subcategory": "Cloud & Infrastructure Security",
+    "specialty": "Network & Firewalls",
+    "role": "Perimeter Security Analyst",
+    "description": "Reviews firewall rules, open ports, and segmentation."
+  },
+  {
+    "id": "sec-cloudflare-guard",
+    "name": "WAF & Edge Security Guard",
+    "category": "Security & SecOps",
+    "subcategory": "Cloud & Infrastructure Security",
+    "specialty": "WAF & Edge",
+    "role": "Edge Protection Analyst",
+    "description": "Monitors WAF rules, edge policies, and bot traffic."
+  },
+  {
+    "id": "sec-code-scan",
+    "name": "SAST/DAST Review Coordinator",
+    "category": "Security & SecOps",
+    "subcategory": "Application Security",
+    "specialty": "SAST & DAST",
+    "role": "AppSec Engineer",
+    "description": "Triages static and dynamic scan findings into fixes."
+  },
+  {
+    "id": "sec-supply-chain",
+    "name": "Software Supply Chain Guard",
+    "category": "Security & SecOps",
+    "subcategory": "Application Security",
+    "specialty": "Supply Chain",
+    "role": "Dependency Security Analyst",
+    "description": "Watches dependency provenance, signing, and integrity."
+  },
+  {
+    "id": "sec-phishing-sim",
+    "name": "Phishing & Social Engineering Guard",
+    "category": "Security & SecOps",
+    "subcategory": "Detection & Response",
+    "specialty": "Phishing & Awareness",
+    "role": "Awareness Program Analyst",
+    "description": "Designs phishing simulations and tracks awareness outcomes."
+  },
+  {
+    "id": "sec-certificate-warden",
+    "name": "Certificate & Key Warden",
+    "category": "Security & SecOps",
+    "subcategory": "Cloud & Infrastructure Security",
+    "specialty": "PKI & Certificates",
+    "role": "PKI Analyst",
+    "description": "Tracks certificate expiry, key rotation, and TLS posture."
+  },
+  {
+    "id": "sec-backup-integrity",
+    "name": "Backup & Recovery Integrity Guard",
+    "category": "Security & SecOps",
+    "subcategory": "Cloud & Infrastructure Security",
+    "specialty": "Backup Integrity",
+    "role": "DR Readiness Analyst",
+    "description": "Verifies backup integrity and recovery readiness."
+  },
+  {
+    "id": "sec-apiscan",
+    "name": "API Security Scanner",
+    "category": "Security & SecOps",
+    "subcategory": "Application Security",
+    "specialty": "API Security",
+    "role": "DevSecOps API Engineer",
+    "description": "Audits API surfaces for auth, rate-limit, and injection gaps."
+  },
+  {
+    "id": "sec-k8s-sec",
+    "name": "Kubernetes Security Reviewer",
+    "category": "Security & SecOps",
+    "subcategory": "Cloud & Infrastructure Security",
+    "specialty": "Kubernetes Security",
+    "role": "Container & Cluster Security",
+    "description": "Reviews cluster RBAC, pods, and network policies for risk."
+  },
+  {
+    "id": "sec-password-audit",
+    "name": "Identity & Password Hygiene Auditor",
+    "category": "Security & SecOps",
+    "subcategory": "Identity & Access",
+    "specialty": "Authentication Hygiene",
+    "role": "Authentication Analyst",
+    "description": "Audits auth posture: MFA, password policies, and session handling."
+  },
+  {
+    "id": "sec-google-scan",
+    "name": "Exposure & Footprint Scanner",
+    "category": "Security & SecOps",
+    "subcategory": "Vulnerability Management",
+    "specialty": "External Exposure",
+    "role": "Attack-Surface Analyst",
+    "description": "Scans for exposed services, buckets, and leaked configs."
+  },
+  {
+    "id": "sec-onboarding-sec",
+    "name": "Secure Access Onboarding",
+    "category": "Security & SecOps",
+    "subcategory": "Identity & Access",
+    "specialty": "Secure Onboarding",
+    "role": "New-Hire Security Provisioner",
+    "description": "Provisions security controls for new employees and contractors."
+  },
+  {
+    "id": "sec-vuln-scan-orchestrator",
+    "name": "Vulnerability Scan Orchestrator",
+    "category": "Security & SecOps",
+    "subcategory": "Vulnerability Management",
+    "specialty": "Scan Orchestration",
+    "role": "Scanner & Assessment Planner",
+    "description": "Schedules and scopes vulnerability scans and packages the results."
+  },
+  {
+    "id": "sec-privileged-session",
+    "name": "Privileged Access Monitor",
+    "category": "Security & SecOps",
+    "subcategory": "Identity & Access",
+    "specialty": "Privileged Access",
+    "role": "PAM & Break-Glass Analyst",
+    "description": "Watches elevated sessions and break-glass access for anomalies."
+  },
+  {
+    "id": "sec-container-image-scan",
+    "name": "Container Image Screener",
+    "category": "Security & SecOps",
+    "subcategory": "Application Security",
+    "specialty": "Container Scanning",
+    "role": "Registry & Image Auditor",
+    "description": "Scans container images for vulnerabilities before they ship."
+  },
+  {
+    "id": "sec-threat-intel-feed",
+    "name": "Threat Intel Feed Analyst",
+    "category": "Security & SecOps",
+    "subcategory": "Vulnerability Management",
+    "specialty": "Threat Intelligence",
+    "role": "Threat Intelligence Curator",
+    "description": "Turns advisories and feeds into prioritized defense actions."
+  },
+  {
+    "id": "sec-malware-ioc",
+    "name": "Malware IOC Tracker",
+    "category": "Security & SecOps",
+    "subcategory": "Vulnerability Management",
+    "specialty": "Malware IOCs",
+    "role": "Indicators-of-Compromise Analyst",
+    "description": "Correlates hashes, domains, and URLs across alerts to spot campaigns."
+  },
+  {
+    "id": "sec-ai-governance",
+    "name": "AI Security & Governance Analyst",
+    "category": "Security & SecOps",
+    "subcategory": "Security Governance",
+    "specialty": "AI Security Governance",
+    "role": "AI Risk & Policy Auditor",
+    "description": "Audits AI usage, prompt-injection surface, and governance posture."
+  },
+  {
+    "id": "pm-prd-writer",
+    "name": "PRD Writer",
+    "category": "Product & Project Management",
+    "subcategory": "Product Definition",
+    "specialty": "PRDs",
+    "role": "Product Requirements Drafter",
+    "description": "Writes sharp PRDs with problems, personas, and acceptance criteria."
+  },
+  {
+    "id": "pm-user-story-crafter",
+    "name": "User Story Crafter",
+    "category": "Product & Project Management",
+    "subcategory": "Product Definition",
+    "specialty": "User Stories",
+    "role": "Agile Story Writer",
+    "description": "Decomposes PRDs into testable user stories."
+  },
+  {
+    "id": "pm-roadmap-planner",
+    "name": "Roadmap Planner",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "Roadmapping",
+    "role": "Product Strategy Analyst",
+    "description": "Builds prioritization frameworks and roadmap narratives."
+  },
+  {
+    "id": "pm-okr-manager",
+    "name": "OKR Manager",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "OKRs & Goals",
+    "role": "Goal & Metric Orbiter",
+    "description": "Formulates and tracks OKRs aligned to strategy."
+  },
+  {
+    "id": "pm-discovery-lead",
+    "name": "Discovery & Research Lead",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "Discovery",
+    "role": "Product Research Designer",
+    "description": "Designs and runs product discovery with real user evidence."
+  },
+  {
+    "id": "pm-competitive-gap",
+    "name": "Competitive Gap Analyst",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "Competitive Gaps",
+    "role": "Market & Product Gap Specialist",
+    "description": "Maps product vs competitor gaps into strategic asks."
+  },
+  {
+    "id": "pm-release-manager",
+    "name": "Release & Go-to-Market Coordinator",
+    "category": "Product & Project Management",
+    "subcategory": "Delivery & Execution",
+    "specialty": "Launch Orchestration",
+    "role": "Launch Orchestrator",
+    "description": "Coordinates launch checklists across product, marketing, support."
+  },
+  {
+    "id": "pm-feature-flag",
+    "name": "Feature Flag Planner",
+    "category": "Product & Project Management",
+    "subcategory": "Delivery & Execution",
+    "specialty": "Feature Flags",
+    "role": "Release Safety Analyst",
+    "description": "Plans feature-flag rollouts with exposure and rollback."
+  },
+  {
+    "id": "pm-backlog-refiner",
+    "name": "Backlog Refinement Facilitator",
+    "category": "Product & Project Management",
+    "subcategory": "Product Definition",
+    "specialty": "Backlog Refinement",
+    "role": "Agile Prioritization Coach",
+    "description": "Runs backlog refinement into build-ready stories."
+  },
+  {
+    "id": "pm-pmo-tracker",
+    "name": "PMO Status Tracker",
+    "category": "Product & Project Management",
+    "subcategory": "Program Management",
+    "specialty": "Program Status",
+    "role": "Program Management Analyst",
+    "description": "Tracks program status, risks, and dependencies across teams."
+  },
+  {
+    "id": "pm-risk-register",
+    "name": "Risk Register Owner",
+    "category": "Product & Project Management",
+    "subcategory": "Program Management",
+    "specialty": "Risk Register",
+    "role": "Program Risk Analyst",
+    "description": "Maintains a program risk register with mitigations."
+  },
+  {
+    "id": "pm-stakeholder-brief",
+    "name": "Stakeholder Brief Writer",
+    "category": "Product & Project Management",
+    "subcategory": "Program Management",
+    "specialty": "Stakeholder Comms",
+    "role": "Executive Communication Analyst",
+    "description": "Writes crisp stakeholder and executive updates."
+  },
+  {
+    "id": "pm-metrics-analyst",
+    "name": "Product Metrics Analyst",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "Product Metrics",
+    "role": "North-Star Metric Expert",
+    "description": "Defines product metrics and connects features to outcomes."
+  },
+  {
+    "id": "pm-abtest-designer",
+    "name": "Experiment Designer",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "Experiments",
+    "role": "Product Experimentation PM",
+    "description": "Designs product experiments with rigorous hypotheses."
+  },
+  {
+    "id": "pm-beta-coordinator",
+    "name": "Beta Program Coordinator",
+    "category": "Product & Project Management",
+    "subcategory": "Delivery & Execution",
+    "specialty": "Beta Programs",
+    "role": "Beta Launch Operator",
+    "description": "Runs beta cohorts, telemetry, and feedback loops."
+  },
+  {
+    "id": "pm-sprint-facilitator",
+    "name": "Sprint Facilitator",
+    "category": "Product & Project Management",
+    "subcategory": "Delivery & Execution",
+    "specialty": "Sprint Execution",
+    "role": "Scrum Master",
+    "description": "Runs sprint ceremonies and improves team throughput."
+  },
+  {
+    "id": "pm-estimation-coach",
+    "name": "Estimation Coach",
+    "category": "Product & Project Management",
+    "subcategory": "Delivery & Execution",
+    "specialty": "Estimation",
+    "role": "Sizing & Effort Analyst",
+    "description": "Improves estimation with data and honest uncertainty."
+  },
+  {
+    "id": "pm-tech-spec",
+    "name": "Technical Spec Drafter",
+    "category": "Product & Project Management",
+    "subcategory": "Product Definition",
+    "specialty": "Technical Specs",
+    "role": "Engineering-Collaborator PM",
+    "description": "Drafts technical specs that bridge product intent and engineering."
+  },
+  {
+    "id": "pm-nps-owner",
+    "name": "NPS & Feedback Owner",
+    "category": "Product & Project Management",
+    "subcategory": "User Research",
+    "specialty": "Feedback Loops",
+    "role": "Customer Feedback Loops",
+    "description": "Operates the NPS/feedback loop into the roadmap."
+  },
+  {
+    "id": "pm-changelog-writer",
+    "name": "Changelog & Release Notes Writer",
+    "category": "Product & Project Management",
+    "subcategory": "Delivery & Execution",
+    "specialty": "Release Communications",
+    "role": "Release Comms Author",
+    "description": "Writes clear release notes and changelogs for users."
+  },
+  {
+    "id": "pm-pricing-strategist",
+    "name": "Pricing & Packaging Strategist",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "Pricing & Packaging",
+    "role": "Monetization Analyst",
+    "description": "Models pricing experiments and packaging strategy."
+  },
+  {
+    "id": "pm-internal-llm",
+    "name": "Product Spec Reviewer",
+    "category": "Product & Project Management",
+    "subcategory": "Product Definition",
+    "specialty": "Spec Review",
+    "role": "Requirements Quality Auditor",
+    "description": "Reviews specs for clarity, testability, and completeness."
+  },
+  {
+    "id": "pm-launch-sec",
+    "name": "Launch Security & Risk Reviewer",
+    "category": "Product & Project Management",
+    "subcategory": "Delivery & Execution",
+    "specialty": "Launch Risk Review",
+    "role": "Pre-Launch Risk Analyst",
+    "description": "Audits launches for security, privacy, and compliance gaps."
+  },
+  {
+    "id": "pm-market-summary",
+    "name": "Market & Category Summarizer",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "Market Research",
+    "role": "Category Evangelist",
+    "description": "Summarizes market and category shifts for product strategies."
+  },
+  {
+    "id": "pm-support-pm",
+    "name": "Support-Synthesis PM",
+    "category": "Product & Project Management",
+    "subcategory": "Product Definition",
+    "specialty": "Support Synthesis",
+    "role": "Voc-to-Catalog Parser",
+    "description": "Converts support themes into prioritized product stories."
+  },
+  {
+    "id": "pm-sec-compliance",
+    "name": "Product Compliance Liaison",
+    "category": "Product & Project Management",
+    "subcategory": "Program Management",
+    "specialty": "Product Compliance",
+    "role": "Regulatory-Product Bridge",
+    "description": "Tracks product changes against regulatory obligations."
+  },
+  {
+    "id": "pm-rtb-retro",
+    "name": "Retro Runbook Author",
+    "category": "Product & Project Management",
+    "subcategory": "Delivery & Execution",
+    "specialty": "Retrospectives",
+    "role": "Team Health Facilitator",
+    "description": "Runs and follows through on retrospectives productively."
+  },
+  {
+    "id": "pm-user-research-ops",
+    "name": "User Research Ops",
+    "category": "Product & Project Management",
+    "subcategory": "User Research",
+    "specialty": "Research Programs",
+    "role": "Research & Insights Coordinator",
+    "description": "Recruits, schedules, and synthesizes user research into briefs."
+  },
+  {
+    "id": "pm-health-score",
+    "name": "Product Health Score Analyst",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "Health & Retention Score",
+    "role": "Activation & Retention Analyst",
+    "description": "Builds a composite health score from activation and retention signals."
+  },
+  {
+    "id": "pm-competitive-sentinel",
+    "name": "Competitive Sentinel",
+    "category": "Product & Project Management",
+    "subcategory": "Product Strategy",
+    "specialty": "Competitor Watch",
+    "role": "Market & Rival Watch",
+    "description": "Watches competitor launches, pricing, and reviews."
+  },
+  {
+    "id": "ops-asset-tracker",
+    "name": "Asset & Inventory Tracker",
+    "category": "IT & Operations",
+    "subcategory": "Endpoints & Devices",
+    "specialty": "Asset & Inventory",
+    "role": "ITAM Analyst",
+    "description": "Tracks hardware inventory, lifecycle, and disposal."
+  },
+  {
+    "id": "ops-mdm-admin",
+    "name": "MDM & Device Policy Admin",
+    "category": "IT & Operations",
+    "subcategory": "Endpoints & Devices",
+    "specialty": "Device Policy & MDM",
+    "role": "Endpoint Management Specialist",
+    "description": "Manages device policies, enrollment, and compliance."
+  },
+  {
+    "id": "ops-helpdesk-sla",
+    "name": "Helpdesk SLA Optimizer",
+    "category": "IT & Operations",
+    "subcategory": "IT Helpdesk",
+    "specialty": "SLAs & Flow",
+    "role": "IT Support Operations",
+    "description": "Monitors helpdesk SLAs and ticket flow."
+  },
+  {
+    "id": "ops-onboarding-it",
+    "name": "IT Onboarding Provisioner",
+    "category": "IT & Operations",
+    "subcategory": "IT Helpdesk",
+    "specialty": "Access Provisioning",
+    "role": "New-Hire Tech Setup Specialist",
+    "description": "Provisions accounts, devices, and access for new hires."
+  },
+  {
+    "id": "ops-offboarding-it",
+    "name": "IT Offboarding Sweeper",
+    "category": "IT & Operations",
+    "subcategory": "IT Helpdesk",
+    "specialty": "Exit Deprovisioning",
+    "role": "Exit-Process Coordinator",
+    "description": "Revokes access and collects assets at departure."
+  },
+  {
+    "id": "ops-saas-budget",
+    "name": "SaaS Sprawl & Budget Analyst",
+    "category": "IT & Operations",
+    "subcategory": "IT Finance & Vendors",
+    "specialty": "SaaS Spend",
+    "role": "SaaS Optimization Specialist",
+    "description": "Audits SaaS spend and consolidates licenses."
+  },
+  {
+    "id": "ops-backup-drill",
+    "name": "Backup & DR Drill Coordinator",
+    "category": "IT & Operations",
+    "subcategory": "Infrastructure & Network",
+    "specialty": "Backup & DR",
+    "role": "Disaster Recovery Analyst",
+    "description": "Runs backup verification and DR drills."
+  },
+  {
+    "id": "ops-dns-watch",
+    "name": "DNS & Email Routing Watch",
+    "category": "IT & Operations",
+    "subcategory": "Infrastructure & Network",
+    "specialty": "DNS & Email Routing",
+    "role": "Infrastructure DNS Sentinel",
+    "description": "Monitors DNS zones, DKIM/SPF/DMARC, and routing health."
+  },
+  {
+    "id": "ops-patch-manager",
+    "name": "Patch & Update Manager",
+    "category": "IT & Operations",
+    "subcategory": "Infrastructure & Network",
+    "specialty": "Patch Compliance",
+    "role": "OS Patch Compliance Analyst",
+    "description": "Coordinates OS and software patching with staged rollouts."
+  },
+  {
+    "id": "ops-network-admin",
+    "name": "Network Admin & VPN Steward",
+    "category": "IT & Operations",
+    "subcategory": "Infrastructure & Network",
+    "specialty": "Network & VPN",
+    "role": "Connectivity Specialist",
+    "description": "Maintains VPN, SSID, and connectivity configs and docs."
+  },
+  {
+    "id": "ops-license-handler",
+    "name": "Software License Handler",
+    "category": "IT & Operations",
+    "subcategory": "IT Finance & Vendors",
+    "specialty": "License Compliance",
+    "role": "Licensing Compliance Specialist",
+    "description": "Tracks software licenses and true-ups."
+  },
+  {
+    "id": "ops-token-rotator",
+    "name": "API Token & Secret Rotator",
+    "category": "IT & Operations",
+    "subcategory": "Identity & Access",
+    "specialty": "Token & Secret Rotation",
+    "role": "Credential Hygiene Operator",
+    "description": "Tracks token expiry and rotates credentials on schedule."
+  },
+  {
+    "id": "ops-provider-billing",
+    "name": "Cloud & Provider Billing Analyst",
+    "category": "IT & Operations",
+    "subcategory": "IT Finance & Vendors",
+    "specialty": "Cloud Billing",
+    "role": "Infrastructure FinOps Analyst",
+    "description": "Monitors provider billing for anomalies and waste."
+  },
+  {
+    "id": "ops-vendor-contracts",
+    "name": "IT Vendor & Contract Steward",
+    "category": "IT & Operations",
+    "subcategory": "IT Finance & Vendors",
+    "specialty": "Vendor Contracts",
+    "role": "Procurement Liaison",
+    "description": "Tracks IT vendor contracts, renewals, and terms."
+  },
+  {
+    "id": "ops-fleet-reporter",
+    "name": "Fleet Health Reporter",
+    "category": "IT & Operations",
+    "subcategory": "Endpoints & Devices",
+    "specialty": "Fleet Health",
+    "role": "Device Fleet Analyst",
+    "description": "Reports device fleet health: patches, encryption, and crashes."
+  },
+  {
+    "id": "ops-sso-admin",
+    "name": "SSO & Federation Admin",
+    "category": "IT & Operations",
+    "subcategory": "Identity & Access",
+    "specialty": "SSO & Federation",
+    "role": "Identity Provider Operator",
+    "description": "Administers SSO apps, claims, and session policies."
+  },
+  {
+    "id": "ops-printer-periph",
+    "name": "Printer & Peripheral Admin",
+    "category": "IT & Operations",
+    "subcategory": "Endpoints & Devices",
+    "specialty": "Printing & Peripherals",
+    "role": "Hardware Support Specialist",
+    "description": "Troubleshoots printers, docks, and peripherals."
+  },
+  {
+    "id": "ops-audit-trail",
+    "name": "IT Audit Trail Builder",
+    "category": "IT & Operations",
+    "subcategory": "Compliance & Audit",
+    "specialty": "Access & Change Logs",
+    "role": "Compliance Evidence Analyst",
+    "description": "Keeps access and change logs audit-ready."
+  },
+  {
+    "id": "ops-oncall-duty",
+    "name": "On-Call Duty Manager",
+    "category": "IT & Operations",
+    "subcategory": "IT Helpdesk",
+    "specialty": "On-Call Schedules",
+    "role": "Rotation & Alert Coordinator",
+    "description": "Manages on-call rotations, escalations, and handoff notes."
+  },
+  {
+    "id": "ops-acceptance-desktop",
+    "name": "Desktop Deployment & Acceptance Lead",
+    "category": "IT & Operations",
+    "subcategory": "Endpoints & Devices",
+    "specialty": "Desktop Deployment",
+    "role": "Device Lifecycle PM",
+    "description": "Coordinates device procurement, staging, and deployment."
+  },
+  {
+    "id": "ops-slack-admin",
+    "name": "Slack & Messaging Admin",
+    "category": "IT & Operations",
+    "subcategory": "Collaboration & Apps",
+    "specialty": "Messaging Governance",
+    "role": "Collaboration Tool Operator",
+    "description": "Administers Slack workspaces, channels, and integrations."
+  },
+  {
+    "id": "ops-gsuite-admin",
+    "name": "Google Workspace & Identity Admin",
+    "category": "IT & Operations",
+    "subcategory": "Identity & Access",
+    "specialty": "Workspace Administration",
+    "role": "Google Admin Operator",
+    "description": "Administers Google Workspace, groups, and sharing policies."
+  },
+  {
+    "id": "ops-coldstart",
+    "name": "Cold-Start Setup Automa",
+    "category": "IT & Operations",
+    "subcategory": "Endpoints & Devices",
+    "specialty": "Office Setup",
+    "role": "New-Office Provisioner",
+    "description": "Sets up office IT: network, printers, and conference room gear."
+  },
+  {
+    "id": "ops-timezone-remote",
+    "name": "Remote & Global Ops Coordinator",
+    "category": "IT & Operations",
+    "subcategory": "Collaboration & Apps",
+    "specialty": "Distributed Work Ops",
+    "role": "Distributed-Work Ops Analyst",
+    "description": "Coordinates ops coverage, handoffs, and async comms across time zones."
+  },
+  {
+    "id": "ops-incident-it",
+    "name": "IT Incident Reporter",
+    "category": "IT & Operations",
+    "subcategory": "IT Helpdesk",
+    "specialty": "Incident Comms",
+    "role": "Internal-Outage Communicator",
+    "description": "Communicates internal IT incidents to the company."
+  },
+  {
+    "id": "ops-file-server-admin",
+    "name": "File & Print Server Admin",
+    "category": "IT & Operations",
+    "subcategory": "Infrastructure & Network",
+    "specialty": "File & Print Services",
+    "role": "Shared Storage Operator",
+    "description": "Monitors shares, permissions, quotas, and print queues."
+  },
+  {
+    "id": "ops-malware-responder",
+    "name": "Endpoint Malware Responder",
+    "category": "IT & Operations",
+    "subcategory": "Endpoints & Devices",
+    "specialty": "Endpoint Malware Response",
+    "role": "Containment & Cleanup Specialist",
+    "description": "Contains and cleans infected endpoints while preserving evidence."
+  },
+  {
+    "id": "ops-datacenter-health",
+    "name": "Datacenter & Rack Health Monitor",
+    "category": "IT & Operations",
+    "subcategory": "Infrastructure & Network",
+    "specialty": "Datacenter Environment",
+    "role": "Infra Environment Analyst",
+    "description": "Tracks rack temperature, power, and UPS health."
+  },
+  {
+    "id": "ops-vpn-remote-admin",
+    "name": "VPN & Remote Access Admin",
+    "category": "IT & Operations",
+    "subcategory": "Identity & Access",
+    "specialty": "Remote Access",
+    "role": "Remote Access Auditor",
+    "description": "Audits VPN auth, client versions, and expiring certificates."
+  },
+  {
+    "id": "ops-audit-log-collector",
+    "name": "Audit Log Consolidator",
+    "category": "IT & Operations",
+    "subcategory": "Compliance & Audit",
+    "specialty": "Audit Log Consolidation",
+    "role": "Evidence Curator",
+    "description": "Collects audit logs into one view for audits and investigations."
+  },
+  {
+    "id": "ai-rag-architect",
+    "name": "RAG Systems Architect",
+    "category": "AI & Machine Learning",
+    "subcategory": "Retrieval & Knowledge",
+    "specialty": "Retrieval-Augmented Generation",
+    "role": "RAG Systems Architect",
+    "description": "Designs retrieval pipelines that ground LLM answers in trusted, fresh sources."
+  },
+  {
+    "id": "ai-agent-orchestrator",
+    "name": "Agent Orchestrator",
+    "category": "AI & Machine Learning",
+    "subcategory": "Agent Systems",
+    "specialty": "Multi-Agent Orchestration",
+    "role": "Agent Workflow Architect",
+    "description": "Designs tool-using agent graphs with clear handoffs, retries, and stop conditions."
+  },
+  {
+    "id": "ai-prompt-engineer",
+    "name": "Prompt Engineering Lead",
+    "category": "AI & Machine Learning",
+    "subcategory": "Prompting & Alignment",
+    "specialty": "Prompt Systems",
+    "role": "Prompt Systems Engineer",
+    "description": "Builds versioned prompt suites with evaluations, guardrails, and regression tests."
+  },
+  {
+    "id": "ai-eval-engineer",
+    "name": "LLM Evaluation Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Evaluation",
+    "specialty": "LLM Evaluation",
+    "role": "Evaluation & Benchmark Engineer",
+    "description": "Designs offline and online evals that catch regressions before users do."
+  },
+  {
+    "id": "ai-finetune-specialist",
+    "name": "Fine-Tuning Specialist",
+    "category": "AI & Machine Learning",
+    "subcategory": "Model Training",
+    "specialty": "Fine-Tuning",
+    "role": "Model Adaptation Engineer",
+    "description": "Plans fine-tuning and preference optimization when prompting and RAG fall short."
+  },
+  {
+    "id": "ai-inference-optimizer",
+    "name": "Inference Performance Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Inference",
+    "specialty": "Latency & Throughput",
+    "role": "Inference Optimization Engineer",
+    "description": "Cuts latency and cost per token across hosted and self-hosted models."
+  },
+  {
+    "id": "ai-mlops-engineer",
+    "name": "MLOps Platform Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "MLOps",
+    "specialty": "Model Lifecycle",
+    "role": "MLOps Platform Engineer",
+    "description": "Builds reproducible training, deployment, and monitoring pipelines for models."
+  },
+  {
+    "id": "ai-model-risk-analyst",
+    "name": "Model Risk Analyst",
+    "category": "AI & Machine Learning",
+    "subcategory": "Governance",
+    "specialty": "Model Risk",
+    "role": "Model Risk Analyst",
+    "description": "Assesses model risk, limitations, and monitoring requirements before deployment."
+  },
+  {
+    "id": "ai-safety-reviewer",
+    "name": "AI Safety Reviewer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Safety",
+    "specialty": "Responsible AI",
+    "role": "AI Safety Reviewer",
+    "description": "Reviews model behavior for harmful outputs, jailbreaks, and unsafe tool use."
+  },
+  {
+    "id": "ai-data-curator",
+    "name": "Training Data Curator",
+    "category": "AI & Machine Learning",
+    "subcategory": "Data",
+    "specialty": "Training Data",
+    "role": "Training Data Curator",
+    "description": "Builds clean, licensed, and representative datasets for training and evaluation."
+  },
+  {
+    "id": "ai-vector-search-engineer",
+    "name": "Vector Search Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Retrieval & Knowledge",
+    "specialty": "Vector Search",
+    "role": "Vector Search Engineer",
+    "description": "Tunes embeddings, indexes, and hybrid search for low-latency, high-recall retrieval."
+  },
+  {
+    "id": "ai-memory-architect",
+    "name": "Agent Memory Architect",
+    "category": "AI & Machine Learning",
+    "subcategory": "Agent Systems",
+    "specialty": "Agent Memory",
+    "role": "Agent Memory Architect",
+    "description": "Designs short-term, long-term, and shared memory for agents with clear retention rules."
+  },
+  {
+    "id": "ai-guardrail-engineer",
+    "name": "Guardrails Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Safety",
+    "specialty": "Guardrails",
+    "role": "Guardrails Engineer",
+    "description": "Implements input/output filters, policy checks, and tool permission boundaries."
+  },
+  {
+    "id": "ai-observability-engineer",
+    "name": "LLM Observability Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Operations",
+    "specialty": "LLM Observability",
+    "role": "LLM Observability Engineer",
+    "description": "Instruments prompts, retrieval, tool calls, and outcomes for debugging and cost tracking."
+  },
+  {
+    "id": "ai-cost-controller",
+    "name": "AI Cost Controller",
+    "category": "AI & Machine Learning",
+    "subcategory": "Operations",
+    "specialty": "AI FinOps",
+    "role": "AI FinOps Analyst",
+    "description": "Tracks token, GPU, and vendor spend and finds safe cost reductions."
+  },
+  {
+    "id": "ai-multimodal-engineer",
+    "name": "Multimodal Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Multimodal",
+    "specialty": "Vision-Language",
+    "role": "Multimodal Systems Engineer",
+    "description": "Builds pipelines that combine text, image, audio, and video understanding."
+  },
+  {
+    "id": "ai-speech-engineer",
+    "name": "Speech & Voice Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Multimodal",
+    "specialty": "Speech",
+    "role": "Speech Systems Engineer",
+    "description": "Builds ASR, TTS, and realtime voice pipelines with latency and privacy controls."
+  },
+  {
+    "id": "ai-vision-engineer",
+    "name": "Computer Vision Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Multimodal",
+    "specialty": "Computer Vision",
+    "role": "Computer Vision Engineer",
+    "description": "Builds detection, classification, and OCR pipelines with evaluation and drift monitoring."
+  },
+  {
+    "id": "ai-recommendation-engineer",
+    "name": "Recommendation Systems Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Personalization",
+    "specialty": "Recommenders",
+    "role": "Recommendation Systems Engineer",
+    "description": "Designs ranking and recommendation systems with offline and online evaluation."
+  },
+  {
+    "id": "ai-knowledge-graph-engineer",
+    "name": "Knowledge Graph Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Retrieval & Knowledge",
+    "specialty": "Knowledge Graphs",
+    "role": "Knowledge Graph Engineer",
+    "description": "Builds entity resolution, graph schemas, and graph-grounded retrieval."
+  },
+  {
+    "id": "ai-synthetic-data-engineer",
+    "name": "Synthetic Data Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Data",
+    "specialty": "Synthetic Data",
+    "role": "Synthetic Data Engineer",
+    "description": "Generates and validates synthetic data for training, evals, and privacy-sensitive scenarios."
+  },
+  {
+    "id": "ai-red-team-lead",
+    "name": "AI Red Team Lead",
+    "category": "AI & Machine Learning",
+    "subcategory": "Safety",
+    "specialty": "Red Teaming",
+    "role": "AI Red Team Lead",
+    "description": "Runs adversarial testing across prompts, tools, retrieval, and multimodal inputs."
+  },
+  {
+    "id": "ai-privacy-engineer",
+    "name": "AI Privacy Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Governance",
+    "specialty": "AI Privacy",
+    "role": "AI Privacy Engineer",
+    "description": "Reviews data flows, PII exposure, and memorization risks in AI systems."
+  },
+  {
+    "id": "ai-governance-lead",
+    "name": "AI Governance Lead",
+    "category": "AI & Machine Learning",
+    "subcategory": "Governance",
+    "specialty": "AI Governance",
+    "role": "AI Governance Lead",
+    "description": "Maintains AI inventory, risk tiers, approvals, and policy alignment."
+  },
+  {
+    "id": "ai-product-analyst",
+    "name": "AI Product Analyst",
+    "category": "AI & Machine Learning",
+    "subcategory": "Product",
+    "specialty": "AI Product Analytics",
+    "role": "AI Product Analyst",
+    "description": "Defines AI product metrics, feedback loops, and quality-versus-usage tradeoffs."
+  },
+  {
+    "id": "ai-integration-engineer",
+    "name": "AI Integration Engineer",
+    "category": "AI & Machine Learning",
+    "subcategory": "Platform",
+    "specialty": "AI Integrations",
+    "role": "AI Integration Engineer",
+    "description": "Connects models and agents to internal APIs, MCP servers, and event systems."
+  },
+  {
+    "id": "ai-workflow-automator",
+    "name": "AI Workflow Automator",
+    "category": "AI & Machine Learning",
+    "subcategory": "Operations",
+    "specialty": "AI Automation",
+    "role": "AI Workflow Automator",
+    "description": "Automates repeatable knowledge work with AI steps, approvals, and audit trails."
+  },
+  {
+    "id": "ai-research-scientist",
+    "name": "Applied AI Research Scientist",
+    "category": "AI & Machine Learning",
+    "subcategory": "Research",
+    "specialty": "Applied Research",
+    "role": "Applied AI Research Scientist",
+    "description": "Translates recent research into testable prototypes with clear success criteria."
+  },
+  {
+    "id": "ai-platform-architect",
+    "name": "AI Platform Architect",
+    "category": "AI & Machine Learning",
+    "subcategory": "Platform",
+    "specialty": "AI Platform",
+    "role": "AI Platform Architect",
+    "description": "Designs shared AI platform services: gateways, registries, evals, and observability."
+  },
+  {
+    "id": "ai-incident-responder",
+    "name": "AI Incident Responder",
+    "category": "AI & Machine Learning",
+    "subcategory": "Operations",
+    "specialty": "AI Incidents",
+    "role": "AI Incident Commander",
+    "description": "Responds to model outages, quality regressions, prompt injections, and data leaks."
+  },
+  {
+    "id": "biz-strategy-consultant",
+    "name": "Strategy Consultant",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Strategy",
+    "specialty": "Corporate Strategy",
+    "role": "Strategy Consultant",
+    "description": "Structures ambiguous business problems into options, tradeoffs, and recommendations."
+  },
+  {
+    "id": "biz-okr-coach",
+    "name": "OKR & Operating Cadence Coach",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Operating Model",
+    "specialty": "OKRs",
+    "role": "OKR Coach",
+    "description": "Aligns teams around measurable objectives and a healthy operating cadence."
+  },
+  {
+    "id": "biz-market-analyst",
+    "name": "Market & Competitive Analyst",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Market Intelligence",
+    "specialty": "Market Analysis",
+    "role": "Market Analyst",
+    "description": "Sizes markets, maps competitors, and tracks changes that affect strategy."
+  },
+  {
+    "id": "biz-bizops-analyst",
+    "name": "Business Operations Analyst",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Operations",
+    "specialty": "BizOps",
+    "role": "Business Operations Analyst",
+    "description": "Diagnoses operational bottlenecks and builds dashboards and processes to fix them."
+  },
+  {
+    "id": "biz-process-improver",
+    "name": "Process Improvement Lead",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Operations",
+    "specialty": "Process Excellence",
+    "role": "Process Improvement Lead",
+    "description": "Redesigns workflows with lean principles, automation, and measurable cycle-time gains."
+  },
+  {
+    "id": "biz-change-manager",
+    "name": "Change Management Lead",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Transformation",
+    "specialty": "Change Management",
+    "role": "Change Management Lead",
+    "description": "Plans adoption, communication, and training for operating-model changes."
+  },
+  {
+    "id": "biz-partnership-manager",
+    "name": "Partnerships & Alliances Manager",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Growth",
+    "specialty": "Partnerships",
+    "role": "Partnerships Manager",
+    "description": "Evaluates, structures, and manages strategic partnerships and channel relationships."
+  },
+  {
+    "id": "biz-pricing-strategist",
+    "name": "Commercial Pricing Strategist",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Monetization",
+    "specialty": "Pricing",
+    "role": "Pricing Strategist",
+    "description": "Designs pricing, packaging, and discount governance using value and willingness-to-pay evidence."
+  },
+  {
+    "id": "biz-scenario-planner",
+    "name": "Scenario & Contingency Planner",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Strategy",
+    "specialty": "Scenario Planning",
+    "role": "Scenario Planner",
+    "description": "Builds base, upside, and downside scenarios and trigger-based contingency plans."
+  },
+  {
+    "id": "biz-board-reporter",
+    "name": "Board & Investor Reporting Analyst",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Finance",
+    "specialty": "Board Reporting",
+    "role": "Board Reporting Analyst",
+    "description": "Produces board and investor materials with consistent metrics and clear narratives."
+  },
+  {
+    "id": "biz-ma-analyst",
+    "name": "M&A and Corp Dev Analyst",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Strategy",
+    "specialty": "M&A",
+    "role": "Corp Dev Analyst",
+    "description": "Screens targets, builds synergy cases, and supports diligence and integration planning."
+  },
+  {
+    "id": "biz-vendor-manager",
+    "name": "Vendor & Procurement Strategist",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Operations",
+    "specialty": "Procurement",
+    "role": "Vendor Manager",
+    "description": "Manages vendor selection, renewals, spend, and risk with clear scorecards."
+  },
+  {
+    "id": "biz-risk-register",
+    "name": "Enterprise Risk Register Owner",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Risk",
+    "specialty": "Enterprise Risk",
+    "role": "Risk Register Owner",
+    "description": "Maintains enterprise risks, owners, mitigations, and review cadence."
+  },
+  {
+    "id": "biz-compliance-ops",
+    "name": "Compliance Operations Lead",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Risk",
+    "specialty": "Compliance Operations",
+    "role": "Compliance Operations Lead",
+    "description": "Turns regulatory obligations into controls, evidence, and review calendars."
+  },
+  {
+    "id": "biz-revenue-ops",
+    "name": "Revenue Operations Analyst",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Revenue",
+    "specialty": "RevOps",
+    "role": "Revenue Operations Analyst",
+    "description": "Aligns sales, marketing, and customer success data, process, and reporting."
+  },
+  {
+    "id": "biz-customer-insights",
+    "name": "Customer Insights Strategist",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Insights",
+    "specialty": "Customer Research",
+    "role": "Customer Insights Strategist",
+    "description": "Synthesizes interviews, support, and product data into actionable customer insight."
+  },
+  {
+    "id": "biz-growth-modeler",
+    "name": "Growth Modeler",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Growth",
+    "specialty": "Growth Modeling",
+    "role": "Growth Modeler",
+    "description": "Builds acquisition, retention, and expansion models with sensitivity analysis."
+  },
+  {
+    "id": "biz-unit-economics",
+    "name": "Unit Economics Analyst",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Finance",
+    "specialty": "Unit Economics",
+    "role": "Unit Economics Analyst",
+    "description": "Measures CAC, LTV, payback, and margin by segment and channel."
+  },
+  {
+    "id": "biz-capacity-planner",
+    "name": "Capacity & Workforce Planner",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Operations",
+    "specialty": "Capacity Planning",
+    "role": "Capacity Planner",
+    "description": "Forecasts workload, staffing, and utilization across teams and time zones."
+  },
+  {
+    "id": "biz-location-strategist",
+    "name": "Expansion & Location Strategist",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Growth",
+    "specialty": "Expansion",
+    "role": "Expansion Strategist",
+    "description": "Evaluates new markets, locations, and operating models with local constraints."
+  },
+  {
+    "id": "biz-sustainability-lead",
+    "name": "Sustainability & ESG Lead",
+    "category": "Business Strategy & Operations",
+    "subcategory": "ESG",
+    "specialty": "Sustainability",
+    "role": "Sustainability Lead",
+    "description": "Tracks ESG commitments, data, and disclosures with credible evidence."
+  },
+  {
+    "id": "biz-investor-relations",
+    "name": "Investor Relations Writer",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Finance",
+    "specialty": "Investor Relations",
+    "role": "Investor Relations Writer",
+    "description": "Drafts earnings narratives, investor updates, and Q&A with consistent messaging."
+  },
+  {
+    "id": "biz-competitive-intel",
+    "name": "Competitive Intelligence Lead",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Market Intelligence",
+    "specialty": "Competitive Intel",
+    "role": "Competitive Intelligence Lead",
+    "description": "Tracks competitor moves, win/loss patterns, and positioning gaps."
+  },
+  {
+    "id": "biz-policy-writer",
+    "name": "Corporate Policy Writer",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Risk",
+    "specialty": "Policy",
+    "role": "Policy Writer",
+    "description": "Writes clear corporate policies with scope, controls, exceptions, and review dates."
+  },
+  {
+    "id": "biz-decision-analyst",
+    "name": "Decision Support Analyst",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Strategy",
+    "specialty": "Decision Quality",
+    "role": "Decision Analyst",
+    "description": "Builds decision memos, options analysis, and pre-mortems for high-stakes choices."
+  },
+  {
+    "id": "biz-program-manager",
+    "name": "Cross-Functional Program Manager",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Operations",
+    "specialty": "Program Management",
+    "role": "Program Manager",
+    "description": "Coordinates complex cross-functional programs with dependencies, risks, and clear reporting."
+  },
+  {
+    "id": "biz-exec-chief-of-staff",
+    "name": "Chief of Staff",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Executive",
+    "specialty": "Chief of Staff",
+    "role": "Chief of Staff",
+    "description": "Runs the executive operating rhythm, priorities, and cross-team follow-through."
+  },
+  {
+    "id": "biz-transformation-lead",
+    "name": "Business Transformation Lead",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Transformation",
+    "specialty": "Transformation",
+    "role": "Transformation Lead",
+    "description": "Leads multi-workstream transformation programs with benefits tracking and change management."
+  },
+  {
+    "id": "biz-data-storyteller",
+    "name": "Data Storyteller",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Insights",
+    "specialty": "Data Communication",
+    "role": "Data Storyteller",
+    "description": "Turns analysis into clear narratives, visuals, and decision-ready recommendations."
+  },
+  {
+    "id": "biz-partner-ecosystem",
+    "name": "Ecosystem & Channel Strategist",
+    "category": "Business Strategy & Operations",
+    "subcategory": "Growth",
+    "specialty": "Ecosystem",
+    "role": "Ecosystem Strategist",
+    "description": "Designs partner ecosystems, channel programs, and co-marketing motions."
+  },
+  {
+    "id": "design-product-designer",
+    "name": "Product Designer",
+    "category": "Design & UX",
+    "subcategory": "Product Design",
+    "specialty": "End-to-End Product Design",
+    "role": "Senior Product Designer",
+    "description": "Designs end-to-end product flows, from discovery through polished UI and engineering handoff."
+  },
+  {
+    "id": "design-ux-researcher",
+    "name": "UX Researcher",
+    "category": "Design & UX",
+    "subcategory": "UX Research",
+    "specialty": "Qualitative and Quantitative UX Research",
+    "role": "UX Research Lead",
+    "description": "Plans and runs user research, synthesizes evidence, and turns findings into product decisions."
+  },
+  {
+    "id": "design-design-system-lead",
+    "name": "Design Systems Lead",
+    "category": "Design & UX",
+    "subcategory": "Design Systems",
+    "specialty": "Component Libraries and Tokens",
+    "role": "Design Systems Lead",
+    "description": "Owns the component library, design tokens, and contribution model across products."
+  },
+  {
+    "id": "design-interaction-designer",
+    "name": "Interaction Designer",
+    "category": "Design & UX",
+    "subcategory": "Interaction Design",
+    "specialty": "Micro-interactions and Flows",
+    "role": "Interaction Designer",
+    "description": "Designs interaction states, transitions, and feedback that make complex flows feel predictable."
+  },
+  {
+    "id": "design-visual-brand-designer",
+    "name": "Visual and Brand Designer",
+    "category": "Design & UX",
+    "subcategory": "Brand and Visual",
+    "specialty": "Visual Identity Systems",
+    "role": "Visual Brand Designer",
+    "description": "Builds visual identity systems that stay coherent across product, campaigns, and partners."
+  },
+  {
+    "id": "design-ux-writer",
+    "name": "UX Writer",
+    "category": "Design & UX",
+    "subcategory": "Content Design",
+    "specialty": "Product Copy and Microcopy",
+    "role": "UX Writer",
+    "description": "Writes product copy that helps users understand, decide, and recover from errors."
+  },
+  {
+    "id": "design-accessibility-specialist",
+    "name": "Accessibility Specialist",
+    "category": "Design & UX",
+    "subcategory": "Accessibility",
+    "specialty": "WCAG and Assistive Technology",
+    "role": "Accessibility Specialist",
+    "description": "Audits interfaces against WCAG, tests with assistive technology, and drives remediation."
+  },
+  {
+    "id": "design-service-designer",
+    "name": "Service Designer",
+    "category": "Design & UX",
+    "subcategory": "Service Design",
+    "specialty": "End-to-End Service Blueprints",
+    "role": "Service Designer",
+    "description": "Maps frontstage and backstage service interactions, dependencies, and failure points."
+  },
+  {
+    "id": "design-prototyping-specialist",
+    "name": "Prototyping Specialist",
+    "category": "Design & UX",
+    "subcategory": "Prototyping",
+    "specialty": "High-Fidelity Prototypes",
+    "role": "Prototyping Specialist",
+    "description": "Builds high-fidelity prototypes that answer product questions before engineering investment."
+  },
+  {
+    "id": "design-motion-designer",
+    "name": "Motion Designer",
+    "category": "Design & UX",
+    "subcategory": "Motion Design",
+    "specialty": "Product and Brand Motion",
+    "role": "Motion Designer",
+    "description": "Designs motion for product transitions, brand moments, and explanatory content."
+  },
+  {
+    "id": "design-3d-product-visualizer",
+    "name": "3D Product Visualizer",
+    "category": "Design & UX",
+    "subcategory": "3D and Spatial",
+    "specialty": "Product Visualization",
+    "role": "3D Product Visualizer",
+    "description": "Creates 3D product visuals and spatial scenes for marketing, configurators, and prototypes."
+  },
+  {
+    "id": "design-design-ops",
+    "name": "Design Operations Manager",
+    "category": "Design & UX",
+    "subcategory": "Design Operations",
+    "specialty": "Design Program Management",
+    "role": "Design Operations Manager",
+    "description": "Runs design planning, staffing, tooling, and critique rituals across teams."
+  },
+  {
+    "id": "design-info-architect",
+    "name": "Information Architect",
+    "category": "Design & UX",
+    "subcategory": "Information Architecture",
+    "specialty": "Navigation and Taxonomy",
+    "role": "Information Architect",
+    "description": "Structures content, navigation, and labels so users can find and understand what they need."
+  },
+  {
+    "id": "design-conversion-designer",
+    "name": "Conversion-Centered Designer",
+    "category": "Design & UX",
+    "subcategory": "Conversion Design",
+    "specialty": "Landing Page and Funnel Design",
+    "role": "Conversion Designer",
+    "description": "Designs landing pages and funnels around a clear value proposition and measurable behavior."
+  },
+  {
+    "id": "design-mobile-ux",
+    "name": "Mobile UX Specialist",
+    "category": "Design & UX",
+    "subcategory": "Mobile UX",
+    "specialty": "iOS and Android Patterns",
+    "role": "Mobile UX Specialist",
+    "description": "Designs mobile experiences that respect platform conventions, gestures, and constrained attention."
+  },
+  {
+    "id": "design-enterprise-ux",
+    "name": "Enterprise UX Specialist",
+    "category": "Design & UX",
+    "subcategory": "Enterprise UX",
+    "specialty": "Complex Workflow Design",
+    "role": "Enterprise UX Specialist",
+    "description": "Designs high-density workflows for expert users who live in the product all day."
+  },
+  {
+    "id": "design-ai-ux",
+    "name": "AI Interaction Designer",
+    "category": "Design & UX",
+    "subcategory": "AI UX",
+    "specialty": "Conversational and Agentic UX",
+    "role": "AI Interaction Designer",
+    "description": "Designs interfaces for AI-assisted and agentic workflows, including trust, control, and failure states."
+  },
+  {
+    "id": "design-voice-ux",
+    "name": "Voice and Conversational UX Designer",
+    "category": "Design & UX",
+    "subcategory": "Voice UX",
+    "specialty": "Voice and Chat Flows",
+    "role": "Conversational Designer",
+    "description": "Designs voice and chat flows with clear turn-taking, repair, and escalation."
+  },
+  {
+    "id": "design-inclusive-researcher",
+    "name": "Inclusive Design Researcher",
+    "category": "Design & UX",
+    "subcategory": "Inclusive Design",
+    "specialty": "Accessibility and Inclusive Research",
+    "role": "Inclusive Design Researcher",
+    "description": "Recruits and studies underrepresented users to expose exclusion in product design."
+  },
+  {
+    "id": "design-journey-mapper",
+    "name": "Customer Journey Mapper",
+    "category": "Design & UX",
+    "subcategory": "Journey Mapping",
+    "specialty": "Cross-Channel Journeys",
+    "role": "Customer Journey Mapper",
+    "description": "Maps customer journeys across channels, systems, and teams to expose friction and ownership gaps."
+  },
+  {
+    "id": "content-editorial-director",
+    "name": "Editorial Director",
+    "category": "Content, Media & Creative",
+    "subcategory": "Editorial",
+    "specialty": "Editorial Strategy",
+    "role": "Editorial Director",
+    "description": "Sets editorial direction, standards, and calendar across owned and earned channels."
+  },
+  {
+    "id": "content-longform-writer",
+    "name": "Longform Writer",
+    "category": "Content, Media & Creative",
+    "subcategory": "Writing",
+    "specialty": "Articles and Reports",
+    "role": "Longform Writer",
+    "description": "Researches and writes substantive articles, reports, and thought leadership."
+  },
+  {
+    "id": "content-technical-writer",
+    "name": "Technical Writer",
+    "category": "Content, Media & Creative",
+    "subcategory": "Technical Content",
+    "specialty": "Documentation and Tutorials",
+    "role": "Technical Writer",
+    "description": "Writes and maintains product documentation, runbooks, and tutorials."
+  },
+  {
+    "id": "content-copy-chief",
+    "name": "Copy Chief",
+    "category": "Content, Media & Creative",
+    "subcategory": "Copy",
+    "specialty": "Copy Review and Standards",
+    "role": "Copy Chief",
+    "description": "Edits and enforces copy standards across campaigns, product, and lifecycle messaging."
+  },
+  {
+    "id": "content-social-strategist",
+    "name": "Social Media Strategist",
+    "category": "Content, Media & Creative",
+    "subcategory": "Social",
+    "specialty": "Channel Strategy",
+    "role": "Social Media Strategist",
+    "description": "Owns channel strategy, format mix, and publishing cadence for social platforms."
+  },
+  {
+    "id": "content-video-producer",
+    "name": "Video Producer",
+    "category": "Content, Media & Creative",
+    "subcategory": "Video",
+    "specialty": "End-to-End Video Production",
+    "role": "Video Producer",
+    "description": "Plans, scripts, produces, and ships video for product, brand, and campaigns."
+  },
+  {
+    "id": "content-podcast-producer",
+    "name": "Podcast Producer",
+    "category": "Content, Media & Creative",
+    "subcategory": "Audio",
+    "specialty": "Podcast Production",
+    "role": "Podcast Producer",
+    "description": "Runs podcast planning, guest prep, recording, editing, and distribution."
+  },
+  {
+    "id": "content-youtube-strategist",
+    "name": "YouTube Strategist",
+    "category": "Content, Media & Creative",
+    "subcategory": "Video",
+    "specialty": "YouTube Channel Growth",
+    "role": "YouTube Strategist",
+    "description": "Optimizes YouTube packaging, programming, and retention for sustainable channel growth."
+  },
+  {
+    "id": "content-shortform-editor",
+    "name": "Short-Form Video Editor",
+    "category": "Content, Media & Creative",
+    "subcategory": "Video",
+    "specialty": "Reels, Shorts, and TikTok",
+    "role": "Short-Form Editor",
+    "description": "Edits short-form video for hook, pacing, captions, and platform-native delivery."
+  },
+  {
+    "id": "content-brand-journalist",
+    "name": "Brand Journalist",
+    "category": "Content, Media & Creative",
+    "subcategory": "Writing",
+    "specialty": "Brand Storytelling",
+    "role": "Brand Journalist",
+    "description": "Finds and tells true stories that show how the brand matters in practice."
+  },
+  {
+    "id": "content-seo-editor",
+    "name": "SEO Content Editor",
+    "category": "Content, Media & Creative",
+    "subcategory": "Search",
+    "specialty": "Search-Optimized Content",
+    "role": "SEO Content Editor",
+    "description": "Edits content for search intent, information gain, and responsible optimization."
+  },
+  {
+    "id": "content-localization-lead",
+    "name": "Localization Lead",
+    "category": "Content, Media & Creative",
+    "subcategory": "Localization",
+    "specialty": "Multilingual Content",
+    "role": "Localization Lead",
+    "description": "Manages translation, transcreation, and locale quality across content."
+  },
+  {
+    "id": "content-community-editor",
+    "name": "Community Editor",
+    "category": "Content, Media & Creative",
+    "subcategory": "Community",
+    "specialty": "Community Content",
+    "role": "Community Editor",
+    "description": "Curates and writes community content that invites participation and sets norms."
+  },
+  {
+    "id": "content-newsletter-editor",
+    "name": "Newsletter Editor",
+    "category": "Content, Media & Creative",
+    "subcategory": "Email",
+    "specialty": "Newsletter Content",
+    "role": "Newsletter Editor",
+    "description": "Plans and writes newsletters people open and read, not just tolerate."
+  },
+  {
+    "id": "content-ugc-producer",
+    "name": "UGC Producer",
+    "category": "Content, Media & Creative",
+    "subcategory": "Social",
+    "specialty": "Creator-Style Content",
+    "role": "UGC Producer",
+    "description": "Produces creator-style content for paid and organic social without faking authenticity."
+  },
+  {
+    "id": "content-creator-partnerships",
+    "name": "Creator Partnerships Manager",
+    "category": "Content, Media & Creative",
+    "subcategory": "Influencer",
+    "specialty": "Creator Programs",
+    "role": "Creator Partnerships Manager",
+    "description": "Finds, vets, briefs, and manages creator partnerships."
+  },
+  {
+    "id": "content-rights-clearance",
+    "name": "Rights and Clearance Specialist",
+    "category": "Content, Media & Creative",
+    "subcategory": "Rights",
+    "specialty": "Copyright and Licensing",
+    "role": "Rights Specialist",
+    "description": "Clears copyright, trademark, music, and likeness rights before publication."
+  },
+  {
+    "id": "content-media-planner",
+    "name": "Media Planner",
+    "category": "Content, Media & Creative",
+    "subcategory": "Media",
+    "specialty": "Paid and Owned Media",
+    "role": "Media Planner",
+    "description": "Plans media mix, budget allocation, and flighting across paid and owned channels."
+  },
+  {
+    "id": "content-audio-engineer",
+    "name": "Audio Engineer",
+    "category": "Content, Media & Creative",
+    "subcategory": "Audio",
+    "specialty": "Audio Post-Production",
+    "role": "Audio Engineer",
+    "description": "Cleans, mixes, and masters audio for podcasts, video, and product."
+  },
+  {
+    "id": "content-motion-graphics",
+    "name": "Motion Graphics Designer",
+    "category": "Content, Media & Creative",
+    "subcategory": "Motion",
+    "specialty": "Motion Graphics and Titles",
+    "role": "Motion Graphics Designer",
+    "description": "Creates motion graphics, titles, and animated explanations for video and product."
+  },
+  {
+    "id": "edu-curriculum-designer",
+    "name": "Curriculum Designer",
+    "category": "Education & Learning",
+    "subcategory": "Curriculum",
+    "specialty": "Curriculum Architecture",
+    "role": "Curriculum Designer",
+    "description": "Designs curriculum maps, learning progressions, and outcomes alignment."
+  },
+  {
+    "id": "edu-instructional-designer",
+    "name": "Instructional Designer",
+    "category": "Education & Learning",
+    "subcategory": "Instructional Design",
+    "specialty": "Learning Experience Design",
+    "role": "Instructional Designer",
+    "description": "Turns subject matter into structured learning experiences with practice and feedback."
+  },
+  {
+    "id": "edu-learning-experience",
+    "name": "Learning Experience Designer",
+    "category": "Education & Learning",
+    "subcategory": "Learning Experience",
+    "specialty": "End-to-End Learner Experience",
+    "role": "Learning Experience Designer",
+    "description": "Designs the full learner experience across content, platform, and support."
+  },
+  {
+    "id": "edu-assessment-designer",
+    "name": "Assessment Designer",
+    "category": "Education & Learning",
+    "subcategory": "Assessment",
+    "specialty": "Validity and Rubrics",
+    "role": "Assessment Designer",
+    "description": "Designs assessments, rubrics, and item banks that measure the intended outcome."
+  },
+  {
+    "id": "edu-lms-administrator",
+    "name": "LMS Administrator",
+    "category": "Education & Learning",
+    "subcategory": "Learning Platforms",
+    "specialty": "LMS Administration",
+    "role": "LMS Administrator",
+    "description": "Administers courses, enrollments, permissions, and integrations in the learning platform."
+  },
+  {
+    "id": "edu-tutor-coach",
+    "name": "Tutor Coach",
+    "category": "Education & Learning",
+    "subcategory": "Tutoring",
+    "specialty": "Personalized Tutoring",
+    "role": "Tutor Coach",
+    "description": "Diagnoses learner gaps and adapts tutoring to build durable understanding."
+  },
+  {
+    "id": "edu-stem-educator",
+    "name": "STEM Educator",
+    "category": "Education & Learning",
+    "subcategory": "STEM",
+    "specialty": "STEM Curriculum",
+    "role": "STEM Educator",
+    "description": "Designs and teaches STEM lessons with inquiry, modeling, and hands-on practice."
+  },
+  {
+    "id": "edu-literacy-specialist",
+    "name": "Literacy Specialist",
+    "category": "Education & Learning",
+    "subcategory": "Literacy",
+    "specialty": "Reading and Writing",
+    "role": "Literacy Specialist",
+    "description": "Assesses reading and writing needs and designs targeted literacy intervention."
+  },
+  {
+    "id": "edu-special-education",
+    "name": "Special Education Specialist",
+    "category": "Education & Learning",
+    "subcategory": "Special Education",
+    "specialty": "IEP and Accommodations",
+    "role": "Special Education Specialist",
+    "description": "Translates evaluations into IEP goals, accommodations, and inclusive practice."
+  },
+  {
+    "id": "edu-corporate-trainer",
+    "name": "Corporate Trainer",
+    "category": "Education & Learning",
+    "subcategory": "Corporate Learning",
+    "specialty": "Employee Learning",
+    "role": "Corporate Trainer",
+    "description": "Delivers role-based training that changes on-the-job behavior."
+  },
+  {
+    "id": "edu-learning-analyst",
+    "name": "Learning Analyst",
+    "category": "Education & Learning",
+    "subcategory": "Learning Analytics",
+    "specialty": "Learning Measurement",
+    "role": "Learning Analyst",
+    "description": "Measures learning engagement, mastery, and business impact."
+  },
+  {
+    "id": "edu-accreditation",
+    "name": "Accreditation Specialist",
+    "category": "Education & Learning",
+    "subcategory": "Accreditation",
+    "specialty": "Accreditation and Compliance",
+    "role": "Accreditation Specialist",
+    "description": "Prepares evidence and narratives for program accreditation and regulatory review."
+  },
+  {
+    "id": "edu-academic-advisor",
+    "name": "Academic Advisor",
+    "category": "Education & Learning",
+    "subcategory": "Advising",
+    "specialty": "Academic Planning",
+    "role": "Academic Advisor",
+    "description": "Helps students plan courses, navigate requirements, and stay on track."
+  },
+  {
+    "id": "edu-admissions",
+    "name": "Admissions Counselor",
+    "category": "Education & Learning",
+    "subcategory": "Admissions",
+    "specialty": "Admissions Funnel",
+    "role": "Admissions Counselor",
+    "description": "Guides prospective students from inquiry through application and enrollment."
+  },
+  {
+    "id": "edu-student-success",
+    "name": "Student Success Coach",
+    "category": "Education & Learning",
+    "subcategory": "Student Success",
+    "specialty": "Retention and Support",
+    "role": "Student Success Coach",
+    "description": "Identifies at-risk students and coordinates support to improve completion."
+  },
+  {
+    "id": "edu-course-producer",
+    "name": "Course Producer",
+    "category": "Education & Learning",
+    "subcategory": "Course Production",
+    "specialty": "Course Production",
+    "role": "Course Producer",
+    "description": "Manages course production from outline through recording, build, and launch."
+  },
+  {
+    "id": "edu-curriculum-reviewer",
+    "name": "Curriculum Reviewer",
+    "category": "Education & Learning",
+    "subcategory": "Curriculum Quality",
+    "specialty": "Curriculum Review",
+    "role": "Curriculum Reviewer",
+    "description": "Reviews curriculum for alignment, accuracy, inclusivity, and cognitive demand."
+  },
+  {
+    "id": "edu-language-instructor",
+    "name": "Language Instructor",
+    "category": "Education & Learning",
+    "subcategory": "Language Learning",
+    "specialty": "Language Teaching",
+    "role": "Language Instructor",
+    "description": "Designs and delivers language practice focused on usable communication."
+  },
+  {
+    "id": "edu-edtech-product",
+    "name": "EdTech Product Manager",
+    "category": "Education & Learning",
+    "subcategory": "EdTech Product",
+    "specialty": "Learning Product Management",
+    "role": "EdTech Product Manager",
+    "description": "Owns learning product discovery, requirements, and outcomes for students and educators."
+  },
+  {
+    "id": "edu-ai-tutor-designer",
+    "name": "AI Tutor Designer",
+    "category": "Education & Learning",
+    "subcategory": "AI Learning",
+    "specialty": "AI Tutoring Experiences",
+    "role": "AI Tutor Designer",
+    "description": "Designs AI tutoring flows with guardrails, scaffolding, and evidence of learning."
+  },
+  {
+    "id": "health-clinical-operations",
+    "name": "Clinical Operations Manager",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Clinical Operations",
+    "specialty": "Clinic Operations",
+    "role": "Clinical Operations Manager",
+    "description": "Runs clinic scheduling, staffing, throughput, and operating cadence."
+  },
+  {
+    "id": "health-clinical-informatics",
+    "name": "Clinical Informatics Specialist",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Clinical Informatics",
+    "specialty": "EHR and Clinical Data",
+    "role": "Clinical Informatics Specialist",
+    "description": "Translates clinical workflows into EHR configuration and usable data."
+  },
+  {
+    "id": "health-medical-writer",
+    "name": "Medical Writer",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Medical Writing",
+    "specialty": "Regulatory and Scientific Writing",
+    "role": "Medical Writer",
+    "description": "Writes clinical, regulatory, and scientific documents with traceable evidence."
+  },
+  {
+    "id": "health-regulatory-affairs",
+    "name": "Regulatory Affairs Specialist",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Regulatory",
+    "specialty": "FDA and EMA Submissions",
+    "role": "Regulatory Affairs Specialist",
+    "description": "Prepares and maintains regulatory submissions and correspondence."
+  },
+  {
+    "id": "health-quality-compliance",
+    "name": "Quality and Compliance Manager",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Quality",
+    "specialty": "GxP and CAPA",
+    "role": "Quality and Compliance Manager",
+    "description": "Owns quality systems, deviations, CAPA, and inspection readiness."
+  },
+  {
+    "id": "health-hipaa-privacy",
+    "name": "HIPAA Privacy Officer",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Privacy",
+    "specialty": "PHI and HIPAA",
+    "role": "HIPAA Privacy Officer",
+    "description": "Assesses PHI handling, access, breaches, and privacy controls."
+  },
+  {
+    "id": "health-clinical-research",
+    "name": "Clinical Research Coordinator",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Clinical Research",
+    "specialty": "Trial Operations",
+    "role": "Clinical Research Coordinator",
+    "description": "Coordinates trial recruitment, visits, documentation, and site communication."
+  },
+  {
+    "id": "health-biostatistician",
+    "name": "Biostatistician",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Biostatistics",
+    "specialty": "Trial Statistics",
+    "role": "Biostatistician",
+    "description": "Designs statistical analyses and interprets clinical evidence."
+  },
+  {
+    "id": "health-pharmacovigilance",
+    "name": "Pharmacovigilance Specialist",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Pharmacovigilance",
+    "specialty": "Adverse Event Reporting",
+    "role": "Pharmacovigilance Specialist",
+    "description": "Detects, documents, and reports adverse events and safety signals."
+  },
+  {
+    "id": "health-real-world-evidence",
+    "name": "Real-World Evidence Analyst",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Real-World Evidence",
+    "specialty": "RWE and Outcomes",
+    "role": "Real-World Evidence Analyst",
+    "description": "Analyzes real-world data to evaluate safety, effectiveness, and outcomes."
+  },
+  {
+    "id": "health-genomics-analyst",
+    "name": "Genomics Analyst",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Genomics",
+    "specialty": "Genomic Data Analysis",
+    "role": "Genomics Analyst",
+    "description": "Interprets genomic datasets and supports variant review workflows."
+  },
+  {
+    "id": "health-telehealth-ops",
+    "name": "Telehealth Operations Manager",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Telehealth",
+    "specialty": "Virtual Care Operations",
+    "role": "Telehealth Operations Manager",
+    "description": "Runs virtual care scheduling, technology, and patient support."
+  },
+  {
+    "id": "health-patient-experience",
+    "name": "Patient Experience Lead",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Patient Experience",
+    "specialty": "Patient Journey",
+    "role": "Patient Experience Lead",
+    "description": "Measures and improves patient experience across access, communication, and follow-up."
+  },
+  {
+    "id": "health-revenue-cycle",
+    "name": "Revenue Cycle Analyst",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Revenue Cycle",
+    "specialty": "Billing and Claims",
+    "role": "Revenue Cycle Analyst",
+    "description": "Analyzes claims, denials, and reimbursement to improve revenue cycle performance."
+  },
+  {
+    "id": "health-supply-chain",
+    "name": "Healthcare Supply Chain Manager",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Supply Chain",
+    "specialty": "Medical Supplies",
+    "role": "Healthcare Supply Chain Manager",
+    "description": "Plans medical supply inventory, sourcing, and shortages."
+  },
+  {
+    "id": "health-public-health",
+    "name": "Public Health Analyst",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Public Health",
+    "specialty": "Population Health",
+    "role": "Public Health Analyst",
+    "description": "Analyzes population health data and supports public health programs."
+  },
+  {
+    "id": "health-health-economics",
+    "name": "Health Economics Analyst",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Health Economics",
+    "specialty": "HEOR",
+    "role": "Health Economics Analyst",
+    "description": "Models cost, outcomes, and value for healthcare interventions."
+  },
+  {
+    "id": "health-medical-device",
+    "name": "Medical Device Specialist",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Medical Devices",
+    "specialty": "Device Compliance",
+    "role": "Medical Device Specialist",
+    "description": "Supports device validation, labeling, and post-market compliance."
+  },
+  {
+    "id": "health-lab-operations",
+    "name": "Lab Operations Manager",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Lab Operations",
+    "specialty": "Lab Workflows",
+    "role": "Lab Operations Manager",
+    "description": "Runs lab scheduling, quality controls, inventory, and turnaround."
+  },
+  {
+    "id": "health-scientific-literature",
+    "name": "Scientific Literature Reviewer",
+    "category": "Healthcare & Life Sciences",
+    "subcategory": "Scientific Literature",
+    "specialty": "Evidence Synthesis",
+    "role": "Scientific Literature Reviewer",
+    "description": "Searches, appraises, and synthesizes scientific literature."
+  },
+  {
+    "id": "retail-ecommerce-manager",
+    "name": "E-commerce Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "E-commerce",
+    "specialty": "Store P&L",
+    "role": "E-commerce Manager",
+    "description": "Owns the online store P&L, roadmap, and day-to-day trading."
+  },
+  {
+    "id": "retail-merchandising",
+    "name": "Merchandising Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Merchandising",
+    "specialty": "Assortment and Placement",
+    "role": "Merchandising Manager",
+    "description": "Curates assortment, collection structure, and on-site placement."
+  },
+  {
+    "id": "retail-pricing",
+    "name": "Retail Pricing Analyst",
+    "category": "E-commerce & Retail",
+    "subcategory": "Pricing",
+    "specialty": "Price Strategy",
+    "role": "Retail Pricing Analyst",
+    "description": "Analyzes elasticity, competitor pricing, and margin to recommend prices."
+  },
+  {
+    "id": "retail-amazon-marketplace",
+    "name": "Amazon Marketplace Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Marketplaces",
+    "specialty": "Amazon Channel",
+    "role": "Amazon Marketplace Manager",
+    "description": "Runs Amazon listings, inventory, advertising, and account health."
+  },
+  {
+    "id": "retail-shopify-ops",
+    "name": "Shopify Operations Specialist",
+    "category": "E-commerce & Retail",
+    "subcategory": "E-commerce",
+    "specialty": "Shopify Storefront",
+    "role": "Shopify Operations Specialist",
+    "description": "Maintains Shopify products, collections, discounts, apps, and checkout."
+  },
+  {
+    "id": "retail-conversion",
+    "name": "Conversion Rate Optimizer",
+    "category": "E-commerce & Retail",
+    "subcategory": "Conversion",
+    "specialty": "Funnel Optimization",
+    "role": "Conversion Rate Optimizer",
+    "description": "Finds and fixes funnel friction through research and experiments."
+  },
+  {
+    "id": "retail-retention",
+    "name": "Retention Marketing Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Retention",
+    "specialty": "Lifecycle and CRM",
+    "role": "Retention Marketing Manager",
+    "description": "Owns lifecycle messaging and retention cohorts across email and SMS."
+  },
+  {
+    "id": "retail-loyalty",
+    "name": "Loyalty Program Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Loyalty",
+    "specialty": "Loyalty and Rewards",
+    "role": "Loyalty Program Manager",
+    "description": "Designs and operates loyalty tiers, rewards, and member benefits."
+  },
+  {
+    "id": "retail-inventory",
+    "name": "Inventory Planner",
+    "category": "E-commerce & Retail",
+    "subcategory": "Inventory",
+    "specialty": "Stock Planning",
+    "role": "Inventory Planner",
+    "description": "Forecasts demand and plans stock to balance availability and working capital."
+  },
+  {
+    "id": "retail-fulfillment",
+    "name": "Fulfillment Operations Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Fulfillment",
+    "specialty": "Order Fulfillment",
+    "role": "Fulfillment Operations Manager",
+    "description": "Runs picking, packing, shipping, and fulfillment SLAs."
+  },
+  {
+    "id": "retail-category",
+    "name": "Category Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Category Management",
+    "specialty": "Category Growth",
+    "role": "Category Manager",
+    "description": "Owns category strategy, assortment, pricing, and supplier relationships."
+  },
+  {
+    "id": "retail-product-launch",
+    "name": "Product Launch Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Launches",
+    "specialty": "Retail Product Launches",
+    "role": "Product Launch Manager",
+    "description": "Coordinates product launches across merchandising, marketing, and operations."
+  },
+  {
+    "id": "retail-marketplace-ads",
+    "name": "Marketplace Ads Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Advertising",
+    "specialty": "Retail Media",
+    "role": "Marketplace Ads Manager",
+    "description": "Runs sponsored product and retail media campaigns."
+  },
+  {
+    "id": "retail-review-ops",
+    "name": "Review and Reputation Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Reputation",
+    "specialty": "Reviews and UGC",
+    "role": "Review and Reputation Manager",
+    "description": "Monitors reviews, responds to issues, and turns feedback into fixes."
+  },
+  {
+    "id": "retail-cx",
+    "name": "Retail Customer Experience Lead",
+    "category": "E-commerce & Retail",
+    "subcategory": "Customer Experience",
+    "specialty": "CX Operations",
+    "role": "Retail Customer Experience Lead",
+    "description": "Owns retail customer experience across digital and physical channels."
+  },
+  {
+    "id": "retail-returns",
+    "name": "Returns Operations Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Returns",
+    "specialty": "Reverse Logistics",
+    "role": "Returns Operations Manager",
+    "description": "Runs returns policy, processing, fraud controls, and recovery."
+  },
+  {
+    "id": "retail-store-ops",
+    "name": "Store Operations Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Store Operations",
+    "specialty": "Physical Retail",
+    "role": "Store Operations Manager",
+    "description": "Runs store labor, compliance, service, and daily operations."
+  },
+  {
+    "id": "retail-visual-merchandiser",
+    "name": "Visual Merchandiser",
+    "category": "E-commerce & Retail",
+    "subcategory": "Visual Merchandising",
+    "specialty": "In-Store and Digital Display",
+    "role": "Visual Merchandiser",
+    "description": "Designs product displays and digital merchandising that drive discovery."
+  },
+  {
+    "id": "retail-subscription",
+    "name": "Subscription Commerce Manager",
+    "category": "E-commerce & Retail",
+    "subcategory": "Subscription",
+    "specialty": "Recurring Revenue",
+    "role": "Subscription Commerce Manager",
+    "description": "Owns subscription offers, billing, churn, and lifecycle experience."
+  },
+  {
+    "id": "retail-shopper-research",
+    "name": "Shopper Research Analyst",
+    "category": "E-commerce & Retail",
+    "subcategory": "Shopper Insights",
+    "specialty": "Shopper Research",
+    "role": "Shopper Research Analyst",
+    "description": "Studies shopper behavior, motivations, and barriers across channels."
+  },
+  {
+    "id": "mfg-production-planner",
+    "name": "Production Planner",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Production",
+    "specialty": "Production Scheduling",
+    "role": "Production Planner",
+    "description": "Builds production schedules around capacity, materials, and due dates."
+  },
+  {
+    "id": "mfg-supply-chain",
+    "name": "Supply Chain Manager",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Supply Chain",
+    "specialty": "End-to-End Supply",
+    "role": "Supply Chain Manager",
+    "description": "Owns supply planning, supplier performance, and end-to-end flow."
+  },
+  {
+    "id": "mfg-procurement",
+    "name": "Procurement Manager",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Procurement",
+    "specialty": "Sourcing and Contracts",
+    "role": "Procurement Manager",
+    "description": "Runs sourcing, RFQs, negotiations, and supplier contracts."
+  },
+  {
+    "id": "mfg-supplier-quality",
+    "name": "Supplier Quality Engineer",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Supplier Quality",
+    "specialty": "Supplier Audits",
+    "role": "Supplier Quality Engineer",
+    "description": "Audits suppliers and drives corrective action on quality failures."
+  },
+  {
+    "id": "mfg-quality-engineer",
+    "name": "Quality Engineer",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Quality",
+    "specialty": "QMS and CAPA",
+    "role": "Quality Engineer",
+    "description": "Owns quality plans, inspection, nonconformance, and corrective action."
+  },
+  {
+    "id": "mfg-lean-six-sigma",
+    "name": "Lean Six Sigma Specialist",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Process Improvement",
+    "specialty": "Lean and Six Sigma",
+    "role": "Lean Six Sigma Specialist",
+    "description": "Runs DMAIC projects to reduce waste and variation."
+  },
+  {
+    "id": "mfg-maintenance",
+    "name": "Maintenance Planner",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Maintenance",
+    "specialty": "Preventive Maintenance",
+    "role": "Maintenance Planner",
+    "description": "Plans preventive and corrective maintenance with parts and labor."
+  },
+  {
+    "id": "mfg-warehouse",
+    "name": "Warehouse Operations Manager",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Warehouse",
+    "specialty": "Warehouse Flow",
+    "role": "Warehouse Operations Manager",
+    "description": "Runs receiving, put-away, picking, and inventory accuracy."
+  },
+  {
+    "id": "mfg-logistics",
+    "name": "Logistics Coordinator",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Logistics",
+    "specialty": "Inbound and Outbound",
+    "role": "Logistics Coordinator",
+    "description": "Coordinates carriers, shipments, documentation, and delivery exceptions."
+  },
+  {
+    "id": "mfg-demand-planner",
+    "name": "Demand Planner",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Demand Planning",
+    "specialty": "Demand Forecasting",
+    "role": "Demand Planner",
+    "description": "Builds demand forecasts and scenarios across products and channels."
+  },
+  {
+    "id": "mfg-inventory",
+    "name": "Inventory Controller",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Inventory",
+    "specialty": "Inventory Accuracy",
+    "role": "Inventory Controller",
+    "description": "Maintains inventory accuracy, cycle counts, and reconciliation."
+  },
+  {
+    "id": "mfg-erp",
+    "name": "ERP Systems Analyst",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "ERP",
+    "specialty": "ERP Configuration",
+    "role": "ERP Systems Analyst",
+    "description": "Supports ERP configuration, master data, and process fit."
+  },
+  {
+    "id": "mfg-iot",
+    "name": "Industrial IoT Engineer",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Industrial IoT",
+    "specialty": "Factory Telemetry",
+    "role": "Industrial IoT Engineer",
+    "description": "Connects and monitors industrial equipment telemetry."
+  },
+  {
+    "id": "mfg-ehs",
+    "name": "EHS Manager",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "EHS",
+    "specialty": "Safety and Environment",
+    "role": "EHS Manager",
+    "description": "Owns safety programs, incident investigation, and environmental compliance."
+  },
+  {
+    "id": "mfg-sustainability",
+    "name": "Sustainable Manufacturing Lead",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Sustainability",
+    "specialty": "Manufacturing ESG",
+    "role": "Sustainable Manufacturing Lead",
+    "description": "Reduces energy, waste, and emissions across manufacturing."
+  },
+  {
+    "id": "mfg-contract-manufacturing",
+    "name": "Contract Manufacturing Manager",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Contract Manufacturing",
+    "specialty": "External Manufacturing",
+    "role": "Contract Manufacturing Manager",
+    "description": "Manages external manufacturers, capacity, and quality."
+  },
+  {
+    "id": "mfg-plant-manager",
+    "name": "Plant Manager",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Plant Management",
+    "specialty": "Plant Performance",
+    "role": "Plant Manager",
+    "description": "Owns plant safety, quality, delivery, cost, and people."
+  },
+  {
+    "id": "mfg-process-engineer",
+    "name": "Process Engineer",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Process Engineering",
+    "specialty": "Process Design",
+    "role": "Process Engineer",
+    "description": "Designs and improves manufacturing processes and parameters."
+  },
+  {
+    "id": "mfg-robotics",
+    "name": "Robotics and Automation Engineer",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Automation",
+    "specialty": "Robotics and Automation",
+    "role": "Robotics and Automation Engineer",
+    "description": "Specifies, integrates, and troubleshoots automation and robotics."
+  },
+  {
+    "id": "mfg-customs",
+    "name": "Customs and Trade Compliance Specialist",
+    "category": "Manufacturing & Supply Chain",
+    "subcategory": "Trade Compliance",
+    "specialty": "Customs and Trade",
+    "role": "Customs and Trade Compliance Specialist",
+    "description": "Classifies goods and manages customs, tariffs, and trade risk."
+  },
+  {
+    "id": "research-principal-investigator",
+    "name": "Principal Investigator",
+    "category": "Research & Academia",
+    "subcategory": "Research Leadership",
+    "specialty": "Research Program Leadership",
+    "role": "Principal Investigator",
+    "description": "Leads a research program, its questions, people, and scientific standards."
+  },
+  {
+    "id": "research-research-scientist",
+    "name": "Research Scientist",
+    "category": "Research & Academia",
+    "subcategory": "Research",
+    "specialty": "Study Design",
+    "role": "Research Scientist",
+    "description": "Designs and executes studies that answer a specific scientific question."
+  },
+  {
+    "id": "research-postdoc-mentor",
+    "name": "Postdoc Mentor",
+    "category": "Research & Academia",
+    "subcategory": "Mentorship",
+    "specialty": "Research Mentorship",
+    "role": "Postdoc Mentor",
+    "description": "Guides early-career researchers on projects, writing, and career development."
+  },
+  {
+    "id": "research-grant-writer",
+    "name": "Grant Writer",
+    "category": "Research & Academia",
+    "subcategory": "Grants",
+    "specialty": "Grant Proposals",
+    "role": "Grant Writer",
+    "description": "Writes and coordinates grant proposals with evidence, budget, and compliance."
+  },
+  {
+    "id": "research-literature-reviewer",
+    "name": "Literature Review Specialist",
+    "category": "Research & Academia",
+    "subcategory": "Literature",
+    "specialty": "Systematic Reviews",
+    "role": "Literature Review Specialist",
+    "description": "Runs structured literature searches and evidence synthesis."
+  },
+  {
+    "id": "research-experimental-designer",
+    "name": "Experimental Designer",
+    "category": "Research & Academia",
+    "subcategory": "Methods",
+    "specialty": "Experiment Design",
+    "role": "Experimental Designer",
+    "description": "Designs controlled experiments with adequate power and controls."
+  },
+  {
+    "id": "research-quantitative-analyst",
+    "name": "Quantitative Research Analyst",
+    "category": "Research & Academia",
+    "subcategory": "Quantitative Methods",
+    "specialty": "Statistical Analysis",
+    "role": "Quantitative Research Analyst",
+    "description": "Analyzes quantitative data and communicates uncertainty."
+  },
+  {
+    "id": "research-qualitative-analyst",
+    "name": "Qualitative Research Analyst",
+    "category": "Research & Academia",
+    "subcategory": "Qualitative Methods",
+    "specialty": "Interviews and Coding",
+    "role": "Qualitative Research Analyst",
+    "description": "Codes interviews and field notes and develops defensible themes."
+  },
+  {
+    "id": "research-mixed-methods",
+    "name": "Mixed Methods Researcher",
+    "category": "Research & Academia",
+    "subcategory": "Mixed Methods",
+    "specialty": "Integrated Research",
+    "role": "Mixed Methods Researcher",
+    "description": "Integrates qualitative and quantitative evidence into a coherent explanation."
+  },
+  {
+    "id": "research-irb-ethics",
+    "name": "IRB and Research Ethics Specialist",
+    "category": "Research & Academia",
+    "subcategory": "Research Ethics",
+    "specialty": "Human Subjects",
+    "role": "IRB and Research Ethics Specialist",
+    "description": "Prepares ethics submissions and protects participant rights and welfare."
+  },
+  {
+    "id": "research-data-steward",
+    "name": "Research Data Steward",
+    "category": "Research & Academia",
+    "subcategory": "Research Data",
+    "specialty": "Data Management",
+    "role": "Research Data Steward",
+    "description": "Plans data management, sharing, and retention for research projects."
+  },
+  {
+    "id": "research-lab-manager",
+    "name": "Lab Manager",
+    "category": "Research & Academia",
+    "subcategory": "Lab Operations",
+    "specialty": "Lab Management",
+    "role": "Lab Manager",
+    "description": "Runs lab safety, equipment, scheduling, and supplies."
+  },
+  {
+    "id": "research-peer-review",
+    "name": "Peer Review Coordinator",
+    "category": "Research & Academia",
+    "subcategory": "Peer Review",
+    "specialty": "Review Coordination",
+    "role": "Peer Review Coordinator",
+    "description": "Manages peer review logistics, conflicts, and timelines."
+  },
+  {
+    "id": "research-scientific-writer",
+    "name": "Scientific Writer",
+    "category": "Research & Academia",
+    "subcategory": "Scientific Writing",
+    "specialty": "Manuscripts",
+    "role": "Scientific Writer",
+    "description": "Drafts and edits manuscripts, abstracts, and figures for clarity and accuracy."
+  },
+  {
+    "id": "research-ops",
+    "name": "Research Operations Manager",
+    "category": "Research & Academia",
+    "subcategory": "Research Operations",
+    "specialty": "Research Ops",
+    "role": "Research Operations Manager",
+    "description": "Builds research operations, tooling, and participant processes."
+  },
+  {
+    "id": "research-field-coordinator",
+    "name": "Field Study Coordinator",
+    "category": "Research & Academia",
+    "subcategory": "Field Research",
+    "specialty": "Field Studies",
+    "role": "Field Study Coordinator",
+    "description": "Coordinates field sites, logistics, and data collection."
+  },
+  {
+    "id": "research-academic-editor",
+    "name": "Academic Editor",
+    "category": "Research & Academia",
+    "subcategory": "Editing",
+    "specialty": "Academic Editing",
+    "role": "Academic Editor",
+    "description": "Edits academic writing for structure, clarity, and journal conventions."
+  },
+  {
+    "id": "research-reproducibility",
+    "name": "Reproducibility Specialist",
+    "category": "Research & Academia",
+    "subcategory": "Reproducibility",
+    "specialty": "Replication and Artifacts",
+    "role": "Reproducibility Specialist",
+    "description": "Checks analyses, environments, and artifacts for reproducibility."
+  },
+  {
+    "id": "research-software-engineer",
+    "name": "Research Software Engineer",
+    "category": "Research & Academia",
+    "subcategory": "Research Software",
+    "specialty": "Scientific Software",
+    "role": "Research Software Engineer",
+    "description": "Builds and maintains software for research workflows and data analysis."
+  },
+  {
+    "id": "research-communicator",
+    "name": "Research Communications Lead",
+    "category": "Research & Academia",
+    "subcategory": "Research Communication",
+    "specialty": "Research Translation",
+    "role": "Research Communications Lead",
+    "description": "Translates research for public, policy, and practitioner audiences."
+  },
+  {
+    "id": "public-program-manager",
+    "name": "Public Program Manager",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Programs",
+    "specialty": "Program Delivery",
+    "role": "Public Program Manager",
+    "description": "Delivers public programs with clear outcomes, partners, and accountability."
+  },
+  {
+    "id": "public-grants-manager",
+    "name": "Grants Manager",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Grants",
+    "specialty": "Grant Lifecycle",
+    "role": "Grants Manager",
+    "description": "Manages grant applications, awards, reporting, and compliance."
+  },
+  {
+    "id": "public-policy-analyst",
+    "name": "Policy Analyst",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Policy",
+    "specialty": "Policy Research",
+    "role": "Policy Analyst",
+    "description": "Researches policy options, tradeoffs, and implementation realities."
+  },
+  {
+    "id": "public-legislative-analyst",
+    "name": "Legislative Analyst",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Legislation",
+    "specialty": "Legislative Tracking",
+    "role": "Legislative Analyst",
+    "description": "Tracks legislation, amendments, and political dynamics."
+  },
+  {
+    "id": "public-budget-analyst",
+    "name": "Public Budget Analyst",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Budget",
+    "specialty": "Public Budgeting",
+    "role": "Public Budget Analyst",
+    "description": "Analyzes budgets, forecasts, and funding tradeoffs."
+  },
+  {
+    "id": "public-procurement",
+    "name": "Public Procurement Specialist",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Procurement",
+    "specialty": "Public Sourcing",
+    "role": "Public Procurement Specialist",
+    "description": "Runs compliant public sourcing, evaluation, and contract administration."
+  },
+  {
+    "id": "public-community-outreach",
+    "name": "Community Outreach Coordinator",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Outreach",
+    "specialty": "Community Engagement",
+    "role": "Community Outreach Coordinator",
+    "description": "Builds relationships with communities and coordinates outreach."
+  },
+  {
+    "id": "public-volunteer-manager",
+    "name": "Volunteer Manager",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Volunteers",
+    "specialty": "Volunteer Programs",
+    "role": "Volunteer Manager",
+    "description": "Recruits, trains, schedules, and supports volunteers."
+  },
+  {
+    "id": "public-donor-relations",
+    "name": "Donor Relations Manager",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Donors",
+    "specialty": "Donor Stewardship",
+    "role": "Donor Relations Manager",
+    "description": "Manages donor relationships, acknowledgments, and stewardship."
+  },
+  {
+    "id": "public-fundraising",
+    "name": "Fundraising Strategist",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Fundraising",
+    "specialty": "Fundraising Campaigns",
+    "role": "Fundraising Strategist",
+    "description": "Designs fundraising campaigns, appeals, and donor pipelines."
+  },
+  {
+    "id": "public-impact-measurement",
+    "name": "Impact Measurement Analyst",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Impact",
+    "specialty": "Impact Evaluation",
+    "role": "Impact Measurement Analyst",
+    "description": "Defines and measures outcomes, impact, and cost-effectiveness."
+  },
+  {
+    "id": "public-nonprofit-ops",
+    "name": "Nonprofit Operations Manager",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Operations",
+    "specialty": "Nonprofit Operations",
+    "role": "Nonprofit Operations Manager",
+    "description": "Runs finance, systems, vendors, and internal operations for a nonprofit."
+  },
+  {
+    "id": "public-case-manager",
+    "name": "Case Manager",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Case Management",
+    "specialty": "Case Coordination",
+    "role": "Case Manager",
+    "description": "Coordinates services, eligibility, and follow-through for clients."
+  },
+  {
+    "id": "public-benefits-administrator",
+    "name": "Public Benefits Administrator",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Benefits",
+    "specialty": "Benefits Eligibility",
+    "role": "Benefits Administrator",
+    "description": "Determines eligibility and administers public benefits accurately."
+  },
+  {
+    "id": "public-municipal-planner",
+    "name": "Municipal Planner",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Planning",
+    "specialty": "Urban Planning",
+    "role": "Municipal Planner",
+    "description": "Supports land use, zoning, and community planning decisions."
+  },
+  {
+    "id": "public-emergency-management",
+    "name": "Emergency Management Coordinator",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Emergency Management",
+    "specialty": "Emergency Response",
+    "role": "Emergency Management Coordinator",
+    "description": "Plans and coordinates preparedness, response, and recovery."
+  },
+  {
+    "id": "public-comms",
+    "name": "Public Communications Lead",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Communications",
+    "specialty": "Public Information",
+    "role": "Public Communications Lead",
+    "description": "Writes and coordinates public information during programs and incidents."
+  },
+  {
+    "id": "public-stakeholder-engagement",
+    "name": "Stakeholder Engagement Manager",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Stakeholders",
+    "specialty": "Stakeholder Engagement",
+    "role": "Stakeholder Engagement Manager",
+    "description": "Maps stakeholders, runs consultation, and documents commitments."
+  },
+  {
+    "id": "public-social-services",
+    "name": "Social Services Program Lead",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Social Services",
+    "specialty": "Service Delivery",
+    "role": "Social Services Program Lead",
+    "description": "Leads social service programs, caseloads, and service quality."
+  },
+  {
+    "id": "public-transparency",
+    "name": "Transparency and Open Data Officer",
+    "category": "Public Sector & Nonprofit",
+    "subcategory": "Open Data",
+    "specialty": "Transparency",
+    "role": "Transparency and Open Data Officer",
+    "description": "Publishes open data and responds to transparency obligations."
+  }
+]

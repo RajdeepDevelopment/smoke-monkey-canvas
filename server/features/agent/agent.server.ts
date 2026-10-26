@@ -2,18 +2,24 @@ import { Router, type Request, type Response } from 'express';
 import fs from 'node:fs';
 import path, { join } from 'node:path';
 import { homedir } from 'node:os';
+import { execFile } from 'node:child_process';
 import {
   scanAgentWorkspaceFiles,
   safeResolveWorkspacePath,
   getFileCategory,
   getFileMimeType,
   watchAgentWorkspace,
+  unwatchAgentWorkspace,
+  setupAgentWorkspaceWatcher,
+  initAllAgentWatchers,
 } from './agent.files.js';
 import { AgentDb } from './agent.db.js';
 import { AgentRunner } from './agent.runner.js';
-import { calculateNextCronRun } from './agent.cron.js';
+import { calculateNextCronRun, AgentCronScheduler } from './agent.cron.js';
+import { ensureDefaultAgentCronJobs } from './agent.memory-compactor.js';
 import { CoreDatabase } from '../core/database.db.js';
 import { STOCK_MCPS } from '../mcp/mcp.stock.js';
+import { computeReadiness } from '../mcp/mcp.readiness.js';
 import { PRESETS_BY_KIND, parseIdList } from './agent.presets.js';
 import {
   ensureAgentWorkspace,
@@ -22,6 +28,7 @@ import {
   readAgentPolicyManifest,
   reconcileManifestRemovals,
   reconcileAgentWorkspaceRuntime,
+  syncAgentDiskManifestFromDb,
   readAgentAutomations,
   readAgentMemorySummaries,
 } from './agent.manifest.js';
@@ -32,6 +39,8 @@ import {
   commonRegistryPaths,
 } from './agent.prompt.js';
 import { parsePolicies, type AgentMcpRecord, type AgentSkillRecord } from './agent.types.js';
+import { SpaceDb } from '../space/space.db.js';
+import { buildAgentTeamWorkflowBlock } from '../space/space.workflow.js';
 import {
   detectGitRepository,
   ensureRepoMemory,
@@ -45,6 +54,7 @@ const PROVIDER_KEY_MAP: Record<string, string> = {
   openai: 'OPENAI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   gemini: 'GEMINI_API_KEY',
+  google: 'GEMINI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
   groq: 'GROQ_API_KEY',
   xai: 'XAI_API_KEY',
@@ -84,11 +94,13 @@ export function createAgentRouter(): Router {
   const db = new AgentDb();
   const runner = AgentRunner.getInstance();
 
+  // Proactively start file watchers on all existing agents
+  initAllAgentWatchers(db, CoreWsServer.getInstance());
+
   router.get('/', (_req: Request, res: Response) => {
     try {
       const agents = db.getAllAgents();
       const runner = AgentRunner.getInstance();
-      const coreDb = CoreDatabase.getInstance();
       const result = agents.map((agent) => {
         const mcps = db.getAgentMcps(agent.id);
         const skills = db.getAgentSkills(agent.id);
@@ -102,21 +114,17 @@ export function createAgentRouter(): Router {
 
         let unconfiguredCount = 0;
         const mcpsWithStatus = mcps.map((m) => {
-          const stock = STOCK_MCPS.find((s) => s.name === m.mcp_name);
-          let isConfigured = true;
-          let missingKeys: string[] = [];
-          if (stock && stock.envKeys.length > 0) {
-            let cfg: Record<string, unknown> = {};
-            try { cfg = JSON.parse(m.config_json); } catch {}
-            const env = (cfg.env as Record<string, string>) || {};
-            missingKeys = stock.envKeys.filter((k) => !env[k] && !coreDb.getSetting(k) && !process.env[k]);
-            isConfigured = missingKeys.length === 0;
-          }
-          if (!isConfigured) unconfiguredCount++;
+          let cfg: Record<string, unknown> = {};
+          try { cfg = JSON.parse(m.config_json); } catch {}
+          const env = (cfg.env as Record<string, string>) || {};
+          const readiness = computeReadiness(m.mcp_name, env);
+          if (!readiness.configured) unconfiguredCount++;
           return {
             ...m,
-            isConfigured,
-            missingKeys,
+            isConfigured: readiness.configured,
+            missingKeys: readiness.missingKeys,
+            readinessState: readiness.state,
+            probe: readiness.probe,
           };
         });
 
@@ -141,7 +149,7 @@ export function createAgentRouter(): Router {
       const body = req.body || {};
       const id = body.id || `agent_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       const name = body.name || 'Specialist Agent';
-      const model = body.model || 'meta/llama-3.3-70b-instruct';
+      const model = body.model || 'nvidia/nemotron-3-super-120b-a12b';
       const provider = body.provider || 'nvidia';
       const systemPrompt =
         body.system_prompt ||
@@ -189,6 +197,30 @@ export function createAgentRouter(): Router {
         ? Math.round(body.max_memory_mb)
         : 1024;
 
+      let role = typeof body.role === 'string' && body.role.trim() ? body.role.trim() : null;
+      let specialty = typeof body.specialty === 'string' && body.specialty.trim() ? body.specialty.trim() : null;
+      let description = typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null;
+
+      if (!role || !specialty || !description) {
+        try {
+          const jsonPath = join(__dirname, 'agent.stock-templates.json');
+          if (fs.existsSync(jsonPath)) {
+            const stock = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+            const match = stock.find(
+              (s: any) =>
+                s.id === body.templateId ||
+                s.name.toLowerCase() === name.toLowerCase() ||
+                s.id === id,
+            );
+            if (match) {
+              if (!role) role = match.role;
+              if (!specialty) specialty = match.specialty;
+              if (!description) description = match.description;
+            }
+          }
+        } catch {}
+      }
+
       const agent = db.createAgent({
         id,
         name,
@@ -208,7 +240,25 @@ export function createAgentRouter(): Router {
         output_styles: outputStyles,
         working_dir: workingDir,
         max_memory_mb: maxMemoryMb,
+        role,
+        description,
+        specialty,
       });
+
+      try {
+        const ws = ensureAgentWorkspace(resolveAgentWorkspace(agent), agent.id, agent.name, agent.system_prompt);
+        syncAgentDiskManifestFromDb({ agentId: agent.id, ws, db });
+        setupAgentWorkspaceWatcher(agent.id, db, CoreWsServer.getInstance());
+      } catch (err) {
+        console.warn(`[agent.server] Setup workspace watcher failed for ${agent.id}:`, err);
+      }
+
+      try {
+        ensureDefaultAgentCronJobs(agent.id, db);
+        AgentCronScheduler.getInstance().syncAllAgentSchedules();
+      } catch (err) {
+        console.warn(`[agent.server] Setup default cron jobs failed for ${agent.id}:`, err);
+      }
 
       res.status(201).json({
         ...agent,
@@ -216,6 +266,73 @@ export function createAgentRouter(): Router {
         skills: [],
         latestRun: null,
       });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // ── Peer Agent Connections (must be before /:id to avoid route collision) ─
+  router.get('/connections', (req: Request, res: Response) => {
+    try {
+      const agentId = req.query.agentId as string | undefined;
+      const connections = db.getAgentConnections(agentId);
+      res.json({ connections });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  router.post('/connections', (req: Request, res: Response) => {
+    try {
+      const sourceAgentId = req.body?.sourceAgentId || req.body?.source_agent_id;
+      const targetAgentId = req.body?.targetAgentId || req.body?.target_agent_id;
+      if (!sourceAgentId || !targetAgentId) {
+        res.status(400).json({ error: 'sourceAgentId and targetAgentId are required' });
+        return;
+      }
+      const conn = db.createAgentConnection(sourceAgentId, targetAgentId);
+      CoreWsServer.getInstance().broadcast({
+        type: 'agent_connection_created',
+        data: conn,
+      });
+      res.status(201).json({ connection: conn, ...conn });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: msg });
+    }
+  });
+
+  router.delete('/connections/:connId', (req: Request, res: Response) => {
+    try {
+      const connId = getParam(req.params.connId);
+      db.deleteAgentConnection(connId);
+      CoreWsServer.getInstance().broadcast({
+        type: 'agent_connection_deleted',
+        data: { id: connId },
+      });
+      res.json({ success: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  router.delete('/connections', (req: Request, res: Response) => {
+    try {
+      const sourceAgentId = req.body?.sourceAgentId || req.body?.source_agent_id;
+      const targetAgentId = req.body?.targetAgentId || req.body?.target_agent_id;
+      if (sourceAgentId && targetAgentId) {
+        db.deleteAgentConnectionBetween(sourceAgentId, targetAgentId);
+        CoreWsServer.getInstance().broadcast({
+          type: 'agent_connection_deleted',
+          data: { sourceAgentId, targetAgentId },
+        });
+        res.json({ success: true });
+        return;
+      }
+      res.status(400).json({ error: 'sourceAgentId and targetAgentId are required' });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: msg });
@@ -340,6 +457,8 @@ export function createAgentRouter(): Router {
       disabledTools = [];
     }
 
+    const peerAgents = db.getConnectedPeers(freshAgent.id);
+    const teamWorkflow = buildAgentTeamWorkflowBlock(freshAgent.id, db, new SpaceDb());
     const effectiveSystemPrompt = buildEffectiveSystemPrompt(freshAgent.system_prompt, {
       policyEntries: policies,
       disabledTools,
@@ -351,6 +470,8 @@ export function createAgentRouter(): Router {
       common: commonRegistryPaths(),
       agentId: freshAgent.id,
       agentName: freshAgent.name,
+      peerAgents,
+      teamWorkflow,
     });
 
     const automations = readAgentAutomations(ws);
@@ -376,6 +497,7 @@ export function createAgentRouter(): Router {
       automations,
       memory_files: memoryFiles,
       repository_memory: repoMemory,
+      team_workflow: teamWorkflow,
       effective_system_prompt: effectiveSystemPrompt,
     });
   });
@@ -661,6 +783,50 @@ export function createAgentRouter(): Router {
     }
   });
 
+  /** Open a workspace file with the system-associated default application (macOS open, Windows start, Linux xdg-open) */
+  router.post('/:id/files/open-system', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const relativePath = req.body?.path;
+    if (!relativePath) {
+      res.status(400).json({ error: 'Missing path in body' });
+      return;
+    }
+    const agent = db.getAgent(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    const workspaceRoot = resolveAgentWorkspace(agent);
+    const targetPath = safeResolveWorkspacePath(workspaceRoot, relativePath);
+    if (!targetPath || !fs.existsSync(targetPath)) {
+      res.status(404).json({ error: 'File not found on filesystem' });
+      return;
+    }
+
+    try {
+      const isWindows = process.platform === 'win32';
+      const isMac = process.platform === 'darwin';
+
+      if (isMac) {
+        execFile('open', [targetPath], (err) => {
+          if (err) console.error('[open-system] Failed to open file:', err);
+        });
+      } else if (isWindows) {
+        execFile('cmd', ['/c', 'start', '', targetPath], (err) => {
+          if (err) console.error('[open-system] Failed to open file:', err);
+        });
+      } else {
+        execFile('xdg-open', [targetPath], (err) => {
+          if (err) console.error('[open-system] Failed to open file:', err);
+        });
+      }
+
+      res.json({ success: true, path: targetPath });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.get('/:id', (req: Request, res: Response) => {
     const id = getParam(req.params.id);
     const agent = db.getAgent(id);
@@ -754,6 +920,9 @@ export function createAgentRouter(): Router {
         ? Math.round(body.max_memory_mb)
         : 1024;
     }
+    if (body.role !== undefined) patch.role = typeof body.role === 'string' ? body.role : null;
+    if (body.description !== undefined) patch.description = typeof body.description === 'string' ? body.description : null;
+    if (body.specialty !== undefined) patch.specialty = typeof body.specialty === 'string' ? body.specialty : null;
 
     const updated = db.updateAgent(id, patch);
     if (!updated) {
@@ -765,6 +934,7 @@ export function createAgentRouter(): Router {
 
   router.delete('/:id', (req: Request, res: Response) => {
     const id = getParam(req.params.id);
+    unwatchAgentWorkspace(id);
     db.deleteAgent(id);
     res.json({ success: true, id });
   });
@@ -843,19 +1013,24 @@ export function createAgentRouter(): Router {
     const agentId = getParam(req.params.id);
     const body = req.body || {};
     const id = body.id || `mcp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const mcpName = body.mcp_name;
-    const label = body.label || mcpName;
-    const configJson = typeof body.config === 'object' ? JSON.stringify(body.config) : body.config_json || '{}';
-    const enabled = body.enabled === false ? 0 : 1;
+    const requestedName = body.mcp_name;
 
-    if (!mcpName) {
+    if (!requestedName) {
       res.status(400).json({ error: 'mcp_name is required' });
       return;
     }
 
+    // Resolve legacy aliases (gmail -> mcpai-gmail, slack-mcp -> mcpai-slack,
+    // …) before validating/inserting so the same server cannot be attached
+    // twice under two IDs.
+    const requestedStock = STOCK_MCPS.find((s) => s.name === requestedName);
+    const mcpName = requestedStock?.canonicalName || requestedName;
+    const stock = STOCK_MCPS.find((s) => s.name === mcpName) || requestedStock;
+    const label = body.label || stock?.label || mcpName;
+    const configJson = typeof body.config === 'object' ? JSON.stringify(body.config) : body.config_json || '{}';
+    const enabled = body.enabled === false ? 0 : 1;
+
     // Validate credentials for stock MCPs
-    const stock = STOCK_MCPS.find((s) => s.name === mcpName);
-    let hasMissingCredentials = false;
     if (stock && stock.envKeys.length > 0) {
       const coreDb = CoreDatabase.getInstance();
       const envObj = (typeof body.config === 'object' && body.config?.env) ? body.config.env : {};
@@ -869,7 +1044,6 @@ export function createAgentRouter(): Router {
         }
       }
       if (missingKeys.length > 0) {
-        hasMissingCredentials = true;
         if (body.strictAuth || !body.allowUnconfigured) {
           res.status(400).json({
             error: `MCP server "${stock.label}" requires API credential(s): ${missingKeys.join(', ')}. Please enter the key or connect via OAuth before attaching.`,
@@ -879,9 +1053,13 @@ export function createAgentRouter(): Router {
       }
     }
 
-    // Prevent duplicate MCP attachment to the same agent
+    // Prevent duplicate MCP attachment to the same agent, including an older
+    // legacy row that points at the same server (gmail vs mcpai-gmail).
     const existingMcps = db.getAgentMcps(agentId);
-    const alreadyExists = existingMcps.find((m) => m.mcp_name === mcpName);
+    const alreadyExists = existingMcps.find((m) => {
+      const existingStock = STOCK_MCPS.find((s) => s.name === m.mcp_name);
+      return (existingStock?.canonicalName || m.mcp_name) === mcpName;
+    });
     if (alreadyExists) {
       res.status(409).json({
         error: `MCP server "${label || mcpName}" is already attached to this agent.`,
@@ -897,14 +1075,33 @@ export function createAgentRouter(): Router {
       mcp_name: mcpName,
       label,
       config_json: configJson,
-      enabled: hasMissingCredentials ? 0 : enabled,
+      enabled,
     });
+    try {
+      const agent = db.getAgent(agentId);
+      if (agent) {
+        const ws = ensureAgentWorkspace(resolveAgentWorkspace(agent), agent.id, agent.name, agent.system_prompt);
+        syncAgentDiskManifestFromDb({ agentId, ws, db });
+        CoreWsServer.getInstance().broadcast({ type: 'agent_mcps_updated', agentId, data: { timestamp: new Date().toISOString() } });
+        CoreWsServer.getInstance().broadcast({ type: 'agent_updated', agentId, data: agent });
+      }
+    } catch {}
     res.status(201).json(mcp);
   });
 
   router.delete('/:id/mcps/:mcpId', (req: Request, res: Response) => {
+    const agentId = getParam(req.params.id);
     const mcpId = getParam(req.params.mcpId);
-    db.deleteAgentMcp(mcpId);
+    db.deleteAgentMcp(mcpId, agentId);
+    try {
+      const agent = db.getAgent(agentId);
+      if (agent) {
+        const ws = ensureAgentWorkspace(resolveAgentWorkspace(agent), agent.id, agent.name, agent.system_prompt);
+        syncAgentDiskManifestFromDb({ agentId, ws, db });
+        CoreWsServer.getInstance().broadcast({ type: 'agent_mcps_updated', agentId, data: { timestamp: new Date().toISOString() } });
+        CoreWsServer.getInstance().broadcast({ type: 'agent_updated', agentId, data: agent });
+      }
+    } catch {}
     res.json({ success: true, id: mcpId });
   });
 
@@ -923,20 +1120,40 @@ export function createAgentRouter(): Router {
       return;
     }
 
-    const skill = db.addAgentSkill({
+    const skill = db.upsertAgentSkill({
       id,
       agent_id: agentId,
       skill_name: skillName,
       description,
       content,
       enabled,
+      source: body.source === 'agent' ? 'agent' : 'user',
     });
+    try {
+      const agent = db.getAgent(agentId);
+      if (agent) {
+        const ws = ensureAgentWorkspace(resolveAgentWorkspace(agent), agent.id, agent.name, agent.system_prompt);
+        syncAgentDiskManifestFromDb({ agentId, ws, db });
+        CoreWsServer.getInstance().broadcast({ type: 'agent_skills_updated', agentId, data: { timestamp: new Date().toISOString() } });
+        CoreWsServer.getInstance().broadcast({ type: 'agent_updated', agentId, data: agent });
+      }
+    } catch {}
     res.status(201).json(skill);
   });
 
   router.delete('/:id/skills/:skillId', (req: Request, res: Response) => {
+    const agentId = getParam(req.params.id);
     const skillId = getParam(req.params.skillId);
     db.deleteAgentSkill(skillId);
+    try {
+      const agent = db.getAgent(agentId);
+      if (agent) {
+        const ws = ensureAgentWorkspace(resolveAgentWorkspace(agent), agent.id, agent.name, agent.system_prompt);
+        syncAgentDiskManifestFromDb({ agentId, ws, db });
+        CoreWsServer.getInstance().broadcast({ type: 'agent_skills_updated', agentId, data: { timestamp: new Date().toISOString() } });
+        CoreWsServer.getInstance().broadcast({ type: 'agent_updated', agentId, data: agent });
+      }
+    } catch {}
     res.json({ success: true, id: skillId });
   });
 
@@ -993,6 +1210,179 @@ export function createAgentRouter(): Router {
     const triggerType = req.query.trigger_type ? String(req.query.trigger_type) : undefined;
     const runs = db.getAgentRuns(id, 50, triggerType);
     res.json(runs);
+  });
+
+  // ── Agent Scheduled Cron Jobs ──────────────────────────────────────────────
+  router.get('/:id/cron-jobs', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    ensureDefaultAgentCronJobs(id, db);
+    const jobs = db.getAgentCronJobs(id);
+    res.json(jobs);
+  });
+
+  router.post('/:id/cron-jobs', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const body = req.body || {};
+    const { name, prompt, cron_schedule, enabled, source, delay_minutes, scheduled_at } = body;
+    if (!name || !prompt) {
+      return res.status(400).json({ error: 'Missing name or prompt' });
+    }
+    let nextRun: string | null = null;
+    let schedule = cron_schedule ? String(cron_schedule).trim() : '';
+
+    if (delay_minutes !== undefined && Number(delay_minutes) > 0) {
+      nextRun = new Date(Date.now() + Number(delay_minutes) * 60000).toISOString();
+      schedule = 'once';
+    } else if (scheduled_at) {
+      let parsedDate: Date | null = null;
+      try {
+        const d = new Date(scheduled_at);
+        if (!isNaN(d.getTime())) parsedDate = d;
+      } catch {}
+      if (!parsedDate) {
+        const m = String(scheduled_at).match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+        if (m) {
+          let hours = parseInt(m[1], 10);
+          const mins = m[2] ? parseInt(m[2], 10) : 0;
+          const ampm = m[3]?.toLowerCase();
+          if (ampm === 'pm' && hours < 12) hours += 12;
+          if (ampm === 'am' && hours === 12) hours = 0;
+          const now = new Date();
+          parsedDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, mins, 0);
+          if (parsedDate.getTime() <= now.getTime()) {
+            parsedDate.setDate(parsedDate.getDate() + 1);
+          }
+        }
+      }
+      if (parsedDate) {
+        nextRun = parsedDate.toISOString();
+        schedule = 'once';
+      } else {
+        return res.status(400).json({ error: `Could not parse scheduled_at: ${scheduled_at}` });
+      }
+    } else if (schedule && schedule !== 'once') {
+      nextRun = calculateNextCronRun(schedule);
+      if (!nextRun) {
+        return res.status(400).json({ error: `Invalid cron schedule: ${schedule}` });
+      }
+    } else {
+      return res.status(400).json({ error: 'Missing cron_schedule, delay_minutes, or scheduled_at' });
+    }
+
+    const isEnabled = enabled !== false && enabled !== 0 ? 1 : 0;
+    const job = db.createAgentCronJob({
+      agent_id: id,
+      name: String(name).trim(),
+      prompt: String(prompt).trim(),
+      cron_schedule: schedule,
+      enabled: isEnabled,
+      created_by: source || 'USER',
+      next_run_at: isEnabled ? nextRun : null,
+    });
+    try {
+      AgentCronScheduler.getInstance().syncAllAgentSchedules();
+    } catch {}
+    try {
+      CoreWsServer.getInstance().broadcast({ type: 'agent_cron_jobs_updated', agent_id: id });
+    } catch {}
+    res.status(201).json(job);
+  });
+
+  router.patch('/:id/cron-jobs/:jobId', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const jobId = getParam(req.params.jobId);
+    const existing = db.getCronJob(jobId);
+    if (!existing || existing.agent_id !== id) {
+      return res.status(404).json({ error: 'Cron job not found' });
+    }
+    const body = req.body || {};
+    const updates: any = {};
+    if (body.name !== undefined) updates.name = String(body.name).trim();
+    if (body.prompt !== undefined) updates.prompt = String(body.prompt).trim();
+
+    if (body.cron_schedule !== undefined || body.scheduled_at !== undefined) {
+      const schedule = body.cron_schedule ? String(body.cron_schedule).trim() : existing.cron_schedule;
+      if (schedule === 'once' || body.scheduled_at) {
+        updates.cron_schedule = 'once';
+        let parsedDate: Date | null = null;
+        if (body.scheduled_at) {
+          try {
+            const d = new Date(body.scheduled_at);
+            if (!isNaN(d.getTime())) parsedDate = d;
+          } catch {}
+        }
+        if (parsedDate) {
+          updates.next_run_at = parsedDate.toISOString();
+        } else if (!existing.next_run_at || new Date(existing.next_run_at).getTime() <= Date.now()) {
+          updates.next_run_at = new Date(Date.now() + 60000).toISOString();
+        }
+      } else {
+        const nextRun = calculateNextCronRun(schedule);
+        if (!nextRun) {
+          return res.status(400).json({ error: `Invalid cron schedule: ${schedule}` });
+        }
+        updates.cron_schedule = schedule;
+        if (existing.enabled || body.enabled) updates.next_run_at = nextRun;
+      }
+    }
+
+    if (body.enabled !== undefined) {
+      const isEnabled = body.enabled ? 1 : 0;
+      updates.enabled = isEnabled;
+      if (isEnabled) {
+        const currentSched = updates.cron_schedule || existing.cron_schedule;
+        if (currentSched === 'once') {
+          updates.next_run_at = existing.next_run_at && new Date(existing.next_run_at).getTime() > Date.now()
+            ? existing.next_run_at
+            : new Date(Date.now() + 60000).toISOString();
+        } else {
+          updates.next_run_at = calculateNextCronRun(currentSched);
+        }
+      } else {
+        updates.next_run_at = null;
+      }
+    }
+
+    const updated = db.updateAgentCronJob(jobId, updates);
+    try {
+      AgentCronScheduler.getInstance().syncAllAgentSchedules();
+    } catch {}
+    try {
+      CoreWsServer.getInstance().broadcast({ type: 'agent_cron_jobs_updated', agent_id: id });
+    } catch {}
+    res.json(updated);
+  });
+
+  router.delete('/:id/cron-jobs/:jobId', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const jobId = getParam(req.params.jobId);
+    const existing = db.getCronJob(jobId);
+    if (!existing || existing.agent_id !== id) {
+      return res.status(404).json({ error: 'Cron job not found' });
+    }
+    db.deleteAgentCronJob(jobId);
+    try {
+      AgentCronScheduler.getInstance().syncAllAgentSchedules();
+    } catch {}
+    try {
+      CoreWsServer.getInstance().broadcast({ type: 'agent_cron_jobs_updated', agent_id: id });
+    } catch {}
+    res.json({ success: true, id: jobId });
+  });
+
+  router.post('/:id/cron-jobs/:jobId/run', async (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const jobId = getParam(req.params.jobId);
+    const existing = db.getCronJob(jobId);
+    if (!existing || existing.agent_id !== id) {
+      return res.status(404).json({ error: 'Cron job not found' });
+    }
+    try {
+      const result = await AgentCronScheduler.getInstance().triggerJobNow(jobId);
+      res.json({ success: true, jobId, result });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to trigger cron job' });
+    }
   });
 
   // ── Agent Chat Sessions & Messages ─────────────────────────────────────────

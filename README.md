@@ -350,12 +350,12 @@ Keys set in the UI are stored encrypted in SQLite at `~/.smoke-monkey/canvas.db`
 
 | Provider | Env Variable | Models |
 |----------|-------------|--------|
-| NVIDIA NIM | `NVIDIA_API_KEY` | `nvidia/nemotron-3-super-120b`, `meta/llama-3.3-70b-instruct`, etc. |
-| OpenAI | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4o-mini`, etc. |
-| Anthropic | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet`, `claude-opus-4`, etc. |
-| Google Gemini | `GEMINI_API_KEY` | `gemini-2.0-flash`, `gemini-2.5-pro`, etc. |
-| Groq | `GROQ_API_KEY` | `llama-3.1-70b-versatile`, etc. |
-| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-chat`, `deepseek-reasoner` |
+| NVIDIA NIM | `NVIDIA_API_KEY` | `nvidia/nemotron-3-super-120b-a12b`, `deepseek-ai/deepseek-v4-pro`, etc. |
+| OpenAI | `OPENAI_API_KEY` | `gpt-6-astra`, `gpt-6-luna`, etc. |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-5-5`, `claude-sonnet-5-5`, etc. |
+| Google Gemini | `GEMINI_API_KEY` | `gemini-4-argon`, `gemini-3.8-flash`, etc. |
+| Groq | `GROQ_API_KEY` | `openai/gpt-oss-120b`, `qwen/qwen3.8-27b`, etc. |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-v4-pro`, `deepseek-flash` |
 | Ollama | _(no key)_ | Any local model |
 
 ---

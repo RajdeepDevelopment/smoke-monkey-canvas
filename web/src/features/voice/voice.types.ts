@@ -2,7 +2,19 @@ export interface VoiceLanguage {
   code: string;
   label: string;
   flag: string;
+  /**
+   * Speech engines that can actually recognize this language. Omitted = every
+   * engine. Engines are not interchangeable: each platform's Web Speech API is
+   * backed by a different recognizer.
+   *   'apple'    → Apple Speech (Safari, macOS/iOS Tauri webviews) — matches
+   *                SFSpeechRecognizer.supportedLocales(), which has no Bengali.
+   *   'chromium' → Google-backed recognition (Chrome, Edge, Windows WebView2,
+   *                Android Chrome) — does support Bengali.
+   */
+  engines?: SpeechEngine[];
 }
+
+export type SpeechEngine = 'apple' | 'chromium' | 'other';
 
 export const SUPPORTED_VOICE_LANGUAGES: VoiceLanguage[] = [
   { code: 'auto', label: 'Auto (Browser Default)', flag: '🌐' },
@@ -23,12 +35,50 @@ export const SUPPORTED_VOICE_LANGUAGES: VoiceLanguage[] = [
   { code: 'tr-TR', label: 'Türkçe (Turkish)', flag: '🇹🇷' },
   { code: 'id-ID', label: 'Bahasa Indonesia', flag: '🇮🇩' },
   { code: 'vi-VN', label: 'Tiếng Việt (Vietnamese)', flag: '🇻🇳' },
-  { code: 'bn-IN', label: 'বাংলা (Bengali)', flag: '🇮🇳' },
+  { code: 'bn-IN', label: 'বাংলা (Bengali)', flag: '🇮🇳', engines: ['chromium'] },
 ];
+
+let cachedEngine: SpeechEngine | null = null;
+
+/**
+ * Which recognizer backs `SpeechRecognition` here. Detected once from the UA:
+ * iOS/iPadOS browsers are always WebKit regardless of their name; everything
+ * Chrome-branded (incl. Edge/Opera/Samsung/WebView2) uses Google recognition.
+ */
+export function detectSpeechEngine(): SpeechEngine {
+  if (cachedEngine) return cachedEngine;
+  if (typeof navigator === 'undefined') {
+    cachedEngine = 'other';
+    return cachedEngine;
+  }
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/.test(ua)) cachedEngine = 'apple';
+  else if (/Chrome|Chromium|CriOS|Edg|OPR/.test(ua)) cachedEngine = 'chromium';
+  else if (/AppleWebKit/.test(ua)) cachedEngine = 'apple';
+  else cachedEngine = 'other';
+  return cachedEngine;
+}
+
+/** Languages this platform can actually recognize — use this for all UI lists. */
+export function getAvailableVoiceLanguages(): VoiceLanguage[] {
+  const engine = detectSpeechEngine();
+  return SUPPORTED_VOICE_LANGUAGES.filter((l) => !l.engines || l.engines.includes(engine));
+}
+
+export function isVoiceLanguageAvailable(code: string): boolean {
+  return getAvailableVoiceLanguages().some((l) => l.code === code);
+}
+
+export function getVoiceLanguageLabel(code: string): string {
+  return SUPPORTED_VOICE_LANGUAGES.find((l) => l.code === code)?.label || code;
+}
 
 export function getSavedVoiceLanguage(): string {
   try {
-    return localStorage.getItem('sm_voice_language') || 'auto';
+    const saved = localStorage.getItem('sm_voice_language') || 'auto';
+    // A saved pick may come from another platform (e.g. Bengali chosen on
+    // Windows); never carry it over to an engine that cannot recognize it.
+    return isVoiceLanguageAvailable(saved) ? saved : 'auto';
   } catch {
     return 'auto';
   }

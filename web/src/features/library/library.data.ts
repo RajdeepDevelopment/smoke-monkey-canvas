@@ -1,6 +1,24 @@
 import type { StockSkillItem, ToolKit } from './library.types.js';
 
 export const STOCK_SKILLS: StockSkillItem[] = [
+  {
+    id: 'git-workflow-and-versioning',
+    name: 'Git Workflow & Versioning',
+    description: 'Atomic commits, short-lived branches, PR hygiene, semantic versioning, and safe release history.',
+    category: 'DevOps & CI/CD',
+    tags: ['git', 'versioning', 'commits', 'branches', 'releases'],
+    content:
+      '# Git Workflow and Versioning\n\nGit is your safety net. Treat commits as save points, branches as sandboxes, and history as documentation.\n\n## Working rules\n1. Inspect the working tree before changing anything (`git status`, `git diff`).\n2. Keep changes atomic and commits focused on one logical change.\n3. Use short-lived branches and merge back within 1-3 days.\n4. Write conventional commit messages: `<type>(<scope>): <summary>`.\n5. Never rewrite shared history or force-push without explicit approval.\n6. Verify the diff and run relevant checks before committing or opening a PR.\n7. Never commit secrets, credentials, or build artifacts that belong outside the repo.',
+  },
+  {
+    id: 'git-workflow-governance',
+    name: 'Git Workflow & Branch Protection Governance',
+    description: 'Branch protection rules, conventional commits, semantic release versioning, and safe rebase/merge policy enforcement.',
+    category: 'DevOps & CI/CD',
+    tags: ['git', 'governance', 'branch-protection'],
+    content:
+      '# Git Workflow & Branch Protection Governance\n\n1. Enforce branch protection: require PR review, status checks, and linear history before merges to main.\n2. Conventional Commits: `feat(scope):`, `fix(scope):`, `chore:`, `docs:` with the subject under 72 characters.\n3. Semantic Versioning: derive the bump from commit types (feat -> minor, fix -> patch, breaking -> major).\n4. Never force-push shared branches; use `--force-with-lease` only on feature branches.',
+  },
   { id: 'code-reviewer', name: 'Code Reviewer', description: 'Expert code review: security, performance, style feedback.', category: 'Engineering', tags: ['code', 'review'], content: '# Code Review Directive\n\nYou are an expert code reviewer. For every code change:\n1. Check for security vulnerabilities (SQLi, XSS, SSRF)\n2. Identify performance anti-patterns\n3. Verify naming conventions\n4. Suggest improvements with code examples\n5. Rate severity: Critical / Major / Minor / Suggestion' },
   { id: 'git-commit-writer', name: 'Git Commit Author', description: 'Write conventional commits with scope and breaking changes.', category: 'Engineering', tags: ['git', 'commits'], content: '# Commit Message Directive\n\nFollow Conventional Commits spec:\n- Format: <type>(<scope>): <summary>\n- Types: feat, fix, docs, style, refactor, test, chore\n- Breaking changes: BREAKING CHANGE footer\n- Keep summary under 72 chars' },
   { id: 'test-engineer', name: 'Test Engineer', description: 'Generate unit, integration, and E2E test suites.', category: 'Engineering', tags: ['testing', 'jest'], content: '# Testing Directive\n\nWrite production-quality tests:\n1. Unit tests with mocks/stubs\n2. Integration: real service boundaries\n3. E2E: user journey scenarios\n4. Edge cases: empty, null, overflow\n5. Target >90% branch coverage' },
@@ -91,3 +109,8 @@ export const TOOL_KITS: ToolKit[] = [
     ],
   },
 ];
+
+export { SPACE_PRESETS } from './data/spaces.data.js';
+export { ROLE_ZONE_PRESETS } from './data/role-zones.data.js';
+export { HIERARCHICAL_CHAINS, layoutHierarchicalChain } from './data/hierarchical-chains.data.js';
+

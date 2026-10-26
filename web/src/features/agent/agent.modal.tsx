@@ -8,11 +8,26 @@ import {
   Clock,
   Folder,
   FolderOpen,
-  HardDrive,
+  FolderTree,
   Smartphone,
   ChevronUp,
   ChevronDown,
   Plus,
+  UserRound,
+  Cpu,
+  FileText,
+  KeyRound,
+  Home,
+  Monitor,
+  Laptop,
+  Rocket,
+  Zap,
+  CalendarDays,
+  Briefcase,
+  Palmtree,
+  TimerReset,
+  RotateCcw,
+  ChevronRight,
 } from 'lucide-react';
 import type { SpaceAgentEntity, AgentRecord } from './agent.types.js';
 import { PROVIDER_CATALOG, getProvider, getDefaultModelForProvider } from '../common/provider-catalog.js';
@@ -213,7 +228,7 @@ interface AgentModalProps {
   agent?: SpaceAgentEntity | null;
   initialData?: Partial<AgentRecord> | null;
   initialCoords?: { x: number; y: number } | null;
-  initialSection?: 'general' | 'directory' | 'schedule';
+  initialSection?: 'general' | 'directory' | 'schedule' | 'model';
   onSave: (data: Partial<AgentRecord>) => Promise<void>;
   onOpenKeys: () => void;
   onClose: () => void;
@@ -235,7 +250,7 @@ export const AgentModal: React.FC<AgentModalProps> = ({
   const defaultName = agent?.name || initialData?.name || 'Job & Web Crawler';
   const defaultProvider = agent?.provider || initialData?.provider || 'nvidia';
   const defaultModel =
-    agent?.model === 'meta/llama-3.3-70b-instruct'
+    agent?.model === 'meta/llama-3.3-70b-instruct' || agent?.model === 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'
       ? 'nvidia/nemotron-3-super-120b-a12b'
       : agent?.model || initialData?.model || 'nvidia/nemotron-3-super-120b-a12b';
   const defaultPrompt =
@@ -250,10 +265,16 @@ export const AgentModal: React.FC<AgentModalProps> = ({
   const defaultCronSchedule = agent?.cron_schedule || initialData?.cron_schedule || '30 12 * * *';
   const defaultWorkingDir = agent?.working_dir || initialData?.working_dir || '';
   const defaultMaxMemoryMb = agent?.max_memory_mb || initialData?.max_memory_mb || 1024;
+  const defaultRole = agent?.role || initialData?.role || '';
+  const defaultSpecialty = agent?.specialty || initialData?.specialty || '';
+  const defaultDescription = agent?.description || initialData?.description || '';
 
   const initSchedule = parseCronSchedule(defaultCronSchedule);
 
   const [name, setName] = useState(defaultName);
+  const [role, setRole] = useState(defaultRole);
+  const [specialty, setSpecialty] = useState(defaultSpecialty);
+  const [description, setDescription] = useState(defaultDescription);
   const [provider, setProvider] = useState(defaultProvider);
   const [model, setModel] = useState(defaultModel);
   const [isCustomModel, setIsCustomModel] = useState(false);
@@ -285,6 +306,9 @@ export const AgentModal: React.FC<AgentModalProps> = ({
 
   useEffect(() => {
     setName(defaultName);
+    setRole(defaultRole);
+    setSpecialty(defaultSpecialty);
+    setDescription(defaultDescription);
     setProvider(defaultProvider);
     setModel(defaultModel);
     setIsCustomModel(false);
@@ -340,12 +364,21 @@ export const AgentModal: React.FC<AgentModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    if (initialSection === 'directory' || initialSection === 'schedule') {
-      const targetId = initialSection === 'directory' ? 'agent-modal-directory-section' : 'agent-modal-schedule-section';
+    if (initialSection === 'directory' || initialSection === 'schedule' || initialSection === 'model') {
+      const targetId =
+        initialSection === 'directory'
+          ? 'agent-modal-directory-section'
+          : initialSection === 'schedule'
+            ? 'agent-modal-schedule-section'
+            : 'agent-modal-model-section';
       setTimeout(() => {
         const el = document.getElementById(targetId);
         if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (initialSection === 'model') {
+            const selectEl = el.querySelector('select');
+            selectEl?.focus();
+          }
         }
       }, 100);
     }
@@ -509,6 +542,9 @@ export const AgentModal: React.FC<AgentModalProps> = ({
       const finalModel = isCustomModel && customModelId.trim() ? customModelId.trim() : model;
       await onSave({
         name,
+        role: role.trim() || null,
+        specialty: specialty.trim() || null,
+        description: description.trim() || null,
         model: finalModel,
         provider,
         system_prompt: systemPrompt,
@@ -531,178 +567,236 @@ export const AgentModal: React.FC<AgentModalProps> = ({
   return (
     <div className={`modal-overlay ${isMobile ? 'is-mobile-overlay' : ''}`} onClick={onClose}>
       <div
-        className={`modal-content ${isMobile ? 'is-mobile-modal' : ''}`}
+        className={`modal-content agent-modal ${isMobile ? 'is-mobile-modal' : ''}`}
         onClick={(e) => e.stopPropagation()}
-        style={!isMobile ? { maxWidth: 660, maxHeight: '90vh' } : undefined}
+        style={!isMobile ? { maxWidth: 680, maxHeight: '90vh' } : undefined}
       >
         {isMobile && <div className="modal-sheet-handle" />}
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src="/smoke-monkey-mascot.png" alt="Mascot" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain' }} />
-            <span className="modal-title">{agent ? 'Configure Agent' : 'Create New Agent in Space'}</span>
+        <div className="modal-header ap-modal-header">
+          <div className="ap-modal-heading">
+            <div className="ap-modal-mark" aria-hidden="true">
+              <Bot size={18} />
+            </div>
+            <div className="ap-modal-titles">
+              <span className="modal-title">{agent ? 'Configure Agent' : 'Create New Agent in Space'}</span>
+              <span className="ap-modal-subtitle">
+                {agent ? 'Tune identity, model, runtime and autonomy.' : 'Design a specialist with a model, mission and schedule.'}
+              </span>
+            </div>
           </div>
-          <button className="modal-close-btn" onClick={onClose}>
+          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Close agent editor">
             <X size={18} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <div className="modal-body" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-            {/* Agent Name */}
-            <div className="form-group">
-              <label className="form-label">Agent Name</label>
-              <input
-                className="form-input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Job Search Monitor"
-                required
-              />
-            </div>
-
-            {/* Provider and Dynamic Model Selection */}
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 12 : 14 }}>
-              {/* Provider Field */}
-              <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <ProviderIcon size={14} />
-                    <span>LLM Provider</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={onOpenKeys}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      fontSize: 11,
-                      color: isKeyless ? '#10b981' : isKeyConfigured ? '#10b981' : '#f59e0b',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 3,
-                    }}
-                  >
-                    {isKeyless ? <Check size={11} /> : isKeyConfigured ? <Check size={11} /> : <ShieldCheck size={11} />}
-                    <span>{isKeyless ? 'Free / Keyless' : isKeyConfigured ? 'Key active' : 'Set key'}</span>
-                  </button>
+          <div className="modal-body ap-modal-body" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+            <section className="ap-section">
+              <div className="ap-section-head">
+                <span className="ap-section-mark" aria-hidden="true"><UserRound size={14} /></span>
+                <div className="ap-section-heading">
+                  <h3 className="ap-section-title">Identity</h3>
+                  <p className="ap-section-desc">How this agent appears to you and to peer agents.</p>
                 </div>
-                <select
-                  className="form-select"
-                  value={provider}
-                  onChange={(e) => handleProviderChange(e.target.value)}
-                >
-                  {PROVIDER_CATALOG.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <span className="ap-section-badge">Profile</span>
               </div>
 
-              {/* Dynamic Model Dropdown */}
+              {/* Agent Name */}
               <div className="form-group">
-                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Sparkles size={14} color="var(--accent)" />
-                  <span>Respective Model</span>
-                </label>
-                {!isCustomModel ? (
-                  <select
-                    className="form-select"
-                    value={model}
-                    onChange={(e) => {
-                      if (e.target.value === '__custom__') {
-                        setIsCustomModel(true);
-                      } else {
-                        setModel(e.target.value);
-                      }
-                    }}
-                  >
-                    {currentProviderConfig.models.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label} {m.isDefault ? '★' : ''}
-                      </option>
-                    ))}
-                    <option value="__custom__">+ Enter Custom Model ID...</option>
-                  </select>
-                ) : (
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input
-                      className="form-input"
-                      placeholder="custom/model-id"
-                      value={customModelId}
-                      onChange={(e) => setCustomModelId(e.target.value)}
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      style={{ padding: '6px 10px', fontSize: 11 }}
-                      onClick={() => setIsCustomModel(false)}
-                    >
-                      Presets
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Prompt for API key directly if not configured */}
-            {!isKeyConfigured && (
-              <div
-                style={{
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                  borderRadius: 8,
-                  padding: '10px 12px',
-                  marginBottom: 14,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#f59e0b', marginBottom: 6 }}>
-                  <ShieldCheck size={14} />
-                  <span>API Key Required: {currentKeyName}</span>
-                </div>
+                <label className="form-label">Agent Name</label>
                 <input
-                  type="password"
                   className="form-input"
-                  placeholder={`Enter ${currentKeyName} to authenticate with ${currentProviderConfig.name}`}
-                  value={inlineApiKey}
-                  onChange={(e) => setInlineApiKey(e.target.value)}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Job Search Monitor"
                   required
                 />
               </div>
-            )}
 
-            {/* Model Description Helper */}
-            {!isCustomModel && (
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -6, fontStyle: 'italic' }}>
-                💡 {currentProviderConfig.models.find((m) => m.id === model)?.description}
+              {/* Agent Role & Specialty (Peer Discovery Profile) */}
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 12 : 14 }}>
+                <div className="form-group">
+                  <label className="form-label">Role / Title</label>
+                  <input
+                    className="form-input"
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    placeholder="e.g. Lead QA Engineer, Copywriter, Architect"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Specialty</label>
+                  <input
+                    className="form-input"
+                    value={specialty}
+                    onChange={(e) => setSpecialty(e.target.value)}
+                    placeholder="e.g. TypeScript, E2E Testing, SEO"
+                  />
+                </div>
               </div>
-            )}
+
+              {/* Peer Discovery Description */}
+              <div className="form-group">
+                <label className="form-label">Profile Description (Peer Discovery)</label>
+                <input
+                  className="form-input"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Brief summary of capabilities so peer agents know when to delegate to this agent"
+                />
+              </div>
+            </section>
+
+            {/* Provider and Dynamic Model Selection */}
+            <section
+              id="agent-modal-model-section"
+              className={`ap-section ap-model-section${initialSection === 'model' ? ' is-highlighted' : ''}`}
+            >
+              <div className="ap-section-head">
+                <span className="ap-section-mark" aria-hidden="true"><Cpu size={14} /></span>
+                <div className="ap-section-heading">
+                  <h3 className="ap-section-title">Model &amp; Provider</h3>
+                  <p className="ap-section-desc">Pick the brain that powers this specialist.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenKeys}
+                  className={`ap-key-chip ${isKeyless || isKeyConfigured ? 'is-ready' : 'is-warn'}`}
+                >
+                  {isKeyless || isKeyConfigured ? <Check size={11} /> : <KeyRound size={11} />}
+                  <span>{isKeyless ? 'Free / Keyless' : isKeyConfigured ? 'Key active' : 'Set key'}</span>
+                </button>
+              </div>
+
+              <div className="ap-field-grid">
+                {/* Provider Field */}
+                <div className="form-group">
+                  <label className="form-label ap-label-inline">
+                    <ProviderIcon size={13} />
+                    <span>LLM Provider</span>
+                  </label>
+                  <select
+                    className="form-select"
+                    value={provider}
+                    onChange={(e) => handleProviderChange(e.target.value)}
+                  >
+                    {PROVIDER_CATALOG.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Dynamic Model Dropdown */}
+                <div className="form-group">
+                  <label className="form-label ap-label-inline">
+                    <Sparkles size={13} />
+                    <span>Respective Model</span>
+                  </label>
+                  {!isCustomModel ? (
+                    <select
+                      className="form-select"
+                      value={model}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                          setIsCustomModel(true);
+                        } else {
+                          setModel(e.target.value);
+                        }
+                      }}
+                    >
+                      {currentProviderConfig.models.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}{m.isDefault ? ' · Default' : ''}
+                        </option>
+                      ))}
+                      <option value="__custom__">+ Enter Custom Model ID…</option>
+                    </select>
+                  ) : (
+                    <div className="ap-inline-field">
+                      <input
+                        className="form-input"
+                        placeholder="custom/model-id"
+                        value={customModelId}
+                        onChange={(e) => setCustomModelId(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary ap-compact-btn"
+                        onClick={() => setIsCustomModel(false)}
+                      >
+                        <RotateCcw size={11} />
+                        <span>Presets</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Prompt for API key directly if not configured */}
+              {!isKeyConfigured && (
+                <div className="ap-key-alert">
+                  <div className="ap-key-alert-head">
+                    <ShieldCheck size={14} />
+                    <span>API key required · {currentKeyName}</span>
+                  </div>
+                  <input
+                    type="password"
+                    className="form-input"
+                    placeholder={`Enter ${currentKeyName} to authenticate with ${currentProviderConfig.name}`}
+                    value={inlineApiKey}
+                    onChange={(e) => setInlineApiKey(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
+
+              {/* Model Description Helper */}
+              {!isCustomModel && (
+                <div className="ap-model-help">
+                  <Sparkles size={12} className="ap-model-help-icon" aria-hidden="true" />
+                  <span>{currentProviderConfig.models.find((m) => m.id === model)?.description}</span>
+                </div>
+              )}
+            </section>
 
             {/* System Directives & Prompt */}
-            <div className="form-group">
-              <label className="form-label">System Directives & Mission</label>
-              <textarea
-                className="form-textarea"
-                rows={3}
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                placeholder="What should this autonomous agent do?"
-                required
-              />
-            </div>
+            <section className="ap-section">
+              <div className="ap-section-head">
+                <span className="ap-section-mark" aria-hidden="true"><FileText size={14} /></span>
+                <div className="ap-section-heading">
+                  <h3 className="ap-section-title">System Directives</h3>
+                  <p className="ap-section-desc">The mission and guardrails this agent follows on every run.</p>
+                </div>
+                <span className="ap-count-chip">{systemPrompt.length.toLocaleString()} chars</span>
+              </div>
+              <div className="form-group">
+                <textarea
+                  className="form-textarea sys-prompt-ta"
+                  rows={6}
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  placeholder="What should this autonomous agent do? (Markdown supported in hints/references)"
+                  spellCheck={false}
+                  required
+                />
+                <span className="sys-prompt-hint">Use markdown (# headings, lists, code blocks) for clarity.</span>
+              </div>
+            </section>
 
             {/* Working Directory & RAM Resource Limits */}
-            <div id="agent-modal-directory-section" style={{ borderTop: '1px solid hsl(var(--border) / 0.7)', paddingTop: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                  <HardDrive size={14} color="#3b82f6" />
-                  <span>Workspace Directory & Resource Envelope</span>
-                </span>
-                <span style={{ fontSize: 11, color: maxMemoryMb <= 512 ? '#10b981' : 'hsl(var(--muted-foreground))', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {maxMemoryMb <= 512 && <Smartphone size={12} color="#10b981" />}
-                  {maxMemoryMb <= 512 ? 'Mobile / Edge Mode' : 'Desktop / Cloud Standard'}
+            <section id="agent-modal-directory-section" className="ap-section ap-workspace-section">
+              <div className="ap-section-head">
+                <span className="ap-section-mark" aria-hidden="true"><FolderTree size={14} /></span>
+                <div className="ap-section-heading">
+                  <h3 className="ap-section-title">Workspace &amp; Resources</h3>
+                  <p className="ap-section-desc">Choose where files live and cap memory for edge devices.</p>
+                </div>
+                <span className={`ap-env-chip ${maxMemoryMb <= 512 ? 'is-edge' : ''}`}>
+                  {maxMemoryMb <= 512 ? <Smartphone size={11} /> : <Laptop size={11} />}
+                  {maxMemoryMb <= 512 ? 'Edge mode' : 'Desktop'}
                 </span>
               </div>
 
@@ -758,7 +852,8 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                       onClick={() => setWorkingDir('')}
                       title="Auto-create dedicated ~/.smoke-agents/<id> folder"
                     >
-                      ✨ Auto-Sandbox
+                      <Sparkles size={11} />
+                      <span>Auto-Sandbox</span>
                     </button>
                     {localDirs.length > 0 ? (
                       localDirs.map((dir) => (
@@ -770,7 +865,8 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                           onClick={() => setWorkingDir(dir.path)}
                           title={dir.path}
                         >
-                          📁 {dir.label}
+                          <Folder size={11} />
+                          <span>{dir.label}</span>
                         </button>
                       ))
                     ) : (
@@ -782,7 +878,8 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                           onClick={() => setWorkingDir('./')}
                           title="Set to Current Workspace root"
                         >
-                          📁 Project Root (./)
+                          <Folder size={11} />
+                          <span>Project Root (./)</span>
                         </button>
                         <button
                           type="button"
@@ -791,7 +888,8 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                           onClick={() => setWorkingDir('~')}
                           title="Home Directory"
                         >
-                          🏠 Home (~)
+                          <Home size={11} />
+                          <span>Home (~)</span>
                         </button>
                         <button
                           type="button"
@@ -800,7 +898,8 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                           onClick={() => setWorkingDir('~/Desktop')}
                           title="Desktop folder"
                         >
-                          🖥️ Desktop
+                          <Monitor size={11} />
+                          <span>Desktop</span>
                         </button>
                       </>
                     )}
@@ -821,9 +920,9 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                         </span>
                       )
                     ) : workingDir ? (
-                      <span>📁 Agent assets, files & executions point to: <code>{workingDir}</code></span>
+                      <span><Folder size={11} /> Agent assets, files &amp; executions point to: <code>{workingDir}</code></span>
                     ) : (
-                      <span>✨ Auto-default: Will create and use an isolated folder at <code>~/.smoke-agents/{name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-') || 'agent'}</code></span>
+                      <span><Sparkles size={11} /> Auto-default: will create an isolated folder at <code>~/.smoke-agents/{name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-') || 'agent'}</code></span>
                     )}
                   </div>
                 </div>
@@ -846,35 +945,40 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                       className={`cron-preset-pill ${maxMemoryMb === 256 ? 'active' : ''}`}
                       onClick={() => setMaxMemoryMb(256)}
                     >
-                      📱 256 MB (Mobile Lite)
+                      <Smartphone size={11} />
+                      <span>256 MB · Lite</span>
                     </button>
                     <button
                       type="button"
                       className={`cron-preset-pill ${maxMemoryMb === 512 ? 'active' : ''}`}
                       onClick={() => setMaxMemoryMb(512)}
                     >
-                      📱 512 MB (Mobile Edge)
+                      <Smartphone size={11} />
+                      <span>512 MB · Edge</span>
                     </button>
                     <button
                       type="button"
                       className={`cron-preset-pill ${maxMemoryMb === 1024 ? 'active' : ''}`}
                       onClick={() => setMaxMemoryMb(1024)}
                     >
-                      💻 1024 MB (1 GB Std)
+                      <Laptop size={11} />
+                      <span>1024 MB · Standard</span>
                     </button>
                     <button
                       type="button"
                       className={`cron-preset-pill ${maxMemoryMb === 2048 ? 'active' : ''}`}
                       onClick={() => setMaxMemoryMb(2048)}
                     >
-                      🚀 2048 MB (2 GB)
+                      <Rocket size={11} />
+                      <span>2048 MB · Power</span>
                     </button>
                     <button
                       type="button"
                       className={`cron-preset-pill ${maxMemoryMb === 4096 ? 'active' : ''}`}
                       onClick={() => setMaxMemoryMb(4096)}
                     >
-                      ⚡ 4096 MB (4 GB)
+                      <Zap size={11} />
+                      <span>4096 MB · Max</span>
                     </button>
                   </div>
 
@@ -883,44 +987,46 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                   </div>
                 </div>
               </div>
-            </div>
+            </section>
 
             {/* Scheduled Execution: Proper Visual Clock UI */}
-            <div id="agent-modal-schedule-section" style={{ borderTop: '1px solid hsl(var(--border) / 0.7)', paddingTop: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                  <Clock size={15} color="#f59e0b" />
-                  <span>Scheduled Execution & Clock</span>
-                </span>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+            <section id="agent-modal-schedule-section" className="ap-section ap-schedule-section">
+              <div className="ap-section-head">
+                <span className="ap-section-mark" aria-hidden="true"><Clock size={14} /></span>
+                <div className="ap-section-heading">
+                  <h3 className="ap-section-title">Scheduled Execution</h3>
+                  <p className="ap-section-desc">Run on a clock or repeat on an interval.</p>
+                </div>
+                <label className="ap-switch">
                   <input
                     type="checkbox"
                     checked={cronEnabled}
                     onChange={(e) => setCronEnabled(e.target.checked)}
                   />
-                  <span>Enable Periodic Schedule</span>
+                  <span className="ap-switch-track" aria-hidden="true"><span /></span>
+                  <span>Enable schedule</span>
                 </label>
               </div>
 
               {cronEnabled && (
                 <div className="cron-builder-card" style={{ gap: 14 }}>
                   {/* Schedule Mode Selector Tabs */}
-                  <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid hsl(var(--border) / 0.6)', paddingBottom: 10 }}>
+                  <div className="ap-segmented">
                     <button
                       type="button"
-                      className={`cron-preset-pill ${scheduleType === 'clock' ? 'active' : ''}`}
-                      style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600 }}
+                      className={`ap-segment ${scheduleType === 'clock' ? 'active' : ''}`}
                       onClick={() => handleScheduleTypeChange('clock')}
                     >
-                      🕒 Run at Specific Clock Times
+                      <Clock size={12} />
+                      <span>Specific clock times</span>
                     </button>
                     <button
                       type="button"
-                      className={`cron-preset-pill ${scheduleType === 'interval' ? 'active' : ''}`}
-                      style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600 }}
+                      className={`ap-segment ${scheduleType === 'interval' ? 'active' : ''}`}
                       onClick={() => handleScheduleTypeChange('interval')}
                     >
-                      ⏱️ Repeating Interval (every X mins)
+                      <TimerReset size={12} />
+                      <span>Repeating interval</span>
                     </button>
                   </div>
 
@@ -969,40 +1075,19 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                             return (
                               <div
                                 key={t.id}
+                                className={`ap-time-chip${isSelected ? ' is-selected' : ''}`}
                                 onClick={() => setActiveTimeId(t.id)}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 6,
-                                  padding: '5px 11px',
-                                  borderRadius: 8,
-                                  cursor: 'pointer',
-                                  fontSize: 12,
-                                  fontWeight: isSelected ? 700 : 500,
-                                  background: isSelected ? 'hsl(var(--foreground))' : 'hsl(var(--card))',
-                                  color: isSelected ? 'hsl(var(--background))' : 'hsl(var(--foreground))',
-                                  border: isSelected ? '1px solid hsl(var(--foreground))' : '1px solid hsl(var(--border))',
-                                  boxShadow: isSelected ? '0 0 0 2px hsl(var(--accent) / 0.3)' : 'none',
-                                  transition: 'all 0.15s ease',
-                                }}
                                 title={`Click to edit ${label} on clock`}
                               >
-                                <Clock size={12} color={isSelected ? 'hsl(var(--background))' : '#10b981'} />
+                                <Clock size={12} />
                                 <span>{label}</span>
                                 {scheduledTimes.length > 1 && (
                                   <button
                                     type="button"
+                                    className="ap-time-chip-remove"
                                     onClick={(e) => handleRemoveRunTime(t.id, e)}
-                                    style={{
-                                      background: 'none',
-                                      border: 'none',
-                                      padding: '0 0 0 4px',
-                                      color: isSelected ? 'hsl(var(--background) / 0.8)' : 'hsl(var(--muted-foreground))',
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                    }}
                                     title="Remove this execution time"
+                                    aria-label={`Remove ${label}`}
                                   >
                                     <X size={12} />
                                   </button>
@@ -1014,17 +1099,7 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                       </div>
 
                       {/* Interactive Clock Editor Box for the Selected Time */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 16,
-                          padding: '14px 16px',
-                          background: 'hsl(var(--background) / 0.65)',
-                          borderRadius: 10,
-                          border: '1px solid hsl(var(--border) / 0.8)',
-                        }}
-                      >
+                      <div className="ap-clock-card">
                         {/* Visual SVG Clock Face */}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                           <AnalogClockFace hour={activeTime.hour12} minute={activeTime.minute} />
@@ -1209,21 +1284,24 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                             className={`cron-preset-pill ${scheduleDays === 'daily' ? 'active' : ''}`}
                             onClick={() => handleDaysChange('daily')}
                           >
-                            📅 Every Day
+                            <CalendarDays size={11} />
+                            <span>Every day</span>
                           </button>
                           <button
                             type="button"
                             className={`cron-preset-pill ${scheduleDays === 'weekdays' ? 'active' : ''}`}
                             onClick={() => handleDaysChange('weekdays')}
                           >
-                            💼 Weekdays (Mon–Fri)
+                            <Briefcase size={11} />
+                            <span>Weekdays</span>
                           </button>
                           <button
                             type="button"
                             className={`cron-preset-pill ${scheduleDays === 'weekends' ? 'active' : ''}`}
                             onClick={() => handleDaysChange('weekends')}
                           >
-                            🏖️ Weekends (Sat–Sun)
+                            <Palmtree size={11} />
+                            <span>Weekends</span>
                           </button>
                         </div>
                       </div>
@@ -1293,18 +1371,11 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                   <div style={{ marginTop: 2 }}>
                     <button
                       type="button"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        padding: 0,
-                        fontSize: 11,
-                        color: 'hsl(var(--muted-foreground))',
-                        cursor: 'pointer',
-                        textDecoration: 'underline',
-                      }}
+                      className="ap-link-btn"
                       onClick={() => setShowAdvancedCron((prev) => !prev)}
                     >
-                      {showAdvancedCron ? 'Hide Advanced Cron Syntax' : 'Edit Raw 5-Part Cron Syntax'}
+                      <ChevronRight size={12} className={showAdvancedCron ? 'is-open' : ''} />
+                      <span>{showAdvancedCron ? 'Hide advanced cron syntax' : 'Edit raw cron syntax'}</span>
                     </button>
 
                     {showAdvancedCron && (
@@ -1321,16 +1392,22 @@ export const AgentModal: React.FC<AgentModalProps> = ({
                   </div>
                 </div>
               )}
-            </div>
+            </section>
           </div>
 
-          <div className={`modal-footer ${isMobile ? 'is-mobile-footer' : ''}`} style={{ flexShrink: 0 }}>
-            <button type="button" className="btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Saving…' : agent ? 'Update Agent' : 'Create Agent in Space'}
-            </button>
+          <div className={`modal-footer ap-modal-footer ${isMobile ? 'is-mobile-footer' : ''}`} style={{ flexShrink: 0 }}>
+            <span className="ap-footer-hint">
+              <ShieldCheck size={12} />
+              <span>Runs locally in your workspace</span>
+            </span>
+            <div className="ap-footer-actions">
+              <button type="button" className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary ap-submit-btn" disabled={loading}>
+                {loading ? 'Saving…' : agent ? <><Check size={14} /><span>Update Agent</span></> : <><Bot size={14} /><span>Create Agent</span></>}
+              </button>
+            </div>
           </div>
         </form>
       </div>

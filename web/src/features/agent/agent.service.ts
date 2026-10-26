@@ -8,9 +8,20 @@ import type {
   ChatMessageRecord,
   WorkspaceFilesResponse,
   WorkspaceFileContentResponse,
+  AgentConnectionRecord,
+  AgentCronJobRecord,
 } from './agent.types.js';
 
-const API_BASE = '/api';
+import { getApiBaseUrl } from '../../config/desktop.bridge.ts';
+
+const API_BASE = {
+  toString() {
+    return getApiBaseUrl();
+  },
+  [Symbol.toPrimitive]() {
+    return getApiBaseUrl();
+  },
+};
 
 export class AgentService {
   static async createAgent(data: Partial<AgentRecord>): Promise<SpaceAgentEntity> {
@@ -288,6 +299,149 @@ export class AgentService {
       body: JSON.stringify({ path, content }),
     });
     if (!res.ok) throw new Error('Failed to update workspace file');
+    return res.json();
+  }
+
+  static async openFileWithSystem(agentId: string, path: string): Promise<{ success: boolean; path: string }> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/files/open-system`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    if (!res.ok) throw new Error('Failed to open file with system application');
+    return res.json();
+  }
+
+  static async fetchConnections(agentId?: string): Promise<AgentConnectionRecord[]> {
+    const url = agentId ? `${API_BASE}/agents/connections?agentId=${encodeURIComponent(agentId)}` : `${API_BASE}/agents/connections`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch agent connections');
+    const data = await res.json();
+    return data.connections || [];
+  }
+
+  static async createConnection(sourceAgentId: string, targetAgentId: string): Promise<AgentConnectionRecord> {
+    const res = await fetch(`${API_BASE}/agents/connections`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourceAgentId,
+        targetAgentId,
+        source_agent_id: sourceAgentId,
+        target_agent_id: targetAgentId,
+      }),
+    });
+    if (!res.ok) {
+      let errorMsg = 'Failed to create agent connection';
+      try {
+        const text = await res.text();
+        const json = JSON.parse(text);
+        errorMsg = json.error || errorMsg;
+      } catch {}
+      throw new Error(errorMsg);
+    }
+    const text = await res.text();
+    let data: any = {};
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Unexpected server response: ${text.slice(0, 100)}`);
+    }
+    return data.connection || data;
+  }
+
+  static async deleteConnection(connectionId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/agents/connections/${connectionId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      let errorMsg = 'Failed to delete connection';
+      try {
+        const text = await res.text();
+        const json = JSON.parse(text);
+        errorMsg = json.error || errorMsg;
+      } catch {}
+      throw new Error(errorMsg);
+    }
+  }
+
+  static async deleteConnectionBetween(sourceAgentId: string, targetAgentId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/agents/connections`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourceAgentId,
+        targetAgentId,
+        source_agent_id: sourceAgentId,
+        target_agent_id: targetAgentId,
+      }),
+    });
+    if (!res.ok) {
+      let errorMsg = 'Failed to delete connection between agents';
+      try {
+        const text = await res.text();
+        const json = JSON.parse(text);
+        errorMsg = json.error || errorMsg;
+      } catch {}
+      throw new Error(errorMsg);
+    }
+  }
+
+  // ── Scheduled Cron Automations ─────────────────────────────────────────────
+  static async fetchCronJobs(agentId: string): Promise<AgentCronJobRecord[]> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/cron-jobs`);
+    if (!res.ok) throw new Error('Failed to fetch agent cron jobs');
+    return res.json();
+  }
+
+  static async createCronJob(
+    agentId: string,
+    data: { name: string; prompt: string; cron_schedule: string; enabled?: boolean; source?: string; scheduled_at?: string; delay_minutes?: number }
+  ): Promise<AgentCronJobRecord> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/cron-jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to create cron job');
+    }
+    return res.json();
+  }
+
+  static async updateCronJob(
+    agentId: string,
+    jobId: string,
+    patch: Partial<{ name: string; prompt: string; cron_schedule: string; enabled: boolean; scheduled_at?: string }>
+  ): Promise<AgentCronJobRecord> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/cron-jobs/${jobId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update cron job');
+    }
+    return res.json();
+  }
+
+  static async deleteCronJob(agentId: string, jobId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/cron-jobs/${jobId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete cron job');
+  }
+
+  static async runCronJobNow(agentId: string, jobId: string): Promise<{ success: boolean; result?: any }> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/cron-jobs/${jobId}/run`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to run cron job');
+    }
     return res.json();
   }
 }

@@ -10,9 +10,7 @@ use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, State, WindowEvent};
 
-// ── Backend Handle & Port Configuration ─────────────────────────────────
-
-struct BackendHandle(Mutex<Vec<Child>>);
+// ── Port Configuration ──────────────────────────────────────────────────
 
 // Default Canvas server port (matches server/app.server.ts)
 const DEFAULT_CANVAS_PORT: u16 = 3333;
@@ -998,8 +996,8 @@ fn wait_for_api(timeout_ms: u64) {
 
 #[tauri::command]
 fn open_system_link(app: tauri::AppHandle, url: String) -> Result<(), String> {
-    use tauri_plugin_shell::ShellExt;
-    app.shell().open(&url, None).map_err(|e| e.to_string())
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_url(&url, None::<&str>).map_err(|e| e.to_string())
 }
 
 fn setup_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -1207,7 +1205,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(TerminalManager::new())
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
@@ -1239,26 +1237,26 @@ pub fn run() {
                     let _ = Command::new("xdg-open").arg(&dir).spawn();
                 }
                 "open_web_canvas" => {
-                    use tauri_plugin_shell::ShellExt;
+                    use tauri_plugin_opener::OpenerExt;
                     let port = get_canvas_port();
                     let url = format!("http://localhost:{port}");
-                    let _ = app.shell().open(&url, None);
+                    let _ = app.opener().open_url(&url, None::<&str>);
                 }
                 "docs" => {
-                    use tauri_plugin_shell::ShellExt;
-                    let _ = app.shell().open("https://github.com/smoke-monkey/smoke-monkey-canvas#readme", None);
+                    use tauri_plugin_opener::OpenerExt;
+                    let _ = app.opener().open_url("https://github.com/smoke-monkey/smoke-monkey-canvas#readme", None::<&str>);
                 }
                 "harness_guide" => {
-                    use tauri_plugin_shell::ShellExt;
-                    let _ = app.shell().open("https://github.com/smoke-monkey/smoke-monkey-harness#readme", None);
+                    use tauri_plugin_opener::OpenerExt;
+                    let _ = app.opener().open_url("https://github.com/smoke-monkey/smoke-monkey-harness#readme", None::<&str>);
                 }
                 "canvas_repo" => {
-                    use tauri_plugin_shell::ShellExt;
-                    let _ = app.shell().open("https://github.com/smoke-monkey/smoke-monkey-canvas", None);
+                    use tauri_plugin_opener::OpenerExt;
+                    let _ = app.opener().open_url("https://github.com/smoke-monkey/smoke-monkey-canvas", None::<&str>);
                 }
                 "release_notes" => {
-                    use tauri_plugin_shell::ShellExt;
-                    let _ = app.shell().open("https://github.com/smoke-monkey/smoke-monkey-canvas/releases", None);
+                    use tauri_plugin_opener::OpenerExt;
+                    let _ = app.opener().open_url("https://github.com/smoke-monkey/smoke-monkey-canvas/releases", None::<&str>);
                 }
                 _ => {
                     // Forward UI actions to webview
@@ -1296,6 +1294,12 @@ pub fn run() {
             .min_inner_size(1024.0, 700.0)
             .resizable(true)
             .center()
+            // Tauri installs a native drag-drop handler by default which replaces
+            // the webview's own handler. On macOS (WKWebView) and Windows (WebView2)
+            // this swallows HTML5 drag events, so dragging library items onto the
+            // canvas silently does nothing. The app never consumes Tauri's native
+            // DragDropEvent, so we disable it to restore HTML5 drag-and-drop.
+            .disable_drag_drop_handler()
             .on_navigation(move |url| {
                 let scheme = url.scheme();
                 let host = url.host_str().unwrap_or("");
@@ -1313,8 +1317,8 @@ pub fn run() {
 
                 // Any external web navigation: intercept and open in default OS browser!
                 if scheme == "http" || scheme == "https" || scheme == "mailto" {
-                    use tauri_plugin_shell::ShellExt;
-                    let _ = app_handle.shell().open(url.as_str(), None);
+                    use tauri_plugin_opener::OpenerExt;
+                    let _ = app_handle.opener().open_url(url.as_str(), None::<&str>);
                     return false;
                 }
 

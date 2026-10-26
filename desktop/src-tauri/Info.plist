@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Tauri merges this file into the generated macOS Info.plist.
+    Without these usage-description keys, WKWebView refuses getUserMedia and
+    the Web Speech API with `service-not-allowed` (or the app is terminated by
+    TCC), which is why voice-to-text silently failed in desktop mode.
+  -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Smoke Monkey Canvas requires microphone access to enable voice commands, speech-to-text, and conversational interaction with autonomous agents.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Smoke Monkey Canvas uses on-device speech recognition to transcribe your voice into prompts for autonomous agents.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Smoke Monkey Canvas requires camera access for multi-modal visual inspection.</string>
+</dict>
+</plist>

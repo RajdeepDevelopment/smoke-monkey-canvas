@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getSavedVoiceLanguage, saveVoiceLanguage } from './voice.types.js';
+import {
+  getSavedVoiceLanguage,
+  saveVoiceLanguage,
+  isVoiceLanguageAvailable,
+  getVoiceLanguageLabel,
+} from './voice.types.js';
+import { isTauri, isTauriDevShell } from '../../config/desktop.bridge.js';
 
 interface IWindowSpeechRecognition extends Window {
   SpeechRecognition?: any;
@@ -57,6 +63,10 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
   const [language, setLanguageState] = useState<string>(
     initialLanguage || getSavedVoiceLanguage()
   );
+  // Recognition handlers are attached once and outlive `language` changes;
+  // they read this ref so error messages always name the current language.
+  const languageRef = useRef(language);
+  languageRef.current = language;
   const [status, setStatus] = useState<VoiceState>('idle');
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -137,10 +147,43 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
 
   const startListening = useCallback(async () => {
     if (!isSupported) {
-      const msg = 'Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.';
+      // In the desktop shell this only happens on Linux: WebKitGTK does not
+      // implement SpeechRecognition at all, so voice cannot work there yet.
+      const msg = isTauri()
+        ? 'Voice input is unavailable in this desktop build — its Linux web view has no speech recognition support. Use the macOS or Windows build, or the app in Chrome/Edge.'
+        : 'Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.';
       setError(msg);
       setStatus('error');
       onErrorRef.current?.(msg);
+      return;
+    }
+
+    // A `tauri dev` shell has no bundled Info.plist, so the moment the speech
+    // service is contacted macOS kills the whole app (TCC: "attempted to access
+    // privacy-sensitive data without a usage description"). Refuse up front
+    // instead of crashing; the packaged .app carries the required keys.
+    if (isTauriDevShell()) {
+      const msg =
+        'Voice input requires the packaged desktop app. `tauri dev` has no Info.plist usage descriptions, so macOS would terminate the app. Launch the packaged Smoke Monkey Canvas.app instead.';
+      setError(msg);
+      setStatus('error');
+      onErrorRef.current?.(msg);
+      userIntentListeningRef.current = false;
+      return;
+    }
+
+    // Never hand the recognizer a language this platform's engine cannot do
+    // (e.g. Bengali on Apple Speech): it fails or transcribes in the wrong
+    // language. The dropdown is already filtered, so this only catches a
+    // saved/legacy selection.
+    if (language !== 'auto' && !isVoiceLanguageAvailable(language)) {
+      const msg = `${getVoiceLanguageLabel(language)} speech is not supported by this device's speech engine. Switched to Auto — pick a language from the list.`;
+      setLanguageState('auto');
+      saveVoiceLanguage('auto');
+      setError(msg);
+      setStatus('error');
+      onErrorRef.current?.(msg);
+      userIntentListeningRef.current = false;
       return;
     }
 
@@ -235,8 +278,47 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
             // Benign no-speech event from speech engine: keep silence timer running
             return;
           }
-          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-            const msg = 'Microphone permission denied. Please allow microphone access.';
+          if (
+            event.error === 'language-not-supported' ||
+            event.error === 'language-unavailable'
+          ) {
+            // The engine rejected the requested language (detected at runtime,
+            // beyond what our per-platform list filters out). Drop back to Auto
+            // so the next press works instead of failing forever.
+            const msg = `${getVoiceLanguageLabel(languageRef.current)} speech is not supported by this device's speech engine. Switched to Auto — try again or pick another language.`;
+            setLanguageState('auto');
+            saveVoiceLanguage('auto');
+            setError(msg);
+            setStatus('error');
+            onErrorRef.current?.(msg);
+            userIntentListeningRef.current = false;
+            clearTimers();
+            try {
+              recognition.abort();
+            } catch {}
+            return;
+          }
+          if (event.error === 'not-allowed') {
+            const msg = 'Microphone or speech recognition permission is blocked. Allow access in System Settings > Privacy & Security.';
+            setError(msg);
+            setStatus('error');
+            onErrorRef.current?.(msg);
+            userIntentListeningRef.current = false;
+            clearTimers();
+            return;
+          }
+          if (event.error === 'service-not-allowed') {
+            // On macOS the Web Speech API route uses the system speech service.
+            // A bare dev binary (`tauri dev`) has no app-bundle Info.plist, and a
+            // packaged app without NSSpeechRecognitionUsageDescription, will be
+            // refused here even though `webkitSpeechRecognition` exists.
+            const msg = isTauri()
+              ? 'Speech recognition service unavailable. Run the packaged .app (not `tauri dev`) and enable Dictation in System Settings > Keyboard, then grant Speech Recognition when prompted.'
+              : 'Speech recognition service unavailable in this browser.';
+            console.warn('[SpeechToText] service-not-allowed', {
+              desktop: isTauri(),
+              hasRecognition: true,
+            });
             setError(msg);
             setStatus('error');
             onErrorRef.current?.(msg);
@@ -256,7 +338,9 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
               return;
             } catch {}
           }
-          setStatus('idle');
+          // Keep an error state visible: onend always follows onerror, and
+          // overwriting it would hide the message the user needs to see.
+          setStatus((prev) => (prev === 'error' ? prev : 'idle'));
           setInterimTranscript('');
         };
 

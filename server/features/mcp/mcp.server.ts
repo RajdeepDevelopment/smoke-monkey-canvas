@@ -6,19 +6,23 @@ import {
   clearTokens as clearOAuthTokens,
   credentialLabel,
   validateCredentials,
-  createPkce as createPkcePair,
-  discover,
-  ensureClient,
-  storedClientCreds,
   exchangeCode as exchangeAuthorizationCode,
-  buildAuthorizeUrl as buildAuthorizeRedirect,
   getAccessToken,
-  newState as createOAuthState,
   saveTokens as saveOAuthTokens,
-  stashPending as stashPendingAuth,
   takePending as takePendingAuth,
+  canonicalRedirectUri,
+  MCP_ALIASES,
 } from './mcp.oauth.js';
 import { CoreDatabase } from '../core/database.db.js';
+import { startConnect, beginAuthorization } from './mcp.connect.js';
+import { computeReadiness, getReadinessMap, recordProbe } from './mcp.readiness.js';
+import {
+  clearCachedProviderStatus,
+  fetchMcpAiProviderStatus,
+  isMcpAiServer,
+  readCachedProviderStatus,
+  type McpAiProviderStatus,
+} from './mcp.ai.js';
 
 type ProbeResult = {
   ok: boolean;
@@ -291,6 +295,13 @@ export function createMcpRouter(): Router {
     res.json(STOCK_MCPS);
   });
 
+  // Readiness snapshot for every stock server: credential state + last verified
+  // probe. A server is only "ready" once a real handshake has succeeded, so the
+  // UI never shows "connected" for something that has not actually connected.
+  router.get('/status', (_req: Request, res: Response) => {
+    res.json(getReadinessMap());
+  });
+
 // ── OAuth: real authorization-code + PKCE flow for remote MCP servers ─────
   // Remote servers that publish OAuth metadata are authorized properly.
   // Everything else gets an honest page instead of a fake consent screen.
@@ -300,6 +311,27 @@ export function createMcpRouter(): Router {
       ? (req.params.mcpName[0] ?? '')
       : req.params.mcpName;
     res.json({ mcpName, ...authStatus(mcpName) });
+  });
+
+  /**
+   * MCP.ai layer two: is the underlying provider (Telegram, Linear, …) linked?
+   * `?refresh=1` performs a live call to MCP.ai's `connect` tool; otherwise the
+   * cached answer is returned.
+   */
+  router.get('/oauth/:mcpName/provider', async (req: Request, res: Response) => {
+    const mcpName = Array.isArray(req.params.mcpName)
+      ? (req.params.mcpName[0] ?? '')
+      : req.params.mcpName;
+    if (!isMcpAiServer(mcpName)) {
+      res.status(404).json({ error: 'Not an MCP.ai server' });
+      return;
+    }
+    const refresh = String(req.query.refresh ?? '') === '1';
+    const cached = readCachedProviderStatus(mcpName);
+    const status = refresh || !cached
+      ? await fetchMcpAiProviderStatus(mcpName)
+      : cached;
+    res.json(status);
   });
 
   router.post('/oauth/:mcpName/disconnect', (req: Request, res: Response) => {
@@ -312,6 +344,7 @@ export function createMcpRouter(): Router {
       return;
     }
     clearOAuthTokens(mcpName);
+    clearCachedProviderStatus(mcpName);
 
     // Manually-pasted credentials live in the same settings rows the process reads,
     // so "disconnect" has to clear them too or the token survives the disconnect.
@@ -336,29 +369,13 @@ export function createMcpRouter(): Router {
     const { code, state, error, error_description: errorDescription } = req.query as
       Record<string, string | undefined>;
 
-    const finish = (ok: boolean, message: string, mcpName?: string) => {
-      // Popup flow: hand control back to the opener, then close.
-      res.type('html').send(`<!DOCTYPE html><html><head><meta charset="utf-8">
-        <title>${ok ? 'Connected' : 'Authorization failed'}</title>
-        <style>
-          body{background:#090d16;color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-               display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
-          .c{background:#111827;border:1px solid #1f293d;border-radius:14px;padding:26px 30px;max-width:420px;text-align:center}
-          h1{font-size:16px;margin:0 0 8px} p{font-size:13px;color:#94a3b8;line-height:1.5;margin:0}
-          .ok{color:#10b981}.bad{color:#f87171}
-        </style></head><body><div class="c">
-        <h1 class="${ok ? 'ok' : 'bad'}">${ok ? 'Authorization complete' : 'Authorization failed'}</h1>
-        <p>${escapeHtml(message)}</p></div>
-        <script>
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage({
-              type: '${ok ? 'MCP_OAUTH_SUCCESS' : 'MCP_OAUTH_ERROR'}',
-              mcpName: ${mcpName ? `'${mcpName}'` : 'null'},
-              message: ${JSON.stringify(message)}
-            }, '*');
-            setTimeout(function(){ window.close(); }, 900);
-          }
-        </script></body></html>`);
+    const finish = (
+      ok: boolean,
+      message: string,
+      mcpName?: string,
+      provider?: McpAiProviderStatus
+    ) => {
+      res.type('html').send(renderOAuthResultPage({ ok, message, mcpName, provider }));
     };
 
     if (error) {
@@ -382,7 +399,25 @@ export function createMcpRouter(): Router {
         hit.clientSecret
       );
       saveOAuthTokens(hit.mcpName, tokens);
-      finish(true, `${hit.mcpName} is now connected. You can close this window.`, hit.mcpName);
+
+      // MCP.ai OAuth only authorizes the platform. Ask its `connect` tool
+      // whether the provider account (Telegram, Linear, …) is linked, so the
+      // result page can show the second login step instead of a false success.
+      const provider = isMcpAiServer(hit.mcpName)
+        ? await fetchMcpAiProviderStatus(hit.mcpName)
+        : undefined;
+
+      if (provider?.state === 'needs-login') {
+        finish(
+          true,
+          `MCP.ai is connected. Finish linking your account to authorize ${hit.mcpName}.`,
+          hit.mcpName,
+          provider
+        );
+        return;
+      }
+
+      finish(true, `${hit.mcpName} is now connected. You can close this window.`, hit.mcpName, provider);
     } catch (err) {
       finish(false, err instanceof Error ? err.message : String(err));
     }
@@ -422,6 +457,11 @@ export function createMcpRouter(): Router {
       const coreDb = CoreDatabase.getInstance();
       coreDb.setSetting(`MCP_OAUTH_CLIENT_ID__${mcpName}`, clientId);
       coreDb.setSetting(`MCP_OAUTH_CLIENT_SECRET__${mcpName}`, clientSecret);
+      // Remember that this client belongs to the user and which callback URL it
+      // was registered with, so later connects never re-register it and always
+      // send the same redirect_uri the provider has on file.
+      coreDb.setSetting(`MCP_OAUTH_CLIENT_IS_USER_APP__${mcpName}`, '1');
+      coreDb.setSetting(`MCP_OAUTH_CLIENT_REDIRECT__${mcpName}`, callbackUrl(req));
       res.json({
         success: true, mcpName,
         saved: ['OAUTH_CLIENT_ID', 'OAUTH_CLIENT_SECRET'],
@@ -479,43 +519,114 @@ export function createMcpRouter(): Router {
       return;
     }
 
-    const redirectUri = absoluteUrl(req, '/api/mcp/oauth/callback');
-    try {
-      const d = await discover(stock.url);
-
-      // Providers that publish metadata but no registration_endpoint (GitHub, for
-      // one) still speak OAuth -- they just require the host app to bring its own
-      // OAuth App. Offer that path instead of degrading straight to a pasted token.
-      if (!d.registrationEndpoint && !storedClientCreds(mcpName)) {
-        res.status(502).send(
-          renderManualTokenPage(stock, noDcrReason(stock), { oauthApp: true })
-        );
-        return;
-      }
-
-      const { clientId, clientSecret } = await ensureClient(mcpName, d, redirectUri);
-      const { verifier, challenge } = createPkcePair();
-      const state = createOAuthState();
-
-      stashPendingAuth({
-        state, mcpName, verifier, redirectUri, clientId, clientSecret,
-        tokenEndpoint: d.tokenEndpoint, resource: d.resource,
-      });
-
-      res.redirect(buildAuthorizeRedirect(d, clientId, redirectUri, challenge, state));
-    } catch (err) {
+    const redirectUri = callbackUrl(req);
+    const started = await beginAuthorization(mcpName, stock, redirectUri);
+    if (!started.ok) {
       // Honest fallback: explain exactly why automation failed and offer the
       // manual token path rather than pretending to authorize.
-      const reason = err instanceof Error ? err.message : String(err);
-      res.status(502).send(renderManualTokenPage(stock, reason));
+      res.status(502).send(
+        started.needsClient
+          ? renderManualTokenPage(stock, started.reason, { oauthApp: true })
+          : renderManualTokenPage(stock, started.reason)
+      );
+      return;
     }
+
+    res.redirect(started.authorizationUrl);
   });
 
-  router.get('/oauth/:mcpName/done', (req: Request, res: Response) => {
+  /**
+   * Programmatic connect: the same flow as `/start`, but answered with JSON
+   * instead of a redirect, so a client (or the agent itself) can drive it.
+   *
+   * The response always carries the authorization URL, and `browserOpened`
+   * reports whether the server managed to hand it to the OS browser itself.
+   * A client that can open a window should use the URL; one that cannot rely
+   * on the server-side launch.
+   */
+  router.post('/oauth/:mcpName/connect', async (req: Request, res: Response) => {
     const mcpName = Array.isArray(req.params.mcpName)
       ? (req.params.mcpName[0] ?? '')
       : req.params.mcpName;
-    res.send(renderDonePage(mcpName, req.query.status === 'already'));
+    const aliasNames = MCP_ALIASES[mcpName] ?? [];
+    const stock =
+      STOCK_MCPS.find((s) => s.name === mcpName) ||
+      STOCK_MCPS.find((s) => aliasNames.includes(s.name));
+    if (!stock) {
+      res.status(404).json({ success: false, error: 'MCP not found' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const outcome = await startConnect(mcpName, {
+      redirectUri: callbackUrl(req),
+      launch: body.launch === 'server' ? 'server' : 'client',
+    });
+
+    switch (outcome.status) {
+      case 'connected':
+        res.json({ success: true, mcpName, status: 'connected', message: outcome.message });
+        return;
+      case 'awaiting-auth':
+        res.json({
+          success: true,
+          mcpName,
+          status: 'awaiting-auth',
+          authorizationUrl: outcome.authorizationUrl,
+          browserOpened: outcome.browserOpened,
+          message: outcome.message,
+        });
+        return;
+      case 'needs-token':
+        res.json({
+          success: false,
+          mcpName,
+          status: 'needs-token',
+          message: outcome.message,
+          required: outcome.required,
+        });
+        return;
+      case 'needs-client':
+        res.status(502).json({
+          success: false,
+          mcpName,
+          status: 'needs-client',
+          error: outcome.reason,
+          message: outcome.message,
+        });
+        return;
+      default:
+        res.status(502).json({
+          success: false,
+          mcpName,
+          status: 'failed',
+          error: outcome.reason,
+          message: outcome.message,
+        });
+    }
+  });
+
+  router.get('/oauth/:mcpName/done', async (req: Request, res: Response) => {
+    const mcpName = Array.isArray(req.params.mcpName)
+      ? (req.params.mcpName[0] ?? '')
+      : req.params.mcpName;
+    const already = req.query.status === 'already';
+    const provider = isMcpAiServer(mcpName)
+      ? readCachedProviderStatus(mcpName) ?? (await fetchMcpAiProviderStatus(mcpName))
+      : undefined;
+    const label = STOCK_MCPS.find((s) => s.name === mcpName)?.label ?? mcpName;
+    res.type('html').send(
+      renderOAuthResultPage({
+        ok: true,
+        message: provider?.state === 'needs-login'
+          ? `MCP.ai is connected. Finish linking your ${label} account to authorize this server.`
+          : already
+          ? 'This server already has a valid token. You can close this window.'
+          : 'The authorization flow completed. You can close this window.',
+        mcpName,
+        provider,
+      })
+    );
   });
 
   // Legacy path used by older UI: delegate to the real flow.
@@ -534,55 +645,210 @@ export function createMcpRouter(): Router {
     );
   }
 
-  function absoluteUrl(req: Request, pathname: string): string {
+  /**
+   * The OAuth callback URI for this server.
+   *
+   * Deliberately NOT derived from the request's Host header: the browser, the
+   * dev proxy and the desktop app all spell the local host differently, and a
+   * provider compares redirect URIs byte for byte. One pinned URI keeps the
+   * registered client and the authorize request in agreement.
+   */
+  function callbackUrl(req: Request): string {
     const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim()
       || req.protocol
       || 'http';
     const host = (req.headers['x-forwarded-host'] as string)?.split(',')[0]?.trim()
       || req.get('host')
-      || 'localhost:3333';
-    return `${proto}://${host}${pathname}`;
+      || '';
+    return canonicalRedirectUri(proto, host);
   }
 
   const PAGE_CSS = `
     *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#090d16;color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-    .card{background:#111827;border:1px solid #1f293d;border-radius:16px;width:100%;max-width:460px;
-          padding:28px;box-shadow:0 25px 50px -12px rgba(0,0,0,.6)}
-    h1{font-size:17px;font-weight:700;color:#fff;margin-bottom:6px}
-    p{font-size:13px;color:#94a3b8;line-height:1.55}
-    .banner{background:#1c1408;border:1px solid #78350f;border-radius:10px;padding:12px 14px;
-            margin:16px 0;font-size:12.5px;color:#fbbf24;line-height:1.5;white-space:pre-wrap;
-            word-break:break-word}
+    body{background:#070b14;background-image:
+           radial-gradient(900px 500px at 50% -10%,rgba(37,99,235,.22),transparent 62%),
+           radial-gradient(700px 420px at 100% 110%,rgba(14,165,233,.12),transparent 60%);
+         color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;
+         display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+    .card{position:relative;background:linear-gradient(180deg,rgba(17,24,39,.98),rgba(9,14,24,.99));
+          border:1px solid rgba(148,163,184,.16);border-radius:20px;width:100%;max-width:480px;
+          padding:32px;box-shadow:0 40px 90px -30px rgba(0,0,0,.92),
+          0 0 0 1px rgba(255,255,255,.03) inset,0 1px 0 rgba(255,255,255,.07) inset;
+          overflow:hidden}
+    .card:before{content:'';position:absolute;inset:0 0 auto;height:1px;
+          background:linear-gradient(90deg,transparent,rgba(96,165,250,.55),transparent)}
+    .orb{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+         margin-bottom:20px;font-size:24px;font-weight:700;
+         background:linear-gradient(145deg,rgba(16,185,129,.22),rgba(16,185,129,.06));
+         border:1px solid rgba(16,185,129,.35);color:#6ee7b7;
+         box-shadow:0 12px 32px -12px rgba(16,185,129,.55),0 0 0 6px rgba(16,185,129,.04)}
+    .orb.bad{background:linear-gradient(145deg,rgba(248,113,113,.2),rgba(248,113,113,.05));
+         border-color:rgba(248,113,113,.35);color:#fca5a5;
+         box-shadow:0 12px 32px -12px rgba(248,113,113,.4),0 0 0 6px rgba(248,113,113,.04)}
+    .eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+         color:#64748b;margin-bottom:8px}
+    h1{font-size:21px;line-height:1.25;font-weight:750;color:#fff;margin-bottom:8px;letter-spacing:-.01em}
+    p{font-size:13px;color:#94a3b8;line-height:1.6}
+    .banner{background:rgba(120,53,15,.22);border:1px solid rgba(245,158,11,.32);border-radius:12px;
+            padding:13px 15px;margin:18px 0;font-size:12.5px;color:#fbbf24;line-height:1.55;
+            white-space:pre-wrap;word-break:break-word}
+    .provider{margin-top:20px;padding:18px;border-radius:14px;
+         background:linear-gradient(145deg,rgba(30,41,59,.55),rgba(15,23,42,.5));
+         border:1px solid rgba(96,165,250,.2);box-shadow:0 14px 34px -20px rgba(37,99,235,.55)}
+    .provider.done{border-color:rgba(16,185,129,.28);background:linear-gradient(145deg,rgba(6,78,59,.28),rgba(15,23,42,.5))}
+    .provider-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:5px}
+    .provider p{font-size:12.5px;color:#9fb0c7}
+    .status-dot{width:7px;height:7px;border-radius:50%;background:#60a5fa;box-shadow:0 0 0 4px rgba(96,165,250,.12)}
+    .status-dot.green{background:#34d399;box-shadow:0 0 0 4px rgba(52,211,153,.12)}
     label{display:block;font-size:11.5px;font-weight:600;color:#94a3b8;margin:14px 0 6px}
-    input{width:100%;padding:10px 12px;background:#0b0f19;border:1px solid #334155;border-radius:8px;
-          color:#fff;font-size:13px;outline:none}
-    input:focus{border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.2)}
-    button{width:100%;margin-top:16px;padding:12px;border:none;border-radius:9px;font-size:13.5px;
-           font-weight:600;cursor:pointer;background:#2563eb;color:#fff}
-    button:hover{background:#1d4ed8}
+    input{width:100%;padding:11px 13px;background:#080d17;border:1px solid #263449;border-radius:9px;
+          color:#fff;font-size:13px;outline:none;transition:border-color .15s,box-shadow .15s}
+    input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.16)}
+    button{width:100%;margin-top:16px;padding:12px;border:none;border-radius:10px;font-size:13.5px;
+           font-weight:650;cursor:pointer;background:linear-gradient(180deg,#3b82f6,#2563eb);color:#fff;
+           box-shadow:0 10px 26px -12px rgba(37,99,235,.8),0 1px 0 rgba(255,255,255,.15) inset;
+           transition:transform .15s,filter .15s}
+    button:hover{filter:brightness(1.08)}
+    button:active{transform:translateY(1px)}
+    button.secondary{background:rgba(255,255,255,.06);border:1px solid rgba(148,163,184,.22);
+           box-shadow:none;color:#dbe6f5;margin-top:9px}
     button:disabled{opacity:.6;cursor:not-allowed}
-    .ok{color:#10b981}
+    .ok{color:#34d399}
     a{color:#60a5fa;font-size:12.5px}
+    .link-btn{display:block;text-align:center;text-decoration:none;margin-top:14px;padding:12px;
+         border-radius:10px;font-size:13.5px;font-weight:650;color:#fff;
+         background:linear-gradient(180deg,#3b82f6,#2563eb);
+         box-shadow:0 10px 26px -12px rgba(37,99,235,.8),0 1px 0 rgba(255,255,255,.15) inset}
+    .link-btn:hover{filter:brightness(1.08)}
+    .meta{margin-top:18px;padding-top:16px;border-top:1px solid rgba(148,163,184,.1);
+          font-size:11.5px;color:#64748b;line-height:1.55}
   `;
 
-  /** Why a provider that speaks OAuth still cannot be authorized automatically. */
-  function noDcrReason(stock: { label: string; url?: string }): string {
-    return (
-      `${stock.label} supports OAuth, but its authorization server does not offer dynamic ` +
-      'client registration. That means this app cannot create its own OAuth client ' +
-      'automatically -- a host application has to bring its own.\n\n' +
-      'Register an OAuth App with ' + stock.label + ', set its callback URL to\n' +
-      '    ' + callbackHint(stock) + '\n' +
-      'then paste the Client ID and Client Secret below. After that, Connect runs the ' +
-      'real OAuth sign-in and no access token is ever typed by hand.'
-    );
-  }
+  // `noDcrReason` / `callbackHint` live in mcp.connect.ts so the agent tool and
+  // these pages explain the same rule identically.
 
-  function callbackHint(stock: { url?: string }): string {
-    const host = stock.url ? new URL(stock.url).host : 'localhost:3333';
-    return `http://localhost:3333/api/mcp/oauth/callback  (on ${host})`;
+  function renderOAuthResultPage(opts: {
+    ok: boolean;
+    message: string;
+    mcpName?: string;
+    provider?: McpAiProviderStatus;
+  }): string {
+    const { ok, message, mcpName, provider } = opts;
+    const stock = mcpName ? STOCK_MCPS.find((s) => s.name === mcpName) : undefined;
+    const label = stock?.label ?? mcpName ?? 'MCP server';
+    const needsLogin = provider?.state === 'needs-login';
+    const providerDone = provider?.state === 'connected';
+    const title = !ok
+      ? 'Authorization failed'
+      : needsLogin
+      ? `One more step for ${label}`
+      : providerDone || !provider
+      ? `${label} connected`
+      : `${label} platform connected`;
+
+    const providerPanel = provider
+      ? `<div class="provider ${providerDone ? 'done' : ''}" id="provider-card">
+          <div class="provider-title">
+            <span class="status-dot ${providerDone ? 'green' : ''}"></span>
+            <span id="provider-title">${
+              providerDone
+                ? `${escapeHtml(label)} account linked`
+                : needsLogin
+                ? `${escapeHtml(label)} account login required`
+                : provider.state === 'needs-platform-auth'
+                ? 'MCP.ai sign-in required'
+                : 'Could not verify the account'
+            }</span>
+          </div>
+          <p id="provider-detail">${escapeHtml(
+            provider.detail ??
+              (providerDone
+                ? `MCP.ai and ${label} are both authorized.`
+                : needsLogin
+                ? `MCP.ai is connected, but ${label} still needs your account login.`
+                : 'MCP.ai did not report a provider connection.')
+          )}</p>
+          ${
+            provider.connectUrl
+              ? `<a class="link-btn" href="${escapeHtml(provider.connectUrl)}" target="_blank" rel="noopener noreferrer">Connect ${escapeHtml(label)} account</a>`
+              : ''
+          }
+          <button type="button" class="secondary" id="provider-check">I finished — check again</button>
+        </div>`
+      : '';
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>${escapeHtml(title)}</title>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>${PAGE_CSS}</style></head><body><div class="card">
+      <div class="orb ${ok ? '' : 'bad'}">${ok ? '&#10003;' : '!'}</div>
+      <div class="eyebrow">${provider ? 'Two-step connection' : 'MCP connection'}</div>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(message)}</p>
+      ${providerPanel}
+      <div class="meta">Credentials are stored on this machine. MCP.ai only tells this app whether the provider account is linked.</div>
+      </div>
+      <script>
+        const mcpName = ${JSON.stringify(mcpName ?? null)};
+        const providerState = ${JSON.stringify(provider?.state ?? null)};
+        const label = ${JSON.stringify(label)};
+        const openerMessage = {
+          type: ${JSON.stringify(ok ? 'MCP_OAUTH_SUCCESS' : 'MCP_OAUTH_ERROR')},
+          mcpName,
+          message: ${JSON.stringify(message)},
+          providerState,
+        };
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(openerMessage, '*');
+        }
+        const check = document.getElementById('provider-check');
+        const titleEl = document.getElementById('provider-title');
+        const detailEl = document.getElementById('provider-detail');
+        const card = document.getElementById('provider-card');
+        let poll = null;
+
+        async function refreshProvider() {
+          if (!mcpName || !check) return;
+          check.disabled = true;
+          check.textContent = 'Checking…';
+          try {
+            const res = await fetch('/api/mcp/oauth/' + encodeURIComponent(mcpName) + '/provider?refresh=1');
+            const status = await res.json();
+            if (status.state === 'connected') {
+              if (card) card.classList.add('done');
+              if (titleEl) titleEl.textContent = label + ' account linked';
+              if (detailEl) detailEl.textContent = 'MCP.ai and ' + label + ' are both authorized.';
+              check.textContent = 'Connected';
+              check.disabled = true;
+              if (poll) clearInterval(poll);
+              setTimeout(function(){ window.close(); }, 1400);
+              return;
+            }
+            if (titleEl) {
+              titleEl.textContent = status.state === 'needs-platform-auth'
+                ? 'MCP.ai sign-in required'
+                : label + ' account login required';
+            }
+            if (detailEl) detailEl.textContent = status.detail || 'Finish the ' + label + ' login, then check again.';
+            check.textContent = 'I finished — check again';
+            check.disabled = false;
+          } catch {
+            check.textContent = 'Check again';
+            check.disabled = false;
+          }
+        }
+
+        if (check) {
+          check.addEventListener('click', refreshProvider);
+          if (providerState === 'needs-login') {
+            poll = setInterval(refreshProvider, 10000);
+          }
+        }
+
+        if (${ok && !needsLogin ? 'true' : 'false'}) {
+          setTimeout(function(){ window.close(); }, 1600);
+        }
+      </script></body></html>`;
   }
 
   function renderManualTokenPage(
@@ -810,32 +1076,6 @@ export function createMcpRouter(): Router {
     </script></body></html>`;
   }
 
-  function renderDonePage(mcpName: string, already: boolean): string {
-    const stock = STOCK_MCPS.find((s) => s.name === mcpName);
-    const label = stock?.label ?? mcpName;
-    // Never render the secret itself, only whether one is present.
-    const hasAccess = !!authStatus(mcpName).connected;
-    const manualKey = (stock?.envKeys ?? []).find((k) => CoreDatabase.getInstance().getSetting(k));
-    const hasManual = !!manualKey;
-    return `<!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>${escapeHtml(label)}</title>
-      <style>${PAGE_CSS}</style></head><body><div class="card">
-      <h1 class="ok">${already ? 'Already connected' : 'Connected'}</h1>
-      <p>${escapeHtml(label)} is authorized${
-        already ? ' and still has a valid token.' : '. You can close this window.'
-      }.</p>
-      <p class="hint">Access token: ${
-        hasAccess ? 'stored on this machine' : 'not stored'
-      }</p>
-    </div><script>
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: 'MCP_OAUTH_SUCCESS', mcpName: ${JSON.stringify(
-          mcpName
-        )}, viaToken: ${hasManual && !hasAccess} }, '*');
-        setTimeout(function(){ window.close(); }, 700);
-      }
-    </script></body></html>`;
-  }
   // ── Test MCP Connection (real handshake) ───────────────────────────────────
   router.post('/test', async (req: Request, res: Response) => {
     const started = Date.now();
@@ -894,6 +1134,13 @@ export function createMcpRouter(): Router {
     const latencyMs = Date.now() - started;
 
     if (!result.ok) {
+      recordProbe(stock.name, {
+        ok: false,
+        stage: result.stage,
+        detail: result.detail,
+        toolCount: 0,
+        latencyMs,
+      });
       res.status(200).json({
         success: false,
         stage: result.stage,
@@ -901,6 +1148,42 @@ export function createMcpRouter(): Router {
         label: stock.label,
         error: result.detail,
         latencyMs,
+        readiness: computeReadiness(stock.name),
+      });
+      return;
+    }
+
+    recordProbe(stock.name, {
+      ok: true,
+      stage: result.stage,
+      detail: '',
+      toolCount: result.tools.length,
+      latencyMs,
+    });
+
+    // A successful MCP handshake is not enough for MCP.ai: the hosted connector
+    // still needs the user's provider account. Check it so "Test connection"
+    // never paints a half-connected server green.
+    const provider = stock.isMcpAi
+      ? readCachedProviderStatus(stock.name) ?? (await fetchMcpAiProviderStatus(stock.name))
+      : undefined;
+    const providerNeedsLogin =
+      provider?.state === 'needs-login' || provider?.state === 'needs-platform-auth';
+    const readiness = computeReadiness(stock.name);
+
+    if (providerNeedsLogin) {
+      res.json({
+        success: false,
+        stage: 'provider',
+        mcpName: stock.name,
+        label: stock.label,
+        toolCount: result.tools.length,
+        tools: result.tools.slice(0, 25),
+        error: provider?.detail ?? `Finish linking your ${stock.label} account.`,
+        message: provider?.detail ?? `Finish linking your ${stock.label} account, then test again.`,
+        provider,
+        latencyMs,
+        readiness,
       });
       return;
     }
@@ -914,7 +1197,9 @@ export function createMcpRouter(): Router {
       message: result.tools.length
         ? `Connected. ${stock.label} exposes ${result.tools.length} tool${result.tools.length === 1 ? '' : 's'}.`
         : `Connected. ${stock.label} completed the MCP handshake.`,
+      provider,
       latencyMs,
+      readiness,
     });
   });
 

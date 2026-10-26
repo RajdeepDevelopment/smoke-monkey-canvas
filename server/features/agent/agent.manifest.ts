@@ -818,61 +818,215 @@ export const writeAgentManifest = (input: WriteManifestInput): AgentManifest => 
   return ws;
 };
 
+export interface ManifestReadResult<T> {
+  exists: boolean;
+  valid: boolean;
+  error?: string;
+  entries: T[];
+}
+
+/** Read the agent's MCP manifest from disk with detailed validity tracking. */
+export const readAgentMcpManifestDetailed = (ws: AgentWorkspace): ManifestReadResult<ManifestMcpEntry> => {
+  const targetFile = fs.existsSync(ws.mcpFile)
+    ? ws.mcpFile
+    : fs.existsSync(path.join(ws.dir, 'mcp.json'))
+      ? path.join(ws.dir, 'mcp.json')
+      : null;
+
+  if (!targetFile) {
+    return { exists: false, valid: true, entries: [] };
+  }
+
+  let text = '';
+  try {
+    text = fs.readFileSync(targetFile, 'utf8').trim();
+  } catch (err: any) {
+    return { exists: true, valid: false, error: err?.message || 'Could not read mcp.json', entries: [] };
+  }
+
+  if (!text) {
+    return { exists: true, valid: false, error: 'Empty mcp.json file', entries: [] };
+  }
+
+  let raw: any;
+  try {
+    raw = JSON.parse(text);
+  } catch (err: any) {
+    return { exists: true, valid: false, error: `Invalid JSON in mcp.json: ${err?.message || err}`, entries: [] };
+  }
+
+  let list: any[] = [];
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (raw && typeof raw === 'object') {
+    const servers = raw.mcp_servers ?? raw.servers ?? raw.mcps ?? raw.items;
+    if (Array.isArray(servers)) {
+      list = servers;
+    } else if (servers && typeof servers === 'object') {
+      list = Object.entries(servers).map(([key, val]) =>
+        typeof val === 'object' && val !== null ? { key, name: key, ...(val as any) } : { key, name: key }
+      );
+    }
+  }
+
+  const entries = list
+    .map((item: any): ManifestMcpEntry | null => {
+      if (typeof item === 'string') {
+        const trimmed = item.trim();
+        if (!trimmed) return null;
+        return {
+          key: trimmed.toLowerCase().replace(/[^a-z0-9_-]+/g, '-'),
+          name: trimmed,
+          label: trimmed,
+          enabled: true,
+          source: 'agent',
+        };
+      }
+      if (item && typeof item === 'object') {
+        const name = item.name || item.mcp_name || item.label || item.key;
+        if (!name || typeof name !== 'string') return null;
+        const key = item.key || name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+        return {
+          key,
+          name: name.trim(),
+          label: item.label || name.trim(),
+          command: item.command,
+          args: item.args,
+          url: item.url,
+          env: item.env,
+          enabled: item.enabled !== false && item.enabled !== 0,
+          source: item.source ?? 'agent',
+          attachment_id: item.attachment_id || item.id,
+        };
+      }
+      return null;
+    })
+    .filter((e): e is ManifestMcpEntry => e !== null);
+
+  return { exists: true, valid: true, entries };
+};
+
 /** Read the agent's MCP manifest from disk (any source), legacy root copy as fallback. */
 export const readAgentMcpManifest = (ws: AgentWorkspace): ManifestMcpEntry[] => {
-  try {
-    const data =
-      readJson<{ mcp_servers?: ManifestMcpEntry[] | Record<string, ManifestMcpEntry> }>(ws.mcpFile) ??
-      readJson<{ mcp_servers?: ManifestMcpEntry[] | Record<string, ManifestMcpEntry> }>(
-        path.join(ws.dir, 'mcp.json'),
-      );
-    const servers = data?.mcp_servers;
-    if (!servers) return [];
-    return Array.isArray(servers) ? servers : Object.values(servers);
-  } catch {
-    return [];
+  return readAgentMcpManifestDetailed(ws).entries;
+};
+
+/** Read the agent's skill manifest from disk with detailed validity tracking. */
+export const readAgentSkillManifestDetailed = (ws: AgentWorkspace): ManifestReadResult<ManifestSkillEntry> => {
+  const targetFile = fs.existsSync(ws.skillsFile)
+    ? ws.skillsFile
+    : fs.existsSync(path.join(ws.dir, 'skills.json'))
+      ? path.join(ws.dir, 'skills.json')
+      : null;
+
+  if (!targetFile) {
+    return { exists: false, valid: true, entries: [] };
   }
+
+  let text = '';
+  try {
+    text = fs.readFileSync(targetFile, 'utf8').trim();
+  } catch (err: any) {
+    return { exists: true, valid: false, error: err?.message || 'Could not read skills.json', entries: [] };
+  }
+
+  if (!text) {
+    return { exists: true, valid: false, error: 'Empty skills.json file', entries: [] };
+  }
+
+  let raw: any;
+  try {
+    raw = JSON.parse(text);
+  } catch (err: any) {
+    return { exists: true, valid: false, error: `Invalid JSON in skills.json: ${err?.message || err}`, entries: [] };
+  }
+
+  let list: any[] = [];
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (raw && typeof raw === 'object') {
+    const skills = raw.skills ?? raw.skill_names ?? raw.attached_skills ?? raw.items;
+    if (Array.isArray(skills)) {
+      list = skills;
+    } else if (skills && typeof skills === 'object') {
+      list = Object.entries(skills).map(([key, val]) =>
+        typeof val === 'object' && val !== null ? { name: key, ...(val as any) } : { name: key }
+      );
+    }
+  }
+
+  const entries = list
+    .map((item: any): ManifestSkillEntry | null => {
+      if (typeof item === 'string') {
+        const trimmed = item.trim();
+        if (!trimmed) return null;
+        return { name: trimmed, description: trimmed, enabled: true, source: 'agent' };
+      }
+      if (item && typeof item === 'object') {
+        const name = item.name || item.skill_name || item.id;
+        if (!name || typeof name !== 'string') return null;
+        return {
+          name: name.trim(),
+          description: item.description ?? name.trim(),
+          content: item.content ?? '',
+          enabled: item.enabled !== false && item.enabled !== 0,
+          source: item.source ?? 'agent',
+          attachment_id: item.attachment_id || item.id,
+        };
+      }
+      return null;
+    })
+    .filter((e): e is ManifestSkillEntry => e !== null);
+
+  return { exists: true, valid: true, entries };
 };
 
 /** Read the agent's skill manifest from disk (any source), legacy root copy as fallback. */
 export const readAgentSkillManifest = (ws: AgentWorkspace): ManifestSkillEntry[] => {
-  try {
-    const data = readJson<{ skills?: ManifestSkillEntry[] }>(ws.skillsFile) ??
-      readJson<{ skills?: ManifestSkillEntry[] }>(path.join(ws.dir, 'skills.json'));
-    return data?.skills ?? [];
-  } catch {
-    return [];
-  }
+  return readAgentSkillManifestDetailed(ws).entries;
 };
 
 /** Read the agent's policy manifest from disk (any source). */
 export const readAgentPolicyManifest = (ws: AgentWorkspace): ManifestPolicyEntry[] => {
   try {
-    const data = readJson<{ policies?: ManifestPolicyEntry[] }>(ws.policiesFile);
-    return data?.policies ?? [];
+    const raw = readJson<any>(ws.policiesFile);
+    if (!raw) return [];
+    let list: any[] = [];
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (raw && typeof raw === 'object') {
+      if (Array.isArray(raw.policies)) {
+        list = raw.policies;
+      }
+    }
+    return list
+      .map((item: any): ManifestPolicyEntry | null => {
+        if (typeof item === 'string') {
+          return { text: item, source: 'agent' };
+        }
+        if (item && typeof item === 'object' && typeof item.text === 'string') {
+          return {
+            text: item.text,
+            source: item.source ?? 'agent',
+          };
+        }
+        return null;
+      })
+      .filter((p): p is ManifestPolicyEntry => p !== null);
   } catch {
     return [];
   }
 };
 
+const normalizeMatchKey = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || value.toLowerCase().trim();
+
 /**
- * Honor app-managed attachments the agent removed from its own manifest files
- * (`skills/skills.json`, `mcp/mcp.json`). A row missing from a non-empty,
- * older manifest is treated as deleted by the agent: it is dropped from the
- * returned lists and removed from the DB via the callbacks, so the UI stops
- * listing it and the next manifest regeneration cannot resurrect it.
- *
- * Fail-open rules (never prune when unsure):
- *   - empty manifest → freshly seeded, not written yet
- *   - no manifest file / unreadable → nothing to compare against
- *   - row newer than (or same age as) the file → freshly attached, the file
- *     simply has not been rewritten since
- *   - disabled rows → the runner only writes enabled entries, so their
- *     absence from the file is expected
- *
- * Policies are intentionally not reconciled: entries in `agents.policies`
- * carry no timestamps, so a fresh attach and an agent-side removal cannot be
- * told apart safely.
+ * Honor attachments the agent (or peer agent, or manual edit) removed from its own manifest files
+ * (`skills/skills.json`, `mcp/mcp.json`).
+ * If the manifest file exists on disk and is VALID JSON, any row in the DB not present in the manifest file
+ * is treated as removed and pruned from the DB so the UI stops listing it.
+ * If the manifest file is corrupted, invalid JSON, or being written, PRUNING IS SKIPPED to protect against data loss.
  */
 export const reconcileManifestRemovals = <
   S extends { id: string; skill_name: string; created_at: string; enabled: number },
@@ -884,36 +1038,66 @@ export const reconcileManifestRemovals = <
   removeSkill: (id: string) => void;
   removeMcp: (id: string) => void;
 }): { skills: S[]; mcps: M[] } => {
-  const statMs = (file: string): number | null => {
-    try {
-      return fs.statSync(file).mtimeMs;
-    } catch {
-      return null;
+  const detailedSkills = readAgentSkillManifestDetailed(input.ws);
+  let skillKeep: Set<string> | null = null;
+
+  if (detailedSkills.exists) {
+    if (!detailedSkills.valid) {
+      console.warn(
+        `[agent.manifest] ${input.ws.dir}: skipping skill pruning because skills.json is invalid/unparseable (${detailedSkills.error}). DB rows preserved.`,
+      );
+    } else {
+      skillKeep = new Set<string>();
+      for (const e of detailedSkills.entries) {
+        if (e.name) {
+          skillKeep.add(e.name);
+          skillKeep.add(e.name.toLowerCase());
+          skillKeep.add(normalizeMatchKey(e.name));
+        }
+        if (e.attachment_id) {
+          skillKeep.add(e.attachment_id);
+        }
+      }
     }
-  };
+  }
 
-  const skillManifest = readAgentSkillManifest(input.ws);
-  const skillMtime = statMs(input.ws.skillsFile);
-  const skillKeep =
-    skillManifest.length > 0 && skillMtime !== null
-      ? new Set(skillManifest.map((e) => e.name))
-      : null;
+  const detailedMcps = readAgentMcpManifestDetailed(input.ws);
+  let mcpKeep: Set<string> | null = null;
 
-  const mcpManifest = readAgentMcpManifest(input.ws);
-  const mcpMtime = statMs(input.ws.mcpFile);
-  const mcpKeep =
-    mcpManifest.length > 0 && mcpMtime !== null
-      ? new Set(mcpManifest.map((e) => e.name))
-      : null;
+  if (detailedMcps.exists) {
+    if (!detailedMcps.valid) {
+      console.warn(
+        `[agent.manifest] ${input.ws.dir}: skipping MCP pruning because mcp.json is invalid/unparseable (${detailedMcps.error}). DB rows preserved.`,
+      );
+    } else {
+      mcpKeep = new Set<string>();
+      for (const e of detailedMcps.entries) {
+        if (e.name) {
+          mcpKeep.add(e.name);
+          mcpKeep.add(e.name.toLowerCase());
+          mcpKeep.add(normalizeMatchKey(e.name));
+        }
+        if (e.key) {
+          mcpKeep.add(e.key);
+          mcpKeep.add(e.key.toLowerCase());
+        }
+        if (e.attachment_id) {
+          mcpKeep.add(e.attachment_id);
+        }
+      }
+    }
+  }
 
   const skills: S[] = [];
   for (const s of input.skills) {
-    const removed =
-      skillKeep !== null &&
-      !skillKeep.has(s.skill_name) &&
-      s.enabled !== 0 &&
-      Date.parse(s.created_at) < skillMtime!;
-    if (removed) {
+    const isKept =
+      skillKeep === null ||
+      skillKeep.has(s.skill_name) ||
+      skillKeep.has(s.skill_name.toLowerCase()) ||
+      skillKeep.has(normalizeMatchKey(s.skill_name)) ||
+      skillKeep.has(s.id);
+
+    if (!isKept) {
       console.warn(
         `[agent.manifest] ${input.ws.dir}: pruning skill "${s.skill_name}" — removed from the agent's skills.json`,
       );
@@ -925,12 +1109,14 @@ export const reconcileManifestRemovals = <
 
   const mcps: M[] = [];
   for (const m of input.mcps) {
-    const removed =
-      mcpKeep !== null &&
-      !mcpKeep.has(m.mcp_name) &&
-      m.enabled !== 0 &&
-      Date.parse(m.created_at) < mcpMtime!;
-    if (removed) {
+    const isKept =
+      mcpKeep === null ||
+      mcpKeep.has(m.mcp_name) ||
+      mcpKeep.has(m.mcp_name.toLowerCase()) ||
+      mcpKeep.has(normalizeMatchKey(m.mcp_name)) ||
+      mcpKeep.has(m.id);
+
+    if (!isKept) {
       console.warn(
         `[agent.manifest] ${input.ws.dir}: pruning MCP "${m.mcp_name}" — removed from the agent's mcp.json`,
       );
@@ -1069,8 +1255,42 @@ export const writeCommonAgentRegistry = (
 
 // ── Prompt block ───────────────────────────────────────────────────────────
 
-const memoryListBlock = (ws: AgentWorkspace) =>
-  MEMORY_FILES.map((m) => `* \`${ws.memoryFiles[m.file]}\` — ${m.purpose}`).join('\n');
+export const memoryMatrixContentBlock = (ws: AgentWorkspace): string => {
+  const blocks: string[] = [];
+
+  for (const m of MEMORY_FILES) {
+    const filePath = ws.memoryFiles[m.file];
+    let content = '';
+    try {
+      if (fs.existsSync(filePath)) {
+        content = fs.readFileSync(filePath, 'utf8').trim();
+      }
+    } catch {}
+
+    if (!content) {
+      const seedFn = MEMORY_SEEDS[m.file];
+      content = seedFn ? seedFn('Agent').trim() : `# ${m.name}\n\n${m.purpose}`;
+    }
+
+    const lines = content.split('\n');
+    let displayContent = content;
+    if (lines.length > 120) {
+      displayContent =
+        lines.slice(-100).join('\n') +
+        `\n\n<!-- Note: Truncated to latest 100 lines for prompt budget. Full file (${lines.length} lines) available at ${filePath} -->`;
+    }
+
+    blocks.push(`#### 📄 [${m.category}] ${m.file}
+- **Absolute File Path**: \`${filePath}\`
+- **Purpose**: ${m.purpose}
+- **Current Live Content**:
+\`\`\`markdown
+${displayContent}
+\`\`\``);
+  }
+
+  return blocks.join('\n\n');
+};
 
 /**
  * Prompt block naming this agent's own workspace, memory files, and the shared
@@ -1087,36 +1307,66 @@ You have a private persistent workspace that belongs only to you. These paths ar
 Your agent workspace root: "${ws.dir.replace(/\/?$/, '')}"
 
 ### Agent memory (ten human-like memory dimensions)
-Persistent agent memory is stored in "${ws.memoryDir.replace(/\/?$/, '')}" as ten specialized markdown files:
-${memoryListBlock(ws)}
+Persistent agent memory is stored in "${ws.memoryDir.replace(/\/?$/, '')}" as ten specialized markdown files.
+The complete LIVE contents of all 10 memory files are pre-loaded directly below into your runtime context for instant cognitive recall. You do NOT need to call \`read_file\` to explore their initial contents.
 
-Use the appropriate memory file instead of putting unrelated information into one file.
+${memoryMatrixContentBlock(ws)}
 
-### Memory rules
-1. Read relevant memory BEFORE starting a task when it can improve the result.
-2. Update memory when you learn information that is likely to remain useful across future runs.
-3. Do not store temporary reasoning, unnecessary conversation content, or duplicate information.
-4. Prefer concise, structured entries over large transcripts.
-5. Treat \`facts.md\` as verified information. Do not promote guesses or assumptions into facts.
-6. Keep \`working.md\` focused on the current task and clean or replace stale content when appropriate.
-7. Use \`prospective.md\` for scheduled follow-ups, deferred tasks, and future trigger conditions ("when X happens, do Y").
-8. Use \`reflective.md\` for meta-cognition, self-critique, and capturing lessons from mistakes or near-misses.
-9. Use \`associative.md\` for dependency linkages and mental models of systems and entities.
-10. Use \`identity.md\` for your evolving persona, voice nuances, and role boundaries.
-11. When information becomes obsolete, update or remove it rather than continuously appending to the file.
-12. Do not expose internal memory files to the user unless the user asks for their contents.
+### Memory update & learning rules
+1. **Instant Memory Recall**: Use the pre-loaded memory contents above immediately. Do not waste tool calls reading unchanged memory files at task start.
+2. **Pushing Learned Facts & Updates**:
+   - When you discover, verify, or learn new ground-truth facts about the user, project, environment, or system, ALWAYS write or append them directly to \`${ws.memoryFiles['facts.md']}\` using \`manage_agent_memory\` (action: "append") or your file editing tools (\`edit_file\`, \`write_file\`).
+   - Treat \`facts.md\` as verified information. Do not promote unverified guesses or assumptions into facts.
+3. **Task Scratchpad & Working Memory**:
+   - Keep \`working.md\` (\`${ws.memoryFiles['working.md']}\`) focused on the current task and update or replace scratchpad content as goals evolve.
+4. **Procedural Workflows & Runbooks**:
+   - When you establish reusable step-by-step procedures or execution runbooks, record them in \`procedural.md\` (\`${ws.memoryFiles['procedural.md']}\`).
+5. **Deferred Intentions & Reminders**:
+   - Use \`prospective.md\` (\`${ws.memoryFiles['prospective.md']}\`) for scheduled follow-ups, deferred tasks, and future trigger conditions ("when X happens, do Y").
+6. **Reflections & Meta-Cognition**:
+   - Use \`reflective.md\` (\`${ws.memoryFiles['reflective.md']}\`) for meta-cognition, self-critique, and capturing lessons from mistakes or near-misses.
+7. **Relationships & Mental Models**:
+   - Use \`associative.md\` (\`${ws.memoryFiles['associative.md']}\`) for dependency linkages and mental models of systems and entities.
+8. **Identity & Preferences**:
+   - Use \`identity.md\` (\`${ws.memoryFiles['identity.md']}\`) for your evolving persona, voice nuances, and role boundaries.
+   - Use \`preferences.md\` (\`${ws.memoryFiles['preferences.md']}\`) for stable user preferences, coding styles, and working norms.
+9. When information becomes obsolete, update or remove it rather than continuously appending to the file.
+10. Do not expose raw internal memory files to the user unless the user explicitly asks for their contents.
 
-### Base system prompt & instructions
-Your active base system prompt is mirrored at "${ws.systemPromptFile}". You can inspect and update your instructions with \`read_file\`, \`write_file\`, or \`edit_file\`; changes are synced to your system configuration automatically.
+### Base system prompt & instructions (Self-Rebuilding)
+Your active base system prompt is mirrored at "${ws.systemPromptFile}".
+- You have FULL authority to rewrite, customize, or improve your system instructions.
+- Call the first-class tool \`update_system_prompt\` with your new prompt (or append: true) to immediately persist prompt changes to both the database and workspace and update the UI in real time.
+- Alternatively, you can inspect or modify "${ws.systemPromptFile}" directly with \`read_file\`, \`write_file\`, or \`edit_file\`; changes are synced to your system configuration automatically.
 
-### Skills
-Agent skills are managed through "${ws.skillsFile}". Use the Smoke Monkey skill/manifest system to discover and use skills. Do not manually invent or modify skill configuration unless the task requires it. Long skill bodies live next to it under "${ws.skillsDir}".
+### Agent Profile, Personality & Output Style Customization (Self-Rebuilding)
+You have FULL authority to inspect and customize your identity, role, specialty, description, personality/voice, and output format.
+- To inspect your full profile and active presets, call \`get_agent_profile\`.
+- To discover available personality presets (e.g. tone and voice) or output style presets (e.g. tables, diagrams, steps, summaries), call \`list_available_presets\`.
+- To change or add personality traits, output styles, or update your role and description, call \`update_agent_profile\`.
+- Profile updates immediately persist to the database and reflect live on canvas nodes and the UI.
 
-### MCP
-MCP configuration for this agent is at "${ws.mcpFile}". Use the configured MCP servers and tools when they are available and appropriate for the task. Do not store MCP credentials, API keys, access tokens, passwords, or other secrets in memory files.
+### Memory & Facts Management (Self-Learning & Facts Recording)
+- To inspect or list your 10 memory dimensions, call \`list_agent_memories\`.
+- To read, write, append to, or clear any memory file (e.g. facts.md, semantic.md, procedural.md, episodic.md, etc.), call \`manage_agent_memory\`.
+- Always verify facts before recording them in \`facts.md\`.
+
+### Skills & MCP Server Management (Discovery, Attaching & Unattaching)
+You and connected peer agents have FULL capability and authority to discover, attach, and configure skills and MCP servers.
+- You ONLY have your explicitly attached skills (inspect your attached skills anytime with \`get_agent_skills\`).
+- To search or discover available skills across the catalog, call \`search_available_skills\` (with an optional query or category).
+- To attach any skill from the catalog or add a custom skill, call \`attach_skill\` (passing \`skill_name\` or multiple names in \`skill_names\`). It automatically resolves full instructions and content from the library, writes local skill bundles, and syncs to canvas.
+- When the user asks you to remove, detach, or unattach ANY skill or group of skills, do NOT refuse or claim that run configuration cannot be changed.
+- Immediately call \`unattach_skill\` (passing \`skill_name\` or multiple names in \`skill_names\`) to unattach them.
+- To search or discover available MCP servers across integrations, call \`search_available_mcps\` (with an optional query or category).
+- To attach an MCP server, call \`attach_mcp\` (passing \`mcp_name\` or multiple names in \`mcp_names\`).
+- To unattach an MCP server, call \`unattach_mcp\` (passing \`mcp_name\` or multiple names in \`mcp_names\`).
+- You can configure yourself (omit target_agent_id) or configure any peer agent by providing \`target_agent_id\`.
+- NEVER attempt manual regexp-replace or fragile manual text edits on "${ws.skillsFile}" or "${ws.mcpFile}" when \`unattach_skill\`, \`attach_skill\`, \`unattach_mcp\`, and \`attach_mcp\` are available — the tools dynamically handle all names and guarantee safe database and workspace synchronization.
+- Any attachment or unattachment automatically updates the database and reflects live on the canvas nodes and UI in real time.
 
 ### Policies
-Your enforced operating boundaries are compiled from the app policy list into "${ws.policiesFile}". Entries with source "canvas" or "user" belong to the app/user — never modify or remove them. You may add your own boundary by appending an entry with source "agent"; it is preserved across runs and injected into your system prompt on every future run.
+Your enforced operating boundaries are compiled from the app policy list into "${ws.policiesFile}". You may add your own boundary by appending an entry with source "agent"; it is preserved across runs and injected into your system prompt on every future run.
 
 ### Shared MCP & environment registry (read-only, shared by ALL agents)
 Every agent shares one common registry for DISCOVERY only. Read these to see MCP servers and environment variables available across the app:
@@ -1352,6 +1602,79 @@ export const readAgentMemorySummaries = (ws: AgentWorkspace): AgentMemorySummary
   });
 };
 
+const slugifyManifestName = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item';
+
+/**
+ * Import skills/MCP servers the agent wrote into its own manifest files
+ * (`skills/skills.json`, `mcp/mcp.json`) with `source: "agent"` (or a legacy
+ * entry with no source) into the database, so runs and the UI pick them up.
+ * Managed (`canvas`/`user`) entries are skipped — they are already sourced from
+ * the DB — and existing rows are upserted by name, never duplicated.
+ */
+const importAgentManifestAdditions = (input: {
+  agentId: string;
+  ws: AgentWorkspace;
+  existingSkillNames: Set<string>;
+  existingMcpNames: Set<string>;
+  upsertSkill?: (skill: any) => any;
+  upsertMcp?: (mcp: any) => any;
+}): { skills: number; mcps: number } => {
+  let skills = 0;
+  let mcps = 0;
+
+  if (input.upsertSkill) {
+    for (const e of readAgentSkillManifest(input.ws)) {
+      if (e.source && e.source !== 'agent') continue;
+      if (input.existingSkillNames.has(e.name)) continue;
+      try {
+        input.upsertSkill({
+          id: `${input.agentId}::agent::${slugifyManifestName(e.name)}`,
+          agent_id: input.agentId,
+          skill_name: e.name,
+          description: e.description ?? e.name,
+          content: e.content ?? '',
+          enabled: e.enabled === false ? 0 : 1,
+          source: 'agent' as const,
+        });
+        input.existingSkillNames.add(e.name);
+        skills++;
+      } catch (err) {
+        console.warn(`[agent.manifest] Failed to import agent skill "${e.name}" for ${input.agentId}:`, err);
+      }
+    }
+  }
+
+  if (input.upsertMcp) {
+    for (const e of readAgentMcpManifest(input.ws)) {
+      if (e.source && e.source !== 'agent') continue;
+      if (input.existingMcpNames.has(e.name)) continue;
+      try {
+        input.upsertMcp({
+          id: `${input.agentId}::agent::${slugifyManifestName(e.name)}`,
+          agent_id: input.agentId,
+          mcp_name: e.name,
+          label: e.label || e.name,
+          config_json: JSON.stringify({
+            command: e.command,
+            args: e.args,
+            url: e.url,
+            env: e.env,
+          }),
+          enabled: e.enabled === false ? 0 : 1,
+          source: 'agent' as const,
+        });
+        input.existingMcpNames.add(e.name);
+        mcps++;
+      } catch (err) {
+        console.warn(`[agent.manifest] Failed to import agent MCP "${e.name}" for ${input.agentId}:`, err);
+      }
+    }
+  }
+
+  return { skills, mcps };
+};
+
 export interface ReconcileRuntimeInput {
   agentId: string;
   ws: AgentWorkspace;
@@ -1362,6 +1685,10 @@ export interface ReconcileRuntimeInput {
     deleteAgentSkill: (id: string) => void;
     getAgentMcps: (id: string) => any[];
     deleteAgentMcp: (id: string) => void;
+    /** Optional: persist skills the agent added to its own manifest. */
+    upsertAgentSkill?: (skill: any) => any;
+    /** Optional: persist MCP servers the agent added to its own manifest. */
+    upsertAgentMcp?: (mcp: any) => any;
   };
   wsServer?: {
     broadcast: (msg: any) => void;
@@ -1410,6 +1737,22 @@ export const reconcileAgentWorkspaceRuntime = (input: ReconcileRuntimeInput) => 
     hasChanges = true;
   }
 
+  // 2b. Import skills/MCP servers the agent ADDED to its own manifest files
+  // (reverse of the pruning above) so the DB, the next run, and the UI box all
+  // pick them up. Managed canvas/user entries are ignored; existing names are
+  // upserted, never duplicated. No-op when the DB layer exposes no upserts.
+  const imported = importAgentManifestAdditions({
+    agentId,
+    ws,
+    existingSkillNames: new Set(reconciled.skills.map((s: any) => s.skill_name)),
+    existingMcpNames: new Set(reconciled.mcps.map((m: any) => m.mcp_name)),
+    upsertSkill: typeof db.upsertAgentSkill === 'function' ? db.upsertAgentSkill.bind(db) : undefined,
+    upsertMcp: typeof db.upsertAgentMcp === 'function' ? db.upsertAgentMcp.bind(db) : undefined,
+  });
+  if (imported.skills > 0 || imported.mcps > 0) {
+    hasChanges = true;
+  }
+
   // 3. Broadcast real-time events to the UI
   if (hasChanges && wsServer) {
     const updatedAgent = db.getAgent(agentId);
@@ -1432,7 +1775,126 @@ export const reconcileAgentWorkspaceRuntime = (input: ReconcileRuntimeInput) => 
       agentId,
       data: { timestamp: new Date().toISOString() },
     });
+    wsServer.broadcast({
+      type: 'agent_skills_updated',
+      agentId,
+      data: { timestamp: new Date().toISOString() },
+    });
+    wsServer.broadcast({
+      type: 'agent_mcps_updated',
+      agentId,
+      data: { timestamp: new Date().toISOString() },
+    });
   }
 
   return { hasChanges, updatedSystemPrompt };
+};
+
+/**
+ * Persist the agent's current DB skills, MCPs, and policies onto disk in .smoke-agent/
+ * so disk and database stay in continuous 2-way synchronization.
+ */
+/**
+ * Write only the skills manifest from the DB. Used for one-time skill backfills
+ * so we do not touch the agent's MCP manifest as a side effect.
+ */
+export const syncAgentSkillsDiskManifestFromDb = (input: {
+  agentId: string;
+  ws: AgentWorkspace;
+  db: {
+    getAgent: (id: string) => any;
+    getAgentSkills: (id: string) => any[];
+  };
+}) => {
+  const { agentId, ws, db } = input;
+  const agent = db.getAgent(agentId);
+  if (!agent) return;
+
+  const skills = db.getAgentSkills(agentId).filter((s) => s.enabled !== 0);
+  try {
+    writeJson(ws.skillsFile, {
+      agent_id: agentId,
+      agent_name: agent.name,
+      updated_at: new Date().toISOString(),
+      skills: skills.map((s) => ({
+        name: s.skill_name,
+        description: s.description ?? s.skill_name,
+        content: s.content ?? '',
+        enabled: true,
+        source: s.source ?? 'agent',
+        attachment_id: s.id,
+      })),
+    });
+  } catch (err) {
+    console.warn(`[agent.manifest] Failed to sync skillsFile for ${agentId}:`, err);
+  }
+};
+
+export const syncAgentDiskManifestFromDb = (input: {
+  agentId: string;
+  ws: AgentWorkspace;
+  db: {
+    getAgent: (id: string) => any;
+    getAgentSkills: (id: string) => any[];
+    getAgentMcps: (id: string) => any[];
+  };
+}) => {
+  const { agentId, ws, db } = input;
+  const agent = db.getAgent(agentId);
+  if (!agent) return;
+
+  const skills = db.getAgentSkills(agentId).filter((s) => s.enabled !== 0);
+  const mcps = db.getAgentMcps(agentId).filter((m) => m.enabled !== 0);
+
+  try {
+    writeJson(ws.skillsFile, {
+      agent_id: agentId,
+      agent_name: agent.name,
+      updated_at: new Date().toISOString(),
+      skills: skills.map((s) => ({
+        name: s.skill_name,
+        description: s.description ?? s.skill_name,
+        content: s.content ?? '',
+        enabled: true,
+        source: s.source ?? 'agent',
+        attachment_id: s.id,
+      })),
+    });
+  } catch (err) {
+    console.warn(`[agent.manifest] Failed to sync skillsFile for ${agentId}:`, err);
+  }
+
+  try {
+    writeJson(ws.mcpFile, {
+      agent_id: agentId,
+      agent_name: agent.name,
+      updated_at: new Date().toISOString(),
+      mcp_servers: Object.fromEntries(
+        mcps.map((m) => {
+          let cfg: Record<string, any> = {};
+          try {
+            cfg = JSON.parse(m.config_json);
+          } catch {}
+          const key = m.mcp_name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+          return [
+            key,
+            {
+              key,
+              name: m.mcp_name,
+              label: m.label || m.mcp_name,
+              command: cfg.command,
+              args: cfg.args,
+              url: cfg.url,
+              env: cfg.env,
+              enabled: true,
+              source: m.source ?? 'agent',
+              attachment_id: m.id,
+            },
+          ];
+        }),
+      ),
+    });
+  } catch (err) {
+    console.warn(`[agent.manifest] Failed to sync mcpFile for ${agentId}:`, err);
+  }
 };

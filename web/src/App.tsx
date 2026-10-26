@@ -2,6 +2,7 @@ import React from 'react';
 import { SpaceCanvas } from './features/space/space.canvas.js';
 import { GlobalTooltipProvider } from './features/common/app-tooltip.js';
 import './styles/space.scss';
+import './styles/agent-premium.scss';
 
 export const App: React.FC = () => {
   return (

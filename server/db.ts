@@ -83,7 +83,7 @@ export class CanvasDatabase {
       CREATE TABLE IF NOT EXISTS agents (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        model TEXT NOT NULL DEFAULT 'meta/llama-3.3-70b-instruct',
+        model TEXT NOT NULL DEFAULT 'nvidia/nemotron-3-super-120b-a12b',
         provider TEXT NOT NULL DEFAULT 'nvidia',
         system_prompt TEXT NOT NULL,
         cron_schedule TEXT,

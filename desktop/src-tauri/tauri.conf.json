@@ -5,7 +5,7 @@
   "identifier": "com.smokemonkey.canvas",
   "build": {
     "frontendDist": "../../web/dist",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:5180",
     "beforeDevCommand": "npm --prefix ../web run dev",
     "beforeBuildCommand": "npm --prefix ../web run build"
   },
@@ -36,7 +36,8 @@
       }
     },
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "entitlements": "../mac/Entitlements.plist"
     },
     "linux": {
       "deb": {

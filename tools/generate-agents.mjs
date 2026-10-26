@@ -700,3 +700,16 @@ export const ENTERPRISE_AGENT_TEMPLATES: AgentTemplate[] = AGENT_SPECS.map((spec
 
 fs.writeFileSync(TARGET, out);
 console.log(`[generate-agents] Wrote ${TARGET} (${specs.length} agents)`);
+
+const SERVER_TARGET = path.resolve(here, '../server/features/agent/agent.stock-templates.json');
+const serverStock = specs.map((s) => ({
+  id: s.id,
+  name: s.name,
+  category: s.category,
+  subcategory: s.subcategory,
+  specialty: s.specialty,
+  role: s.role,
+  description: s.description,
+}));
+fs.writeFileSync(SERVER_TARGET, JSON.stringify(serverStock, null, 2));
+console.log(`[generate-agents] Wrote ${SERVER_TARGET} (${serverStock.length} agents)`);

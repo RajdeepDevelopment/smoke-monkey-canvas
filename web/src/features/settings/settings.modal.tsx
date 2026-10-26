@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, Key, Check } from 'lucide-react';
+import { X, ShieldCheck, Key, Check, ExternalLink } from 'lucide-react';
 import { BrandIcons } from '../common/brand-icons.js';
+import { openExternalLink } from '../../config/desktop.bridge.js';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -53,15 +54,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   };
 
   const KEY_FIELDS = [
-    { id: 'NVIDIA_API_KEY', label: 'NVIDIA Hosted NIM Key', provider: 'nvidia', placeholder: 'nvapi-...' },
-    { id: 'ANTHROPIC_API_KEY', label: 'Anthropic Claude Key', provider: 'anthropic', placeholder: 'sk-ant-...' },
-    { id: 'OPENAI_API_KEY', label: 'OpenAI API Key', provider: 'openai', placeholder: 'sk-proj-...' },
-    { id: 'GEMINI_API_KEY', label: 'Google Gemini API Key', provider: 'gemini', placeholder: 'AIzaSy...' },
-    { id: 'GROQ_API_KEY', label: 'Groq API Key', provider: 'groq', placeholder: 'gsk_...' },
-    { id: 'OPENROUTER_API_KEY', label: 'OpenRouter Unified Key', provider: 'openrouter', placeholder: 'sk-or-...' },
-    { id: 'FIRECRAWL_API_KEY', label: 'Firecrawl Web Scraper Key', provider: 'firecrawl', placeholder: 'fc-...' },
-    { id: 'TAVILY_API_KEY', label: 'Tavily Search API Key', provider: 'tavily', placeholder: 'tvly-...' },
-    { id: 'GITHUB_TOKEN', label: 'GitHub Personal Access Token', provider: 'github', placeholder: 'ghp_...' },
+    { id: 'NVIDIA_API_KEY', label: 'NVIDIA Hosted NIM Key', provider: 'nvidia', placeholder: 'nvapi-...', getKeyUrl: 'https://build.nvidia.com/settings/api-keys' },
+    { id: 'ANTHROPIC_API_KEY', label: 'Anthropic Claude Key', provider: 'anthropic', placeholder: 'sk-ant-...', getKeyUrl: 'https://console.anthropic.com/settings/keys' },
+    { id: 'OPENAI_API_KEY', label: 'OpenAI API Key', provider: 'openai', placeholder: 'sk-proj-...', getKeyUrl: 'https://platform.openai.com/api-keys' },
+    { id: 'GEMINI_API_KEY', label: 'Google Gemini API Key', provider: 'gemini', placeholder: 'AIzaSy...', getKeyUrl: 'https://aistudio.google.com/app/apikey' },
+    { id: 'GROQ_API_KEY', label: 'Groq API Key', provider: 'groq', placeholder: 'gsk_...', getKeyUrl: 'https://console.groq.com/keys' },
+    { id: 'OPENROUTER_API_KEY', label: 'OpenRouter Unified Key', provider: 'openrouter', placeholder: 'sk-or-...', getKeyUrl: 'https://openrouter.ai/keys' },
+    { id: 'FIRECRAWL_API_KEY', label: 'Firecrawl Web Scraper Key', provider: 'firecrawl', placeholder: 'fc-...', getKeyUrl: 'https://www.firecrawl.dev/app/api-keys' },
+    { id: 'TAVILY_API_KEY', label: 'Tavily Search API Key', provider: 'tavily', placeholder: 'tvly-...', getKeyUrl: 'https://app.tavily.com/home' },
+    { id: 'GITHUB_TOKEN', label: 'GitHub Personal Access Token', provider: 'github', placeholder: 'ghp_...', getKeyUrl: 'https://github.com/settings/tokens' },
   ];
 
   return (
@@ -97,30 +98,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 const isConfigured = keyInfo?.isSet;
 
                 return (
-                  <div key={f.id} className="form-group">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                        {Icon && <Icon size={14} />}
-                        <span>{f.label}</span>
-                      </label>
-                      {isConfigured ? (
-                        <span style={{ fontSize: 11, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <Check size={11} /> {keyInfo?.masked}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>Not set</span>
-                      )}
+                  <div key={f.id} className="form-group key-card">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div className="key-card-icon">
+                        {Icon && <Icon size={24} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                          <span className="form-label" style={{ fontSize: 13 }}>{f.label}</span>
+                          {isConfigured ? (
+                            <span style={{ fontSize: 11, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                              <Check size={11} /> {keyInfo?.masked}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>Not set</span>
+                          )}
+                        </div>
+                        <a
+                          href={f.getKeyUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="key-card-link"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            void openExternalLink(f.getKeyUrl);
+                          }}
+                        >
+                          <span>Get key</span>
+                          <ExternalLink size={11} />
+                        </a>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input
-                        type="password"
-                        className="form-input"
-                        style={{ flex: 1 }}
-                        placeholder={isConfigured ? `Configured (${keyInfo?.masked}). Enter new to overwrite.` : f.placeholder}
-                        value={formData[f.id] || ''}
-                        onChange={(e) => handleChange(f.id, e.target.value)}
-                      />
-                    </div>
+                    <input
+                      type="password"
+                      className="form-input"
+                      style={{ flex: 1, marginTop: 12 }}
+                      placeholder={isConfigured ? `Configured (${keyInfo?.masked}). Enter new to overwrite.` : f.placeholder}
+                      value={formData[f.id] || ''}
+                      onChange={(e) => handleChange(f.id, e.target.value)}
+                    />
                   </div>
                 );
               })}

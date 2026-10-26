@@ -1,11 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X, ChevronLeft, Search, Plus, KeyRound, CheckCircle2, ArrowRight,
-  Wrench, Check, Copy, Bot
+  Wrench, Check, Copy, Bot, ExternalLink, Star, LogOut, Loader2, Building2, Network, Cpu
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { getBrandVisuals } from '../../common/brand-icons.js';
-import type { StockMcp } from '../../mcp/mcp.types.js';
+import { getBrandVisuals, McpBrandIcon } from '../../common/brand-icons.js';
+import { openExternalLink } from '../../../config/desktop.bridge.js';
+import type { StockMcp, McpReadiness } from '../../mcp/mcp.types.js';
+import { buildStockMcpLookup } from '../../mcp/mcp.catalog.js';
 import type { AgentTemplate } from '../../agent/agent.templates.js';
 import { ENTERPRISE_AGENT_TEMPLATES } from '../../agent/agent.templates.js';
 import type {
@@ -14,9 +16,18 @@ import type {
   ToolKit,
   PromptPreset,
 } from '../library.types.js';
-import { STOCK_SKILLS, TOOL_KITS } from '../library.data.js';
-import { LIB_TAB_ICONS, LIB_TAB_COLORS } from '../library.icons.js';
-import { LibGlyph } from '../library-glyph.js';
+import { PLUGIN_CATEGORY_ORDER } from '../library.types.js';
+import { agentCategoryColor } from '../library.icons.js';
+import { AgentAvatar } from '../../agent/agent-avatar.js';
+import { STOCK_SKILLS, TOOL_KITS, SPACE_PRESETS, ROLE_ZONE_PRESETS, HIERARCHICAL_CHAINS } from '../library.data.js';
+import { LIB_TAB_ICONS, LIB_TAB_COLORS, personalityPresetIcon, outputPresetIcon, pluginCategoryColor } from '../library.icons.js';
+import { CUSTOM_PLUGINS, pluginToSkillItem, formatStars, VERIFIED_AT } from '../library.plugins.js';
+import { LibGlyph, GhAvatar } from '../library-glyph.js';
+import { AgentResourceRows } from '../agent-resource-badges.js';
+import type { RoleZone } from '../../space/space.types.js';
+
+/** Curated GitHub plugins are static, so their skill directives are built once. */
+const PLUGIN_SKILLS: StockSkillItem[] = CUSTOM_PLUGINS.map(pluginToSkillItem);
 
 export interface LibrarySidebarMobileProps {
   activeTab: LibraryTab | null;
@@ -31,7 +42,11 @@ export interface LibrarySidebarMobileProps {
   personalityPresets: PromptPreset[];
   outputStylePresets: PromptPreset[];
   onConnectKey: (mcp: StockMcp) => void;
+  onDisconnectKey?: (mcp: StockMcp) => void;
+  mcpReadiness?: Record<string, McpReadiness>;
   onSpawnTemplate?: (template: AgentTemplate) => void;
+  connectingMcpName?: string | null;
+  roleZones?: RoleZone[];
   onClose: () => void;
 }
 
@@ -47,16 +62,29 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
   personalityPresets,
   outputStylePresets,
   onConnectKey,
+  onDisconnectKey,
+  mcpReadiness,
   onSpawnTemplate,
+  connectingMcpName,
+  roleZones = [],
   onClose,
 }) => {
   const [selectedItem, setSelectedItem] = useState<{ kind: LibraryTab; item: any } | null>(null);
+  const [copiedText, setCopiedText] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [copiedText, setCopiedText] = useState(false);
+  const [skillSource, setSkillSource] = useState<'all' | 'stock' | 'plugins'>('all');
+  const AGENT_PAGE_SIZE = 60;
+  const [agentVisibleCount, setAgentVisibleCount] = useState(AGENT_PAGE_SIZE);
+  // The imported catalogue has thousands of entries; render a first page.
+  const [showAllMcps, setShowAllMcps] = useState(false);
+  useEffect(() => {
+    setShowAllMcps(false);
+  }, [searchQuery, selectedCategory]);
 
   // Combined lists with full fallback catalogs
   const allMcps = useMemo(() => [...customMcps, ...stockMcps], [customMcps, stockMcps]);
+  const catalogMcpMap = useMemo(() => buildStockMcpLookup(allMcps), [allMcps]);
   
   const allSkills = useMemo(() => {
     const combined = [...customSkills, ...serverStockSkills];
@@ -101,6 +129,7 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
       return ['All', ...Array.from(set).sort()];
     }
     if (activeTab === 'skills') {
+      if (skillSource === 'plugins') return ['All', ...PLUGIN_CATEGORY_ORDER];
       const set = new Set(allSkills.map((s) => s.category || 'Other'));
       return ['All', ...Array.from(set).sort()];
     }
@@ -117,7 +146,7 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
       return ['All', ...Array.from(set).sort()];
     }
     return ['All'];
-  }, [activeTab, allMcps, allSkills, allAgents, allPersonas, allOutputs]);
+  }, [activeTab, skillSource, allMcps, allSkills, allAgents, allPersonas, allOutputs]);
 
   // Filtered items
   const filteredMcps = useMemo(() => {
@@ -138,6 +167,19 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
     });
   }, [allSkills, selectedCategory, searchQuery]);
 
+  const filteredPlugins = useMemo(() => {
+    return PLUGIN_SKILLS.filter((s) => {
+      const matchCat = selectedCategory === 'All' || s.category === selectedCategory;
+      const q = searchQuery.toLowerCase();
+      const matchQ = !q || s.name.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q);
+      return matchCat && matchQ;
+    });
+  }, [selectedCategory, searchQuery]);
+
+  const filteredAllSkills = useMemo(() => {
+    return [...filteredSkills, ...filteredPlugins];
+  }, [filteredSkills, filteredPlugins]);
+
   const filteredAgents = useMemo(() => {
     return allAgents.filter((a) => {
       const matchCat = selectedCategory === 'All' || a.category === selectedCategory;
@@ -146,6 +188,10 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
       return matchCat && matchQ;
     });
   }, [allAgents, selectedCategory, searchQuery]);
+
+  useEffect(() => {
+    setAgentVisibleCount(AGENT_PAGE_SIZE);
+  }, [selectedCategory, searchQuery]);
 
   const filteredToolkits = useMemo(() => {
     return allToolkits.filter((t) => {
@@ -211,6 +257,8 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
               </span>
               <span className="lib-mobile-title">
                 {activeTab === 'mcp' && 'MCP Servers'}
+                {activeTab === 'spaces' && 'Office Spaces'}
+                {activeTab === 'zones' && 'Role Zones'}
                 {activeTab === 'skills' && 'Skills Catalogue'}
                 {activeTab === 'agents' && 'Agent Templates'}
                 {activeTab === 'tools' && 'Built-in Toolkits'}
@@ -236,6 +284,11 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
             {/* MCP DETAILS */}
             {selectedItem.kind === 'mcp' && (() => {
               const mcp = selectedItem.item as StockMcp;
+              const readiness = mcpReadiness?.[mcp.name];
+              const oauthConnected = Boolean(readiness?.stock && readiness.oauth?.connected);
+              const connected = readiness?.stock
+                ? readiness.configured
+                : mcp.envKeys.length === 0 || mcp.envKeys.every((k) => configuredKeys[k]);
               return (
                 <div className="lib-mobile-detail-scroll">
                   <div className="detail-hero-box">
@@ -251,7 +304,10 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
                       <div className="detail-section-title">Required Credentials</div>
                       <div className="detail-keys-list">
                         {mcp.envKeys.map((k) => {
-                          const isKeySet = Boolean(configuredKeys[k]);
+                          const isKeySet = Boolean(configuredKeys[k]) || oauthConnected;
+                          const perKey = mcp.keyLinks?.[k];
+                          const getUrl = perKey?.url || mcp.keyGetUrl;
+                          const getLabel = perKey?.label || mcp.keyGetLabel || 'Get Key';
                           return (
                             <div key={k} className="detail-key-row">
                               <div className="detail-key-info">
@@ -263,18 +319,60 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
                                   <CheckCircle2 size={12} /> Configured
                                 </span>
                               ) : (
-                                <button
-                                  type="button"
-                                  className="key-connect-btn"
-                                  onClick={() => onConnectKey(mcp)}
-                                >
-                                  Connect
-                                </button>
+                                <div className="detail-key-actions">
+                                  {getUrl && (
+                                    <a
+                                      href={getUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="key-getlink"
+                                      title={`Get ${k} — ${getUrl}`}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        void openExternalLink(getUrl);
+                                      }}
+                                    >
+                                      <span>{getLabel}</span>
+                                      <ExternalLink size={11} />
+                                    </a>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="key-connect-btn"
+                                    disabled={connectingMcpName === mcp.name}
+                                    onClick={() => onConnectKey(mcp)}
+                                    style={connectingMcpName === mcp.name ? { opacity: 0.85, cursor: 'wait' } : undefined}
+                                  >
+                                    {connectingMcpName === mcp.name ? (
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <Loader2 size={11} className="lib-spin" />
+                                        Connecting...
+                                      </span>
+                                    ) : (
+                                      'Connect'
+                                    )}
+                                  </button>
+                                </div>
                               )}
                             </div>
                           );
                         })}
                       </div>
+                    </div>
+                  )}
+
+                  {connected && mcp.authType === 'oauth' && onDisconnectKey && (
+                    <div className="detail-section">
+                      <div className="detail-section-title">Authorization</div>
+                      <button
+                        type="button"
+                        className="lib-spawn-btn disconnect"
+                        onClick={() => onDisconnectKey(mcp)}
+                        title={`Revoke stored credentials for ${mcp.label || mcp.name}`}
+                      >
+                        <LogOut size={13} />
+                        <span>Disconnect {mcp.label || mcp.name}</span>
+                      </button>
                     </div>
                   )}
 
@@ -470,6 +568,44 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
               )}
             </div>
 
+            {/* Skills Sub-tab Switcher (All vs Stock vs Curated GitHub Plugins) */}
+            {activeTab === 'skills' && (
+              <div className="lib-segmented">
+                <button
+                  type="button"
+                  className={skillSource === 'all' ? 'active' : ''}
+                  onClick={() => {
+                    setSkillSource('all');
+                    setSelectedCategory('All');
+                  }}
+                  title="Search and browse all skills and plugins together"
+                >
+                  All Skills <span>{filteredAllSkills.length}</span>
+                </button>
+                <button
+                  type="button"
+                  className={skillSource === 'stock' ? 'active' : ''}
+                  onClick={() => {
+                    setSkillSource('stock');
+                    setSelectedCategory('All');
+                  }}
+                >
+                  Stock Skills <span>{filteredSkills.length}</span>
+                </button>
+                <button
+                  type="button"
+                  className={skillSource === 'plugins' ? 'active' : ''}
+                  onClick={() => {
+                    setSkillSource('plugins');
+                    setSelectedCategory('All');
+                  }}
+                  title={`Popular GitHub plugins (2k+ stars, verified ${VERIFIED_AT})`}
+                >
+                  GitHub Plugins <span>{filteredPlugins.length}</span>
+                </button>
+              </div>
+            )}
+
             {/* Category Filter Pills */}
             {categories.length > 1 && (
               <div className="lib-mobile-cat-scroll">
@@ -493,8 +629,13 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
                 filteredMcps.length === 0 ? (
                   <div className="empty-list-notice">No MCP servers match search.</div>
                 ) : (
-                  filteredMcps.map((mcp) => {
-                    const isConfigured = !mcp.envKeys || mcp.envKeys.length === 0 || mcp.envKeys.every((k) => configuredKeys[k]);
+                  <>
+                  {(showAllMcps ? filteredMcps : filteredMcps.slice(0, 40)).map((mcp) => {
+                    const readiness = mcpReadiness?.[mcp.name];
+                    const isConfigured = readiness?.stock
+                      ? readiness.configured
+                      : !mcp.envKeys || mcp.envKeys.length === 0 || mcp.envKeys.every((k) => configuredKeys[k]);
+                    const needsOAuth = !isConfigured && (readiness?.state === 'needs-oauth' || (mcp.authType === 'oauth' && !!mcp.url));
                     const brand = getBrandVisuals(`${mcp.label} ${mcp.name}`, 24);
                     return (
                       <div
@@ -523,7 +664,7 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
                               flexShrink: 0,
                             }}
                           >
-                            {brand.icon}
+                            <McpBrandIcon mcp={mcp} size={22} fallback={brand.icon} />
                           </div>
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div className="card-top-row" style={{ margin: 0, marginBottom: 2 }}>
@@ -532,6 +673,8 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
                                 <span className="badge-ready">
                                   <CheckCircle2 size={11} /> Ready
                                 </span>
+                              ) : needsOAuth ? (
+                                <span className="badge-needs-config">Needs OAuth</span>
                               ) : (
                                 <span className="badge-needs-config">Needs Key</span>
                               )}
@@ -555,60 +698,151 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
                       </div>
                     );
                   })
+                  }
+                  {filteredMcps.length > 40 && (
+                    <button className="lib-mobile-category-pill" onClick={() => setShowAllMcps((v) => !v)}>
+                      {showAllMcps ? 'Show fewer servers' : `Show all ${filteredMcps.length} servers`}
+                    </button>
+                  )}
+                  </>
                 )
               )}
 
               {/* TAB: SKILLS */}
-              {activeTab === 'skills' && (
-                filteredSkills.length === 0 ? (
-                  <div className="empty-list-notice">No skills match search.</div>
-                ) : (
-                  filteredSkills.map((sk) => (
+              {activeTab === 'skills' && (() => {
+                const renderPlugin = (sk: any) => {
+                  const color = pluginCategoryColor(sk.category);
+                  return (
                     <div
                       key={sk.id}
                       className="lib-mobile-card"
                       onClick={() => setSelectedItem({ kind: 'skills', item: sk })}
                     >
                       <div className="card-top-row">
-                        <span className="card-title">{sk.name}</span>
-                        <span className="card-category-tag">{sk.category}</span>
+                        <span className="card-title-row">
+                          <GhAvatar repo={sk.plugin?.repo || sk.name} fallbackIcon={Wrench} color={color} size={24} />
+                          <span className="card-title">{sk.name}</span>
+                        </span>
+                        <span className="card-category-tag" style={{ color, background: `${color}18` }}>
+                          {sk.category}
+                        </span>
                       </div>
                       <p className="card-desc">{sk.description}</p>
                       <div className="card-bottom-row">
+                        <span className="plugin-meta-row">
+                          {sk.plugin && (
+                            <span className="plugin-star-pill">
+                              <Star size={10} fill="currentColor" />
+                              {formatStars(sk.plugin.stars)}
+                            </span>
+                          )}
+                          {sk.plugin?.license && <span className="plugin-lic-pill">{sk.plugin.license}</span>}
+                        </span>
                         <span className="card-view-link">
-                          <span>Inspect Skill</span>
+                          <span>Inspect Plugin</span>
                           <ArrowRight size={12} />
                         </span>
                       </div>
                     </div>
-                  ))
-                )
-              )}
+                  );
+                };
+
+                const renderStock = (sk: any) => (
+                  <div
+                    key={sk.id}
+                    className="lib-mobile-card"
+                    onClick={() => setSelectedItem({ kind: 'skills', item: sk })}
+                  >
+                    <div className="card-top-row">
+                      <span className="card-title">{sk.name}</span>
+                      <span className="card-category-tag">{sk.category}</span>
+                    </div>
+                    <p className="card-desc">{sk.description}</p>
+                    <div className="card-bottom-row">
+                      <span className="card-view-link">
+                        <span>Inspect Skill</span>
+                        <ArrowRight size={12} />
+                      </span>
+                    </div>
+                  </div>
+                );
+
+                if (skillSource === 'all') {
+                  if (filteredAllSkills.length === 0) {
+                    return <div className="empty-list-notice">No skills or plugins match search.</div>;
+                  }
+                  return filteredAllSkills.map((sk) => (sk.plugin ? renderPlugin(sk) : renderStock(sk)));
+                }
+
+                if (skillSource === 'plugins') {
+                  if (filteredPlugins.length === 0) {
+                    return <div className="empty-list-notice">No plugins match search.</div>;
+                  }
+                  return filteredPlugins.map(renderPlugin);
+                }
+
+                if (filteredSkills.length === 0) {
+                  return <div className="empty-list-notice">No skills match search.</div>;
+                }
+                return filteredSkills.map(renderStock);
+              })()}
 
               {/* TAB: AGENT TEMPLATES */}
               {activeTab === 'agents' && (
                 filteredAgents.length === 0 ? (
                   <div className="empty-list-notice">No agent templates match search.</div>
                 ) : (
-                  filteredAgents.map((ag) => (
-                    <div
-                      key={ag.id}
-                      className="lib-mobile-card"
-                      onClick={() => setSelectedItem({ kind: 'agents', item: ag })}
-                    >
-                      <div className="card-top-row">
-                        <span className="card-title">{ag.name}</span>
-                        <span className="card-category-tag">{ag.category}</span>
-                      </div>
-                      <p className="card-desc">{ag.description}</p>
-                      <div className="card-bottom-row">
-                        <span className="card-view-link">
-                          <span>Deploy Template</span>
-                          <ArrowRight size={12} />
-                        </span>
-                      </div>
+                  <>
+                    {filteredAgents.slice(0, agentVisibleCount).map((ag) => {
+                      const accent = agentCategoryColor(ag.category);
+                      return (
+                        <div
+                          key={ag.id}
+                          className="lib-mobile-card lib-mobile-agent-card"
+                          style={{ '--ac': accent } as React.CSSProperties}
+                          onClick={() => setSelectedItem({ kind: 'agents', item: ag })}
+                        >
+                          <div className="card-top-row lib-mobile-agent-identity">
+                            <span className="lib-mobile-agent-avatar">
+                              <AgentAvatar agentId={ag.id} size={30} />
+                            </span>
+                            <div className="lib-mobile-agent-names">
+                              <span className="card-title">{ag.name}</span>
+                              <span className="card-category-tag">{ag.category}</span>
+                            </div>
+                          </div>
+                          <p className="card-desc">{ag.description}</p>
+                          <AgentResourceRows agent={ag} catalogMcps={catalogMcpMap} />
+                          <div className="card-bottom-row">
+                            <span className="lib-mobile-model-chip" title={`Model: ${ag.default_model}`}>
+                              <Cpu size={10} />
+                              <span>{ag.default_model?.split('/').pop() || 'Recommended'}</span>
+                            </span>
+                            <span className="card-view-link">
+                              <span>Deploy</span>
+                              <ArrowRight size={12} />
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="lib-agent-loadmore">
+                      <span className="lib-agent-loadmore-count">
+                        Showing {Math.min(agentVisibleCount, filteredAgents.length)} of {filteredAgents.length} agents
+                      </span>
+                      {agentVisibleCount < filteredAgents.length ? (
+                        <button
+                          type="button"
+                          className="lib-agent-loadmore-btn"
+                          onClick={() => setAgentVisibleCount((count) => count + AGENT_PAGE_SIZE)}
+                        >
+                          Load more
+                        </button>
+                      ) : (
+                        <span className="lib-agent-loadmore-end">All agents loaded</span>
+                      )}
                     </div>
-                  ))
+                  </>
                 )
               )}
 
@@ -653,7 +887,10 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
                       onClick={() => setSelectedItem({ kind: 'personality', item: p })}
                     >
                       <div className="card-top-row">
-                        <span className="card-title">{p.name}</span>
+                        <span className="card-title-row">
+                          <LibGlyph icon={personalityPresetIcon(p.id, p.category)} color={LIB_TAB_COLORS.personality} size={13} />
+                          <span className="card-title">{p.name}</span>
+                        </span>
                         {p.category && <span className="card-category-tag">{p.category}</span>}
                       </div>
                       <p className="card-desc">{p.description || p.directive}</p>
@@ -668,6 +905,176 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
                 )
               )}
 
+              {/* TAB: OFFICE SPACES */}
+              {activeTab === 'spaces' && (
+                SPACE_PRESETS.filter((preset) =>
+                  !searchQuery || preset.name.toLowerCase().includes(searchQuery.toLowerCase()),
+                ).map((preset) => (
+                  <div key={preset.name} className="lib-mobile-card">
+                    <div className="card-top-row">
+                      <span className="card-title-row">
+                        <Building2 size={14} color={preset.color} />
+                        <span className="card-title">{preset.name}</span>
+                      </span>
+                      <span className="card-category-tag" style={{ color: preset.color }}>
+                        {preset.width}×{preset.height}
+                      </span>
+                    </div>
+                    <p className="card-desc">{preset.description || 'Visual team room for agents.'}</p>
+                    <div className="card-bottom-row">
+                      <span className="card-view-link">
+                        <button
+                          type="button"
+                          className="lib-space-deploy-btn"
+                          style={{ '--space-accent': preset.color } as React.CSSProperties}
+                          onClick={() => {
+                            window.dispatchEvent(new CustomEvent('canvas:spawn-zone', { detail: preset }));
+                            onClose();
+                          }}
+                        >
+                          <Plus size={12} />
+                          <span>Deploy Space</span>
+                        </button>
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+
+              {/* TAB: ROLE ZONES */}
+              {activeTab === 'zones' && (
+                <>
+                  {roleZones.length > 0 && (
+                    <div className="empty-list-notice" style={{ textAlign: 'left' }}>
+                      Active zones on canvas: {roleZones.length}
+                    </div>
+                  )}
+                  {roleZones
+                    .filter((zone) => !searchQuery || zone.name.toLowerCase().includes(searchQuery.toLowerCase()) || zone.roleTitle.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map((zone) => (
+                      <div key={zone.id} className="lib-mobile-card">
+                        <div className="card-top-row">
+                          <span className="card-title-row">
+                            <Network size={14} color={zone.color} />
+                            <span className="card-title">{zone.name}</span>
+                          </span>
+                          <span className="card-category-tag" style={{ color: zone.color }}>
+                            L{zone.level} · {zone.roleTitle}
+                          </span>
+                        </div>
+                        <p className="card-desc">{zone.description || `Assign agents ${zone.roleTitle} designation.`}</p>
+                        <div className="card-bottom-row">
+                          <button
+                            type="button"
+                            className="lib-space-deploy-btn"
+                            onClick={() => {
+                              if (zone.spaceId) {
+                                window.dispatchEvent(
+                                  new CustomEvent('canvas:open-space-workspace', {
+                                    detail: { spaceId: zone.spaceId },
+                                  }),
+                                );
+                              } else {
+                                window.dispatchEvent(new CustomEvent('canvas:open-workspace-panel'));
+                              }
+                              onClose();
+                            }}
+                          >
+                            Open Space Workspace
+                          </button>
+                          <span className="card-view-link">
+                            <button
+                              type="button"
+                              className="lib-space-deploy-btn"
+                              style={{ '--space-accent': zone.color } as React.CSSProperties}
+                              onClick={() => {
+                                window.dispatchEvent(new CustomEvent('canvas:spawn-role-zone', { detail: { ...zone, id: undefined } }));
+                                onClose();
+                              }}
+                            >
+                              <Plus size={12} />
+                              <span>Deploy</span>
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  {ROLE_ZONE_PRESETS.filter((preset) =>
+                    !searchQuery || preset.name.toLowerCase().includes(searchQuery.toLowerCase()) || preset.roleTitle.toLowerCase().includes(searchQuery.toLowerCase()),
+                  ).map((preset) => (
+                    <div key={preset.name} className="lib-mobile-card">
+                      <div className="card-top-row">
+                        <span className="card-title-row">
+                          <Network size={14} color={preset.color} />
+                          <span className="card-title">{preset.name}</span>
+                        </span>
+                        <span className="card-category-tag" style={{ color: preset.color }}>
+                          L{preset.level} · {preset.roleTitle}
+                        </span>
+                      </div>
+                      <p className="card-desc">{preset.description || `Hierarchical ${preset.roleTitle} designation.`}</p>
+                      <div className="card-bottom-row">
+                        <span className="card-view-link">
+                          <button
+                            type="button"
+                            className="lib-space-deploy-btn"
+                            style={{ '--space-accent': preset.color } as React.CSSProperties}
+                            onClick={() => {
+                              window.dispatchEvent(new CustomEvent('canvas:spawn-role-zone', { detail: preset }));
+                              onClose();
+                            }}
+                          >
+                            <Plus size={12} />
+                            <span>Deploy Zone</span>
+                          </button>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {HIERARCHICAL_CHAINS.filter((chain) => {
+                    const name = chain.name || chain.companyName || '';
+                    const cat = chain.category || chain.industryCategory || '';
+                    return !searchQuery || name.toLowerCase().includes(searchQuery.toLowerCase()) || cat.toLowerCase().includes(searchQuery.toLowerCase());
+                  }).map((chain) => {
+                    const name = chain.name || chain.companyName || '';
+                    const cat = chain.category || chain.industryCategory || '';
+                    const color = chain.color || chain.industryColor || '#3b82f6';
+                    return (
+                    <div key={chain.id} className="lib-mobile-card">
+                      <div className="card-top-row">
+                        <span className="card-title-row">
+                          <Network size={14} color={color} />
+                          <span className="card-title">{name}</span>
+                        </span>
+                        <span className="card-category-tag" style={{ color }}>
+                          {chain.nodes.length} Zones · {cat}
+                        </span>
+                      </div>
+                      <p className="card-desc">{chain.description || 'Hierarchical organization chain.'}</p>
+                      <div className="card-bottom-row">
+                        <span className="card-view-link">
+                          <button
+                            type="button"
+                            className="lib-space-deploy-btn"
+                            style={{ '--space-accent': color } as React.CSSProperties}
+                            onClick={() => {
+                              window.dispatchEvent(new CustomEvent('canvas:spawn-hierarchical-chain', { detail: { chain } }));
+                              onClose();
+                            }}
+                          >
+                            <Plus size={12} />
+                            <span>Deploy Hierarchy</span>
+                          </button>
+                        </span>
+                      </div>
+                    </div>
+                  );})}
+                  {roleZones.length === 0 && ROLE_ZONE_PRESETS.length === 0 && HIERARCHICAL_CHAINS.length === 0 && (
+                    <div className="empty-list-notice">No role zones yet.</div>
+                  )}
+                </>
+              )}
+
               {/* TAB: OUTPUT STYLES */}
               {activeTab === 'output' && (
                 filteredOutputs.length === 0 ? (
@@ -680,7 +1087,10 @@ export const LibrarySidebarMobile: React.FC<LibrarySidebarMobileProps> = ({
                       onClick={() => setSelectedItem({ kind: 'output', item: o })}
                     >
                       <div className="card-top-row">
-                        <span className="card-title">{o.name}</span>
+                        <span className="card-title-row">
+                          <LibGlyph icon={outputPresetIcon(o.id, o.category)} color={LIB_TAB_COLORS.output} size={13} />
+                          <span className="card-title">{o.name}</span>
+                        </span>
                         {o.category && <span className="card-category-tag">{o.category}</span>}
                       </div>
                       <p className="card-desc">{o.description || o.directive}</p>

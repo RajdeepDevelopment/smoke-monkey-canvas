@@ -1,12 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import { CoreDatabase } from '../core/database.db.js';
 import type {
   AgentRecord,
+  AgentConnectionRecord,
   AgentMcpRecord,
   AgentSkillRecord,
   RunRecord,
   RunEventRecord,
   ChatSessionRecord,
   ChatMessageRecord,
+  AgentCronJobRecord,
+  AgentCronJobInput,
+  CronJobSource,
 } from './agent.types.js';
 
 export class AgentDb {
@@ -33,8 +38,8 @@ export class AgentDb {
       INSERT INTO agents (
         id, name, model, provider, system_prompt, cron_schedule, cron_enabled,
         pos_x, pos_y, status, last_run_at, next_run_at, disabled_tools, policies,
-        personalities, output_styles, working_dir, max_memory_mb, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        personalities, output_styles, working_dir, max_memory_mb, role, description, specialty, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       agent.id,
@@ -43,10 +48,10 @@ export class AgentDb {
       agent.provider,
       agent.system_prompt,
       agent.cron_schedule ?? null,
-      agent.cron_enabled,
-      agent.pos_x,
-      agent.pos_y,
-      agent.status,
+      agent.cron_enabled ? 1 : 0,
+      agent.pos_x ?? 0,
+      agent.pos_y ?? 0,
+      agent.status ?? 'idle',
       agent.last_run_at ?? null,
       agent.next_run_at ?? null,
       agent.disabled_tools ?? '[]',
@@ -55,6 +60,9 @@ export class AgentDb {
       agent.output_styles ?? '[]',
       agent.working_dir ?? null,
       agent.max_memory_mb ?? 1024,
+      agent.role ?? null,
+      agent.description ?? null,
+      agent.specialty ?? null,
       createdAt,
     );
     return {
@@ -65,6 +73,9 @@ export class AgentDb {
       output_styles: agent.output_styles ?? '[]',
       working_dir: agent.working_dir ?? null,
       max_memory_mb: agent.max_memory_mb ?? 1024,
+      role: agent.role ?? null,
+      description: agent.description ?? null,
+      specialty: agent.specialty ?? null,
       created_at: createdAt,
     };
   }
@@ -92,7 +103,10 @@ export class AgentDb {
         personalities = ?,
         output_styles = ?,
         working_dir = ?,
-        max_memory_mb = ?
+        max_memory_mb = ?,
+        role = ?,
+        description = ?,
+        specialty = ?
       WHERE id = ?
     `);
     stmt.run(
@@ -113,6 +127,9 @@ export class AgentDb {
       updated.output_styles ?? '[]',
       updated.working_dir ?? null,
       updated.max_memory_mb ?? 1024,
+      updated.role ?? null,
+      updated.description ?? null,
+      updated.specialty ?? null,
       id,
     );
     return updated;
@@ -121,6 +138,71 @@ export class AgentDb {
   deleteAgent(id: string): boolean {
     const stmt = this.coreDb.db.prepare(`DELETE FROM agents WHERE id = ?`);
     stmt.run(id);
+    return true;
+  }
+
+  // ── Peer Agent Connections ────────────────────────────────────────────────
+  getAgentConnections(agentId?: string): AgentConnectionRecord[] {
+    if (agentId) {
+      const stmt = this.coreDb.db.prepare(`
+        SELECT * FROM agent_connections 
+        WHERE source_agent_id = ? OR target_agent_id = ? 
+        ORDER BY created_at ASC
+      `);
+      return stmt.all(agentId, agentId) as unknown as AgentConnectionRecord[];
+    }
+    const stmt = this.coreDb.db.prepare(`SELECT * FROM agent_connections ORDER BY created_at ASC`);
+    return stmt.all() as unknown as AgentConnectionRecord[];
+  }
+
+  getConnectedPeers(agentId: string): AgentRecord[] {
+    const stmt = this.coreDb.db.prepare(`
+      SELECT DISTINCT a.* FROM agents a
+      INNER JOIN agent_connections c 
+        ON (c.source_agent_id = ? AND c.target_agent_id = a.id)
+        OR (c.target_agent_id = ? AND c.source_agent_id = a.id)
+      WHERE a.id != ?
+      ORDER BY a.name ASC
+    `);
+    return stmt.all(agentId, agentId, agentId) as unknown as AgentRecord[];
+  }
+
+  createAgentConnection(sourceId: string, targetId: string): AgentConnectionRecord {
+    if (sourceId === targetId) {
+      throw new Error('An agent cannot connect to itself');
+    }
+    const existing = this.coreDb.db.prepare(`
+      SELECT * FROM agent_connections 
+      WHERE (source_agent_id = ? AND target_agent_id = ?) 
+         OR (source_agent_id = ? AND target_agent_id = ?)
+    `).get(sourceId, targetId, targetId, sourceId) as unknown as AgentConnectionRecord | undefined;
+    if (existing) {
+      return existing;
+    }
+
+    const id = `conn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const createdAt = new Date().toISOString();
+    const stmt = this.coreDb.db.prepare(`
+      INSERT INTO agent_connections (id, source_agent_id, target_agent_id, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+    stmt.run(id, sourceId, targetId, createdAt);
+    return { id, source_agent_id: sourceId, target_agent_id: targetId, created_at: createdAt };
+  }
+
+  deleteAgentConnection(connectionId: string): boolean {
+    const stmt = this.coreDb.db.prepare(`DELETE FROM agent_connections WHERE id = ?`);
+    stmt.run(connectionId);
+    return true;
+  }
+
+  deleteAgentConnectionBetween(agentIdA: string, agentIdB: string): boolean {
+    const stmt = this.coreDb.db.prepare(`
+      DELETE FROM agent_connections 
+      WHERE (source_agent_id = ? AND target_agent_id = ?) 
+         OR (source_agent_id = ? AND target_agent_id = ?)
+    `);
+    stmt.run(agentIdA, agentIdB, agentIdB, agentIdA);
     return true;
   }
 
@@ -141,9 +223,36 @@ export class AgentDb {
     return { ...mcp, created_at: createdAt, source };
   }
 
-  deleteAgentMcp(id: string): boolean {
-    const stmt = this.coreDb.db.prepare(`DELETE FROM agent_mcps WHERE id = ?`);
-    stmt.run(id);
+  /**
+   * Insert or update an MCP attachment keyed by `(agent_id, mcp_name)`. Used by
+   * runtime reconciliation to persist MCP servers the agent added to its own
+   * `mcp/mcp.json` without duplicating rows on every reconcile.
+   */
+  upsertAgentMcp(mcp: Omit<AgentMcpRecord, 'created_at'> & { created_at?: string }): AgentMcpRecord {
+    const existing = this.coreDb.db
+      .prepare(`SELECT id FROM agent_mcps WHERE agent_id = ? AND mcp_name = ? LIMIT 1`)
+      .get(mcp.agent_id, mcp.mcp_name) as { id: string } | undefined;
+    const source = mcp.source ?? 'agent';
+    if (existing) {
+      this.coreDb.db
+        .prepare(`UPDATE agent_mcps SET label = ?, config_json = ?, enabled = ?, source = ? WHERE id = ?`)
+        .run(mcp.label, mcp.config_json, mcp.enabled, source, existing.id);
+      const row = this.coreDb.db
+        .prepare(`SELECT * FROM agent_mcps WHERE id = ?`)
+        .get(existing.id) as unknown as AgentMcpRecord;
+      return row;
+    }
+    return this.addAgentMcp({ ...mcp, source });
+  }
+
+  deleteAgentMcp(id: string, agentId?: string): boolean {
+    if (agentId) {
+      const stmt = this.coreDb.db.prepare(`DELETE FROM agent_mcps WHERE id = ? OR (agent_id = ? AND mcp_name = ?)`);
+      stmt.run(id, agentId, id);
+    } else {
+      const stmt = this.coreDb.db.prepare(`DELETE FROM agent_mcps WHERE id = ? OR mcp_name = ?`);
+      stmt.run(id, id);
+    }
     return true;
   }
 
@@ -171,6 +280,28 @@ export class AgentDb {
       source,
     );
     return { ...skill, created_at: createdAt, source };
+  }
+
+  /**
+   * Insert or update a skill attachment keyed by `(agent_id, skill_name)`. Used
+   * by runtime reconciliation to persist skills the agent added to its own
+   * `skills/skills.json` without duplicating rows on every reconcile.
+   */
+  upsertAgentSkill(skill: Omit<AgentSkillRecord, 'created_at'> & { created_at?: string }): AgentSkillRecord {
+    const existing = this.coreDb.db
+      .prepare(`SELECT id FROM agent_skills WHERE agent_id = ? AND skill_name = ? LIMIT 1`)
+      .get(skill.agent_id, skill.skill_name) as { id: string } | undefined;
+    const source = skill.source ?? 'agent';
+    if (existing) {
+      this.coreDb.db
+        .prepare(`UPDATE agent_skills SET description = ?, content = ?, enabled = ?, source = ? WHERE id = ?`)
+        .run(skill.description ?? null, skill.content, skill.enabled, source, existing.id);
+      const row = this.coreDb.db
+        .prepare(`SELECT * FROM agent_skills WHERE id = ?`)
+        .get(existing.id) as unknown as AgentSkillRecord;
+      return row;
+    }
+    return this.addAgentSkill({ ...skill, source });
   }
 
   deleteAgentSkill(id: string): boolean {
@@ -521,5 +652,144 @@ export class AgentDb {
   getRunEvents(runId: string): RunEventRecord[] {
     const stmt = this.coreDb.db.prepare(`SELECT * FROM run_events WHERE run_id = ? ORDER BY id ASC`);
     return stmt.all(runId) as unknown as RunEventRecord[];
+  }
+
+  // ── Agent Cron Jobs Registry ───────────────────────────────────────────────
+
+  getAgentCronJobs(agentId: string): AgentCronJobRecord[] {
+    const stmt = this.coreDb.db.prepare(
+      `SELECT * FROM agent_cron_jobs WHERE agent_id = ? ORDER BY created_at ASC`,
+    );
+    return stmt.all(agentId) as unknown as AgentCronJobRecord[];
+  }
+
+  getAllActiveCronJobs(): AgentCronJobRecord[] {
+    const stmt = this.coreDb.db.prepare(
+      `SELECT * FROM agent_cron_jobs WHERE enabled = 1 ORDER BY next_run_at ASC`,
+    );
+    return stmt.all() as unknown as AgentCronJobRecord[];
+  }
+
+  getCronJob(id: string): AgentCronJobRecord | null {
+    const stmt = this.coreDb.db.prepare(`SELECT * FROM agent_cron_jobs WHERE id = ?`);
+    const row = stmt.get(id) as unknown as AgentCronJobRecord | undefined;
+    return row ?? null;
+  }
+
+  createAgentCronJob(
+    job: AgentCronJobInput & { agent_id: string; created_by?: CronJobSource; next_run_at?: string | null },
+  ): AgentCronJobRecord {
+    const id = `cron-${randomUUID()}`;
+    const now = new Date().toISOString();
+    const enabled = job.enabled === undefined || job.enabled === true || job.enabled === 1 ? 1 : 0;
+    const stmt = this.coreDb.db.prepare(`
+      INSERT INTO agent_cron_jobs (
+        id, agent_id, name, prompt, cron_schedule, enabled,
+        last_run_at, next_run_at, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      id,
+      job.agent_id,
+      job.name.trim(),
+      job.prompt.trim(),
+      job.cron_schedule.trim(),
+      enabled,
+      null,
+      job.next_run_at ?? null,
+      job.created_by ?? 'user',
+      now,
+      now,
+    );
+    return this.getCronJob(id)!;
+  }
+
+  updateAgentCronJob(
+    id: string,
+    updates: Partial<AgentCronJobRecord>,
+  ): AgentCronJobRecord | null {
+    const existing = this.getCronJob(id);
+    if (!existing) return null;
+
+    const sets: string[] = [];
+    const values: any[] = [];
+
+    if (updates.name !== undefined) {
+      sets.push('name = ?');
+      values.push(updates.name.trim());
+    }
+    if (updates.prompt !== undefined) {
+      sets.push('prompt = ?');
+      values.push(updates.prompt.trim());
+    }
+    if (updates.cron_schedule !== undefined) {
+      sets.push('cron_schedule = ?');
+      values.push(updates.cron_schedule.trim());
+    }
+    if (updates.enabled !== undefined) {
+      sets.push('enabled = ?');
+      values.push(updates.enabled ? 1 : 0);
+    }
+    if (updates.last_run_at !== undefined) {
+      sets.push('last_run_at = ?');
+      values.push(updates.last_run_at);
+    }
+    if (updates.next_run_at !== undefined) {
+      sets.push('next_run_at = ?');
+      values.push(updates.next_run_at);
+    }
+
+    if (sets.length === 0) return existing;
+
+    sets.push('updated_at = ?');
+    values.push(new Date().toISOString());
+    values.push(id);
+
+    this.coreDb.db.prepare(`UPDATE agent_cron_jobs SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+    return this.getCronJob(id);
+  }
+
+  deleteAgentCronJob(id: string): boolean {
+    const stmt = this.coreDb.db.prepare(`DELETE FROM agent_cron_jobs WHERE id = ?`);
+    const result = stmt.run(id);
+    return Number(result.changes) > 0;
+  }
+
+  recordCronJobRun(id: string, nextRunAt: string | null): void {
+    const now = new Date().toISOString();
+    const stmt = this.coreDb.db.prepare(
+      `UPDATE agent_cron_jobs SET last_run_at = ?, next_run_at = ?, updated_at = ? WHERE id = ?`,
+    );
+    stmt.run(now, nextRunAt, now, id);
+  }
+
+  // ── File Compaction Tracking ───────────────────────────────────────────────
+
+  getFileCompaction(
+    agentId: string,
+    filePath: string,
+  ): { last_mtime: number; line_count: number } | null {
+    const row = this.coreDb.db
+      .prepare(
+        `SELECT last_mtime, line_count FROM agent_file_compaction WHERE agent_id = ? AND file_path = ?`,
+      )
+      .get(agentId, filePath) as { last_mtime: number; line_count: number } | undefined;
+    return row ?? null;
+  }
+
+  recordFileCompaction(
+    agentId: string,
+    filePath: string,
+    mtime: number,
+    lineCount: number,
+  ): void {
+    const now = new Date().toISOString();
+    this.coreDb.db
+      .prepare(`
+        INSERT OR REPLACE INTO agent_file_compaction (
+          agent_id, file_path, last_compacted_at, last_mtime, line_count
+        ) VALUES (?, ?, ?, ?, ?)
+      `)
+      .run(agentId, filePath, now, mtime, lineCount);
   }
 }

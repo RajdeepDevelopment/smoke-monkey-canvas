@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Mic, Square, Check, AlertCircle } from 'lucide-react';
 import { useSpeechToText } from './use-speech-to-text.js';
-import { SUPPORTED_VOICE_LANGUAGES } from './voice.types.js';
+import { getAvailableVoiceLanguages } from './voice.types.js';
 
 export interface ChatVoiceButtonProps {
   currentValue?: string;
@@ -22,6 +22,7 @@ export const ChatVoiceButton: React.FC<ChatVoiceButtonProps> = ({
     status,
     transcript,
     interimTranscript,
+    error,
     language,
     setLanguage,
     startListening,
@@ -79,9 +80,11 @@ export const ChatVoiceButton: React.FC<ChatVoiceButtonProps> = ({
     }
   };
 
+  // Only languages this platform's engine can recognize (e.g. Bengali is
+  // offered on Chrome/Edge/Android but hidden on Apple's web view).
+  const availableLanguages = getAvailableVoiceLanguages();
   const currentLangObj =
-    SUPPORTED_VOICE_LANGUAGES.find((l) => l.code === language) ||
-    SUPPORTED_VOICE_LANGUAGES[0];
+    availableLanguages.find((l) => l.code === language) || availableLanguages[0];
 
   return (
     <div
@@ -133,7 +136,7 @@ export const ChatVoiceButton: React.FC<ChatVoiceButtonProps> = ({
           type="button"
           className="chat-voice-btn state-error"
           onClick={handleStart}
-          title="Microphone permission required. Click to retry."
+          title={error || 'Microphone permission required. Click to retry.'}
         >
           <AlertCircle size={13} color="#f59e0b" />
           <span className="voice-btn-label error">Retry Mic</span>
@@ -162,7 +165,7 @@ export const ChatVoiceButton: React.FC<ChatVoiceButtonProps> = ({
           onChange={(e) => setLanguage(e.target.value)}
           aria-label="Speech Recognition Language"
         >
-          {SUPPORTED_VOICE_LANGUAGES.map((l) => (
+          {availableLanguages.map((l) => (
             <option key={l.code} value={l.code}>
               {l.flag} {l.label}
             </option>

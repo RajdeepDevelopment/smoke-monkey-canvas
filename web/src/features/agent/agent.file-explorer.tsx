@@ -28,6 +28,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { AgentService } from './agent.service.js';
 import type {
   SpaceAgentEntity,
@@ -36,6 +37,7 @@ import type {
   WorkspaceFilesResponse,
 } from './agent.types.js';
 import { MermaidDiagram } from './mermaid-diagram.js';
+import { useSpaceStore } from '../space/space.store.js';
 
 interface AgentFileExplorerProps {
   agent: SpaceAgentEntity;
@@ -129,10 +131,27 @@ export const AgentFileExplorer: React.FC<AgentFileExplorerProps> = ({
     };
   }, [agent.id, loadFiles]);
 
+const BINARY_DOC_EXTENSIONS = new Set([
+  'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt',
+  'parquet', 'zip', 'tar', 'gz', '7z', 'rar',
+  'exe', 'dmg', 'bin', 'iso', 'db', 'sqlite',
+]);
+
   // Load file content when text/markdown file is selected
   useEffect(() => {
     if (!selectedFile) {
       setFileContent(null);
+      setIsEditing(false);
+      return;
+    }
+
+    // Automatically mark asset as reviewed when inspected in explorer
+    useSpaceStore.getState().markAssetReviewed(agent.id, selectedFile.path);
+
+    const cleanExt = (selectedFile.extension || '').toLowerCase().replace(/^\./, '');
+    if (BINARY_DOC_EXTENSIONS.has(cleanExt)) {
+      setFileContent(null);
+      setLoadingContent(false);
       setIsEditing(false);
       return;
     }
@@ -252,6 +271,11 @@ export const AgentFileExplorer: React.FC<AgentFileExplorerProps> = ({
   const rawUrl = selectedFile
     ? AgentService.getWorkspaceFileRawUrl(agent.id, selectedFile.path)
     : '';
+
+  const cleanExt = (selectedFile?.extension || '').toLowerCase().replace(/^\./, '');
+  const isBinaryDoc = selectedFile ? BINARY_DOC_EXTENSIONS.has(cleanExt) : false;
+  const isExcel = ['xlsx', 'xls', 'csv', 'tsv'].includes(cleanExt);
+  const isWord = ['docx', 'doc', 'rtf'].includes(cleanExt);
 
   return (
     <div
@@ -1106,6 +1130,29 @@ export const AgentFileExplorer: React.FC<AgentFileExplorerProps> = ({
                   </>
                 )}
 
+                {/* Open in System Default Application */}
+                <button
+                  type="button"
+                  onClick={() => AgentService.openFileWithSystem(agent.id, selectedFile.path)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    borderRadius: 6,
+                    color: '#38bdf8',
+                    padding: '4px 9px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                  title="Open in System Default Application (Excel, Numbers, Word, etc.)"
+                >
+                  <ExternalLink size={11} />
+                  <span>System App</span>
+                </button>
+
                 {/* External Link & Download */}
                 <a
                   href={rawUrl}
@@ -1123,7 +1170,7 @@ export const AgentFileExplorer: React.FC<AgentFileExplorerProps> = ({
                     fontSize: 11,
                     textDecoration: 'none',
                   }}
-                  title="Open file in new tab"
+                  title="Open raw file in new tab"
                 >
                   <ExternalLink size={11} />
                 </a>
@@ -1391,8 +1438,9 @@ export const AgentFileExplorer: React.FC<AgentFileExplorerProps> = ({
                       }}
                     >
                       <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
                         components={{
-                          code({ className, children, ...props }) {
+                          code({ className, children }: any) {
                             const match = /language-(\w+)/.exec(className || '');
                             const lang = match ? match[1] : '';
                             const codeString = String(children).replace(/\n$/, '');
@@ -1415,7 +1463,7 @@ export const AgentFileExplorer: React.FC<AgentFileExplorerProps> = ({
                                     fontSize: 12,
                                   }}
                                 >
-                                  <code className={className} {...props}>
+                                  <code className={className}>
                                     {children}
                                   </code>
                                 </pre>
@@ -1432,7 +1480,6 @@ export const AgentFileExplorer: React.FC<AgentFileExplorerProps> = ({
                                   borderRadius: 4,
                                   fontSize: '0.9em',
                                 }}
-                                {...props}
                               >
                                 {children}
                               </code>
@@ -1526,10 +1573,220 @@ export const AgentFileExplorer: React.FC<AgentFileExplorerProps> = ({
                 </>
               )}
 
+              {/* BINARY / OFFICE FILE VIEWER */}
+              {isBinaryDoc && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: '80%',
+                    padding: '36px 20px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      background: isExcel
+                        ? 'linear-gradient(180deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.05) 100%)'
+                        : isWord
+                        ? 'linear-gradient(180deg, rgba(56, 189, 248, 0.15) 0%, rgba(2, 132, 199, 0.05) 100%)'
+                        : 'rgba(255, 255, 255, 0.03)',
+                      border: `1px solid ${
+                        isExcel
+                          ? 'rgba(16, 185, 129, 0.3)'
+                          : isWord
+                          ? 'rgba(56, 189, 248, 0.3)'
+                          : 'rgba(255, 255, 255, 0.1)'
+                      }`,
+                      borderRadius: 14,
+                      padding: '32px 28px',
+                      maxWidth: 480,
+                      width: '100%',
+                      boxShadow: '0 12px 36px rgba(0, 0, 0, 0.4)',
+                    }}
+                  >
+                    {isExcel ? (
+                      <FileSpreadsheet
+                        size={56}
+                        style={{
+                          color: '#10b981',
+                          filter: 'drop-shadow(0 0 16px rgba(16, 185, 129, 0.45))',
+                          marginBottom: 16,
+                        }}
+                      />
+                    ) : isWord ? (
+                      <FileText
+                        size={56}
+                        style={{
+                          color: '#38bdf8',
+                          filter: 'drop-shadow(0 0 16px rgba(56, 189, 248, 0.45))',
+                          marginBottom: 16,
+                        }}
+                      />
+                    ) : (
+                      <Folder
+                        size={56}
+                        style={{
+                          color: '#a78bfa',
+                          filter: 'drop-shadow(0 0 16px rgba(167, 139, 250, 0.45))',
+                          marginBottom: 16,
+                        }}
+                      />
+                    )}
+
+                    <div
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: '#f8fafc',
+                        wordBreak: 'break-all',
+                        marginBottom: 6,
+                      }}
+                    >
+                      {selectedFile.name}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: '#94a3b8',
+                        fontFamily: 'monospace',
+                        wordBreak: 'break-all',
+                        marginBottom: 12,
+                      }}
+                    >
+                      {selectedFile.path}
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '3px 12px',
+                        borderRadius: 20,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        background: isExcel
+                          ? 'rgba(16, 185, 129, 0.2)'
+                          : isWord
+                          ? 'rgba(56, 189, 248, 0.2)'
+                          : 'rgba(255, 255, 255, 0.08)',
+                        color: isExcel ? '#34d399' : isWord ? '#7dd3fc' : '#cbd5e1',
+                        border: `1px solid ${
+                          isExcel
+                            ? 'rgba(16, 185, 129, 0.35)'
+                            : isWord
+                            ? 'rgba(56, 189, 248, 0.35)'
+                            : 'rgba(255, 255, 255, 0.12)'
+                        }`,
+                        marginBottom: 24,
+                      }}
+                    >
+                      {isExcel
+                        ? 'Microsoft Excel Spreadsheet'
+                        : isWord
+                        ? 'Microsoft Word Document'
+                        : `${(selectedFile.extension || '').toUpperCase()} Binary Document`}
+                      <span>•</span>
+                      <span>{formatBytes(selectedFile.size)}</span>
+                    </div>
+
+                    {/* Primary System Opener Action Button */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                        width: '100%',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          AgentService.openFileWithSystem(agent.id, selectedFile.path)
+                        }
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                          padding: '11px 20px',
+                          borderRadius: 8,
+                          background: isExcel
+                            ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                            : isWord
+                            ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)'
+                            : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                          color: '#ffffff',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          border: 'none',
+                          cursor: 'pointer',
+                          boxShadow: isExcel
+                            ? '0 4px 16px rgba(16, 185, 129, 0.4)'
+                            : '0 4px 16px rgba(2, 132, 199, 0.4)',
+                          transition: 'all 0.18s ease',
+                        }}
+                      >
+                        <ExternalLink size={15} />
+                        <span>
+                          {isExcel
+                            ? 'Open with Microsoft Excel / Numbers'
+                            : isWord
+                            ? 'Open with Microsoft Word / Pages'
+                            : 'Open with System Default Application'}
+                        </span>
+                      </button>
+
+                      <a
+                        href={rawUrl}
+                        download={selectedFile.name}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          padding: '9px 18px',
+                          borderRadius: 8,
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          color: '#cbd5e1',
+                          fontSize: 12,
+                          textDecoration: 'none',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <Download size={14} />
+                        <span>Download File ({formatBytes(selectedFile.size)})</span>
+                      </a>
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: '#64748b',
+                        marginTop: 18,
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Binary office documents cannot be rendered as plain text. Clicking above opens this file in your native OS app (macOS, Windows, Linux).
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* CODE / TEXT VIEWER */}
               {(selectedFile.category === 'code' ||
                 selectedFile.category === 'document' ||
                 selectedFile.category === 'data') &&
+                !isBinaryDoc &&
                 !loadingContent && (
                   <>
                     {isEditing ? (

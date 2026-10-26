@@ -23,19 +23,27 @@ import {
   Package,
   UserRoundCog,
   TextCursorInput,
+  Maximize2,
+  Minimize2,
+  Palette,
+  Building2,
+  Handshake,
+  Plug,
 } from 'lucide-react';
 import type { SpaceAgentEntity } from './agent.types.js';
 import type { AgentNodeData } from '../space/space.types.js';
-import { BrandIcons, getBrandIcon } from '../common/brand-icons.js';
+import { BrandIcons, getBrandIcon, McpBrandIcon } from '../common/brand-icons.js';
 import { VoiceAgentPopover } from '../voice/voice-agent-popover.js';
 import { readLibDragPayload, isLibDrag, setActiveDragPayload, type LibDragPayload } from '../library/library.types.js';
 import { useIsMobile } from '../common/use-mobile.js';
+import { AgentAvatar, AvatarPickerModal } from './agent-avatar.js';
+import { useSpaceStore } from '../space/space.store.js';
 
 export interface CrabAgentNodeProps {
   data: AgentNodeData & {
     onRun: (id: string) => void;
     onStop?: (id: string) => void;
-    onEdit: (agent: SpaceAgentEntity, section?: 'general' | 'directory' | 'schedule') => void;
+    onEdit: (agent: SpaceAgentEntity, section?: 'general' | 'directory' | 'schedule' | 'model') => void;
     onDelete: (id: string) => void;
     onOpenDrawer: (agent: SpaceAgentEntity) => void;
     onAddMcp: (agentId: string, initialMcpName?: string) => void;
@@ -51,6 +59,10 @@ export interface CrabAgentNodeProps {
     activeVoiceAgentId?: string | null;
     /** Attaches a library item (MCP / skill / toolkit) dropped onto this agent. */
     onLibraryDrop?: (agentId: string, payload: LibDragPayload) => void;
+    /** Toggle active graphical threads view in canvas */
+    onToggleThreads?: (id: string) => void;
+    /** Toggle deliverables assets review thread in canvas */
+    onToggleAssets?: (id: string) => void;
   };
 }
 
@@ -85,7 +97,24 @@ function areAgentNodePropsEqual(
     p.personalities !== n.personalities ||
     p.output_styles !== n.output_styles ||
     p.working_dir !== n.working_dir ||
-    p.max_memory_mb !== n.max_memory_mb
+    p.max_memory_mb !== n.max_memory_mb ||
+    p.role !== n.role ||
+    p.description !== n.description ||
+    p.specialty !== n.specialty ||
+    p.inWorkspaceZone !== n.inWorkspaceZone ||
+    p.workspaceZoneName !== n.workspaceZoneName ||
+    p.workspaceZoneColor !== n.workspaceZoneColor ||
+    p.roleZoneId !== n.roleZoneId ||
+    p.roleZoneName !== n.roleZoneName ||
+    p.roleZoneRole !== n.roleZoneRole ||
+    p.roleZoneLevel !== n.roleZoneLevel ||
+    p.roleZoneColor !== n.roleZoneColor ||
+    p.podMemberCount !== n.podMemberCount ||
+    p.podDensity !== n.podDensity ||
+    p.podScale !== n.podScale ||
+    p.podAvatarSize !== n.podAvatarSize ||
+    p.podCardWidth !== n.podCardWidth ||
+    p.podCardHeight !== n.podCardHeight
   ) {
     return false;
   }
@@ -118,6 +147,12 @@ function areAgentNodePropsEqual(
 
   // Voice popover exclusivity: re-render when this node's voice open state changes
   if (p.activeVoiceAgentId !== n.activeVoiceAgentId) return false;
+
+  // Active threads count change
+  if (p.activeThreadsCount !== n.activeThreadsCount) return false;
+
+  // Unread assets count change
+  if (p.unreadAssetsCount !== n.unreadAssetsCount) return false;
 
   return true;
 }
@@ -172,6 +207,8 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
   // popover can be open at a time. Toggling another mic auto-closes the previous one.
   const isVoiceOpen = data.activeVoiceAgentId === data.id;
   const isRunning = data.status === 'running';
+  const agentMood = useSpaceStore((s) => s.agentMoods[data.id]?.mood || (isRunning ? 'working' : 'idle'));
+  const agentMoodDetail = useSpaceStore((s) => s.agentMoods[data.id]?.detail);
   const ProviderIcon = BrandIcons[data.provider];
 
   // Parse disabled tools count
@@ -231,9 +268,487 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
   const unconfiguredMcps = data.mcps.filter((m) => !isMcpConfigured(m));
   const hasUnconfiguredMcps = unconfiguredMcps.length > 0;
 
+  // ── Pod Avatar Mode State & Interactions ──
+  const isPodCardExpanded = Boolean(useSpaceStore((s) => s.podCardExpandedAgents[data.id]));
+  const setPodCardExpanded = useSpaceStore((s) => s.setPodCardExpanded);
+  const isAvatarMode = !isPodCardExpanded;
+  const [showAvatarPicker, setShowAvatarPicker] = useState<boolean>(false);
+  const [isHovered, setIsHovered] = useState<boolean>(false);
+
+  // ── Pod Dynamic Sizing & Density Metrics ──
+  const density = data.podDensity || 'standard';
+  const _scale = data.podScale || 1.0;
+  void _scale;
+  const avatarSize = data.podAvatarSize || (density === 'micro' ? 36 : density === 'mini' ? 46 : density === 'compact' ? 56 : 72);
+  const cardWidth = data.podCardWidth || (density === 'micro' ? 100 : density === 'mini' ? 130 : density === 'compact' ? 168 : 220);
+
+  // ── If dropped inside a Workspace Pod/Group Room: Render Character Avatar Representation ──
+  if (data.inWorkspaceZone && isAvatarMode) {
+    return (
+      <div
+        className={`crab-pod-avatar-node density-${density} ${isDragOver ? 'crab-drop-active' : ''} ${isRunning ? 'is-running' : ''}`}
+        style={{
+          '--pod-accent': data.workspaceZoneColor || '#38bdf8',
+          width: `${cardWidth}px`,
+          maxHeight: data.podCardHeight ? `${data.podCardHeight}px` : undefined,
+        } as React.CSSProperties}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => {
+          setIsHovered(false);
+        }}
+      >
+        {/* ── Always-Visible Provider & Model Badge (Top of Node, No Hover Needed) ── */}
+        <div
+          className="pod-top-provider-badge nodrag nopan"
+          onClick={(e) => {
+            e.stopPropagation();
+            data.onEdit(data, 'model');
+          }}
+          title={`AI Provider: ${providerLabel} · Model: ${data.model} (Click to configure model in settings)`}
+        >
+          <span className="provider-icon-wrap">
+            {ProviderIcon ? <ProviderIcon size={11} /> : <Cpu size={11} />}
+          </span>
+          <span className="provider-name">{providerLabel}</span>
+          <span className="provider-dot">·</span>
+          <span className="model-name-short">
+            {formattedModel.length > 14 ? formattedModel.slice(0, 13) + '…' : formattedModel}
+          </span>
+          <span className="provider-chevron">▾</span>
+        </div>
+
+        {/* ── Central Avatar Stage (Face + Backlighting Aura + Handles + Orbital Ring) ── */}
+        <div className="pod-avatar-stage">
+          {/* Handles for Peer, Thread, and Assets connections positioned right on the avatar stage */}
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="peer-target-left"
+            className="peer-connector-handle"
+            style={{ left: -4, top: '50%', transform: 'translateY(-50%)' }}
+            title="Connect peer agent here (Left)"
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="peer-source-right"
+            className="peer-connector-handle"
+            style={{ right: -4, top: '50%', transform: 'translateY(-50%)' }}
+            title="Drag connection to peer agent (Right)"
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="thread-source"
+            className="thread-connector-handle"
+            style={{ right: -2, top: 22, opacity: 0 }}
+            title="Active execution thread"
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="assets-source"
+            className="assets-connector-handle"
+            style={{ right: -2, top: 58, opacity: 0 }}
+            title="Deliverables asset thread"
+          />
+          {/* Fallback hidden handles for peer connections */}
+          <Handle
+            type="target"
+            position={Position.Bottom}
+            id="peer-target"
+            style={{ opacity: 0, pointerEvents: 'none', bottom: 0 }}
+          />
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="peer-source"
+            style={{ opacity: 0, pointerEvents: 'none', bottom: 0 }}
+          />
+
+          {/* Luminous Backlighting Aura (soft ambient glow reacting to live mood & run state) */}
+          <div className={`pod-avatar-backlight ${isRunning ? 'is-running' : ''} mood-${agentMood} ${hasUnconfiguredMcps ? 'needs-config' : ''}`} />
+
+          {/* Avatar Disc: Clicking opens Sidebar Chat Drawer directly, dragging moves agent node */}
+          <div
+            className={`pod-avatar-disc mood-${agentMood}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onOpenDrawer(data);
+            }}
+            title={`${data.name}${agentMood !== 'idle' ? ` [${agentMood.toUpperCase()}: ${agentMoodDetail || ''}]` : ''} — Click to open Chat Drawer, drag to move`}
+          >
+            <AgentAvatar
+              agentId={data.id}
+              size={avatarSize}
+              className="pod-avatar-img"
+            />
+            {isRunning && <span className="pod-avatar-pulse-ring" />}
+          </div>
+
+          {/* ── Connected MCPs Brand Icons Collage (Attached at bottom rim of Avatar Disc, In Front / High Z-Index) ── */}
+          {data.mcps && data.mcps.length > 0 && (
+            <div className="pod-mcp-collage-row">
+              {data.mcps.slice(0, 5).map((mcp) => {
+                const isConfigured = isMcpConfigured(mcp);
+                const mcpTitle = mcp.label || mcp.mcp_name || 'MCP Server';
+                return (
+                  <div
+                    key={mcp.id}
+                    className={`pod-mcp-collage-badge ${!isConfigured ? 'unconfigured' : ''}`}
+                    title={`${mcpTitle}${!isConfigured ? ' — Needs Credentials/Config (Click to configure)' : ' — Connected MCP'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      data.onAddMcp?.(data.id, mcp.mcp_name || mcp.label);
+                    }}
+                  >
+                    <McpBrandIcon
+                      mcp={{
+                        name: mcp.mcp_name || mcp.label,
+                        label: mcp.label,
+                        iconUrl: (mcp as any).iconUrl,
+                      }}
+                      size={14}
+                      className="pod-mcp-icon-img"
+                    />
+                    {!isConfigured && <span className="pod-mcp-alert-pip" title="Needs config" />}
+                  </div>
+                );
+              })}
+              {data.mcps.length > 5 && (
+                <div
+                  className="pod-mcp-collage-badge more"
+                  title={`${data.mcps.length - 5} more MCPs connected`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onEdit(data, 'general');
+                  }}
+                >
+                  <span>+{data.mcps.length - 5}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Surrounding Orbital Actions Ring (Spaciously arranged around wings) ── */}
+          <div className={`pod-avatar-orbit ${isHovered ? 'is-visible' : ''}`}>
+
+            {/* Upper-Left 10:30: Voice Assistant */}
+            <div className="pod-orbit-action orbit-top-left">
+              <button
+                type="button"
+                className={`pod-orbit-btn voice-btn nodrag nopan ${isVoiceOpen ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onVoiceToggle?.(data.id);
+                }}
+                title={isVoiceOpen ? 'Close Voice Session' : 'Start Voice Assistant'}
+              >
+                <Mic size={13} />
+              </button>
+            </div>
+
+            {/* Mid-Left 9:00: Run / Stop / Configure */}
+            <div className="pod-orbit-action orbit-mid-left">
+              {isRunning ? (
+                <button
+                  type="button"
+                  className="pod-orbit-btn stop-btn nodrag nopan"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onStop?.(data.id);
+                  }}
+                  title="Stop Agent Execution"
+                >
+                  <Square size={13} fill="currentColor" />
+                </button>
+              ) : hasUnconfiguredMcps ? (
+                <button
+                  type="button"
+                  className="pod-orbit-btn config-btn nodrag nopan"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onAddMcp(data.id, unconfiguredMcps[0]?.mcp_name || unconfiguredMcps[0]?.label);
+                  }}
+                  title="Configure Credentials to Run"
+                >
+                  <AlertTriangle size={13} color="#f59e0b" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="pod-orbit-btn run-btn nodrag nopan"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onRun(data.id);
+                  }}
+                  title="Run Agent Loop"
+                >
+                  <Play size={13} fill="currentColor" />
+                </button>
+              )}
+            </div>
+
+            {/* Far Upper-Left 9:45: Avatar Face Customizer */}
+            <div className="pod-orbit-action orbit-far-top-left">
+              <button
+                type="button"
+                className="pod-orbit-btn face-btn nodrag nopan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAvatarPicker(true);
+                }}
+                title="Customize Avatar Face & Style"
+              >
+                <Palette size={12} />
+              </button>
+            </div>
+
+            {/* Lower-Left Wing 8:00: Built-in Tools & Skills */}
+            <div className="pod-orbit-action orbit-lower-left">
+              <button
+                type="button"
+                className="pod-orbit-btn tools-btn nodrag nopan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onOpenTools?.(data);
+                }}
+                title={`Configure Tools (${activeToolsCount}/24 active)`}
+              >
+                <Wrench size={12} />
+              </button>
+            </div>
+
+            {/* Upper-Right 1:30: Settings */}
+            <div className="pod-orbit-action orbit-top-right">
+              <button
+                type="button"
+                className="pod-orbit-btn settings-btn nodrag nopan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onEdit(data, 'general');
+                }}
+                title="Agent Settings & System Prompt"
+              >
+                <Settings size={13} />
+              </button>
+            </div>
+
+            {/* Mid-Right 3:00: Chat & Logs Drawer */}
+            <div className="pod-orbit-action orbit-mid-right">
+              <button
+                type="button"
+                className="pod-orbit-btn chat-btn nodrag nopan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onOpenDrawer(data);
+                }}
+                title="Open Sidebar Chat Drawer"
+              >
+                <Terminal size={13} />
+              </button>
+            </div>
+
+            {/* Lower-Right Wing 4:00: Guard Policies */}
+            <div className="pod-orbit-action orbit-lower-right">
+              <button
+                type="button"
+                className="pod-orbit-btn policies-btn nodrag nopan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onOpenPolicies?.(data);
+                }}
+                title="Security Guard Policies"
+              >
+                <ShieldCheck size={12} />
+              </button>
+            </div>
+
+            {/* Far Upper-Right 2:15: Expand to Full Card Mode */}
+            <div className="pod-orbit-action orbit-far-top-right">
+              <button
+                type="button"
+                className="pod-orbit-btn expand-btn nodrag nopan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPodCardExpanded(data.id, true);
+                }}
+                title="Expand to Full Card Mode"
+              >
+                <Maximize2 size={12} />
+              </button>
+            </div>
+
+            {/* Delete Agent: Far-Lower-Right 4:45 */}
+            <div className="pod-orbit-action orbit-delete">
+              <button
+                type="button"
+                className="pod-orbit-btn delete-btn nodrag nopan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onDelete(data.id);
+                }}
+                title="Delete Agent"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Metadata & Full Card Options Dock (Proper spacing below avatar stage, never covered) ── */}
+        <div className="pod-avatar-meta">
+          {/* Header Name & Full Card Toggle */}
+          <div className="pod-name-row">
+            <span className="pod-avatar-name" title={data.name}>
+              {data.name}
+            </span>
+          </div>
+
+          {/* Role & Specialty */}
+          {(data.role || data.specialty) && (
+            <span className="pod-avatar-role" title={data.description || data.role || ''}>
+              {data.role || data.specialty}
+            </span>
+          )}
+
+          {/* Status Badge (Needs Config / Running / Failed / Ready) */}
+          <div className="pod-status-row">
+            {hasUnconfiguredMcps ? (
+              <button
+                type="button"
+                className="pod-status-badge needs-config nodrag nopan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onAddMcp(data.id, unconfiguredMcps[0]?.mcp_name || unconfiguredMcps[0]?.label);
+                }}
+                title="Credentials required. Click to configure."
+              >
+                <AlertTriangle size={10} color="#f59e0b" />
+                <span>Needs Config</span>
+              </button>
+            ) : isRunning ? (
+              <span className="pod-status-badge running">
+                <span className="pulse-dot" />
+                <span>Running</span>
+              </span>
+            ) : data.latestRun?.status === 'failed' ? (
+              <button
+                type="button"
+                className="pod-status-badge failed nodrag nopan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onOpenDrawer(data);
+                }}
+                title={data.latestRun.error || 'Last run failed. Click to open logs.'}
+                style={{ cursor: 'pointer' }}
+              >
+                <AlertCircle size={10} color="#ef4444" />
+                <span>Failed</span>
+              </button>
+            ) : (
+              <span className="pod-status-badge ready">
+                <span className="status-dot-subtle" />
+                <span>Ready</span>
+              </span>
+            )}
+          </div>
+
+          {/* ── Attached MCPs Chips Row (Visible with remove X icon) ── */}
+          {data.mcps && data.mcps.length > 0 && (
+            <div className="pod-skills-chips-row pod-mcps-chips-row nodrag nopan">
+              {data.mcps.map((mcp) => (
+                <div
+                  key={mcp.id || mcp.mcp_name}
+                  className="pod-skill-chip-tag pod-mcp-chip-tag"
+                  title={`MCP: ${mcp.label || mcp.mcp_name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onAddMcp?.(data.id, mcp.mcp_name);
+                  }}
+                >
+                  <Plug size={9} className="skill-chip-icon" />
+                  <span className="skill-chip-text">{mcp.label || mcp.mcp_name}</span>
+                  {data.onDeleteMcp && (
+                    <button
+                      type="button"
+                      className="skill-chip-remove-btn"
+                      title={`Remove MCP "${mcp.label || mcp.mcp_name}"`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        data.onDeleteMcp(data.id, mcp.id || mcp.mcp_name);
+                      }}
+                    >
+                      <X size={8} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Skills Chips Row (Always Visible side-by-side, No Hover Needed) ── */}
+          {data.skills && data.skills.length > 0 && (
+            <div className="pod-skills-chips-row nodrag nopan">
+              {data.skills.map((skill) => (
+                <div
+                  key={skill.id}
+                  className="pod-skill-chip-tag"
+                  title={`Skill: ${skill.skill_name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onEdit(data, 'general');
+                  }}
+                >
+                  <Sparkles size={9} className="skill-chip-icon" />
+                  <span className="skill-chip-text">{skill.skill_name}</span>
+                  {data.onDeleteSkill && (
+                    <button
+                      type="button"
+                      className="skill-chip-remove-btn"
+                      title={`Remove skill "${skill.skill_name}"`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        data.onDeleteSkill(data.id, skill.id);
+                      }}
+                    >
+                      <X size={8} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Voice Popover */}
+        {isVoiceOpen && data.onVoiceSend && (
+          <VoiceAgentPopover
+            agent={data}
+            onSend={(text) => data.onVoiceSend?.(data, text)}
+            onClose={() => data.onVoiceClose?.()}
+          />
+        )}
+
+        {/* Avatar Picker Modal */}
+        <AvatarPickerModal
+          isOpen={showAvatarPicker}
+          agentId={data.id}
+          agentName={data.name}
+          onClose={() => setShowAvatarPicker(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`crab-agent-node ${isDragOver ? 'crab-drop-active' : ''}`}
+      className={`crab-agent-node ${isDragOver ? 'crab-drop-active' : ''} ${data.inWorkspaceZone ? 'is-in-pod' : ''}`}
+      style={data.inWorkspaceZone ? ({ '--pod-accent': data.workspaceZoneColor || '#38bdf8' } as React.CSSProperties) : undefined}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -252,15 +767,20 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
         {data.mcps.map((mcp) => {
           const McpIcon = getBrandIcon((mcp.mcp_name || '') + ' ' + (mcp.label || ''), 13);
           const isConfigured = isMcpConfigured(mcp);
+          const probe = (mcp as { probe?: { ok: boolean } }).probe;
+          // A server whose last real handshake failed is surfaced, but it does
+          // not gate the run button — the failure may be transient or external.
+          const failing = !!probe && probe.ok === false;
+          const title = !isConfigured
+            ? `${mcp.label || mcp.mcp_name} is unconfigured. Click to configure credentials or remove.`
+            : failing
+              ? `${mcp.label || mcp.mcp_name} failed its last connection test. Re-test it in the MCP panel.`
+              : mcp.mcp_name;
           return (
             <div
               key={mcp.id}
               className={`claw-hand-item mcp ${!isConfigured ? 'unconfigured' : ''}`}
-              title={
-                !isConfigured
-                  ? `${mcp.label || mcp.mcp_name} is unconfigured. Click to configure credentials or remove.`
-                  : mcp.mcp_name
-              }
+              title={title}
               onClick={
                 !isConfigured
                   ? (e) => {
@@ -278,7 +798,13 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
                       borderStyle: 'dashed',
                       cursor: 'pointer',
                     }
-                  : undefined
+                  : failing
+                    ? {
+                        borderColor: 'rgba(239, 68, 68, 0.5)',
+                        color: '#f87171',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                      }
+                    : undefined
               }
             >
               {!isConfigured ? (
@@ -287,6 +813,23 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
                 McpIcon || <Cpu size={12} />
               )}
               <span>{mcp.label || mcp.mcp_name}</span>
+              {failing && isConfigured && (
+                <span
+                  style={{
+                    fontSize: 8.5,
+                    fontWeight: 700,
+                    background: 'rgba(239, 68, 68, 0.25)',
+                    color: '#f87171',
+                    padding: '1px 5px',
+                    borderRadius: 3,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                >
+                  ✗ Failing
+                </span>
+              )}
               {!isConfigured && (
                 <span
                   style={{
@@ -363,12 +906,80 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
       >
         <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
         <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="thread-source"
+          style={{ right: -6, top: 32, opacity: 0 }}
+        />
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="assets-source"
+          style={{ right: -6, top: 120, opacity: 0 }}
+        />
+        <Handle
+          type="target"
+          position={Position.Top}
+          id="peer-target-top"
+          className="peer-connector-handle top-target"
+          style={{ left: '50%', transform: 'translateX(-50%)', top: -7 }}
+          title="Connect peer agent here (Top)"
+        />
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="peer-target-left"
+          className="peer-connector-handle edge-target left-target"
+          style={{ left: -7, top: '50%', transform: 'translateY(-50%)' }}
+          title="Connect peer agent here (Left)"
+        />
+        <Handle
+          type="target"
+          position={Position.Right}
+          id="peer-target-right"
+          className="peer-connector-handle edge-target right-target"
+          style={{ right: -7, left: 'auto', top: '50%', transform: 'translateY(-50%)' }}
+          title="Connect peer agent here (Right)"
+        />
 
         {/* Row 1: Avatar + Title & Short ID + Status Pill */}
         <div className="crab-header">
           <div className="crab-title-group">
-            <div className="crab-avatar-wrap">
-              <img src="/smoke-monkey-mascot.png" alt="Agent" className="crab-avatar" />
+            <div
+              className="crab-avatar-wrap nodrag nopan"
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onOpenDrawer(data);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                setShowAvatarPicker(true);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              title={`${data.name} — Click to open Chat Drawer · Double-click to customize avatar`}
+              style={{ cursor: 'pointer' }}
+              role="button"
+              tabIndex={0}
+              aria-label={`Open ${data.name} chat drawer`}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  data.onOpenDrawer(data);
+                }
+              }}
+            >
+              <AgentAvatar
+                agentId={data.id}
+                size={30}
+                className="crab-avatar"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onOpenDrawer(data);
+                }}
+              />
             </div>
             <div className="crab-title-col">
               <div className="crab-title-row">
@@ -378,31 +989,117 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
                 <span className="crab-id-chip" title={`Agent ID: ${data.id}`}>
                   {shortId}
                 </span>
+                {data.roleZoneRole && (
+                  <span
+                    className="crab-zone-pill"
+                    style={{
+                      background: `${data.roleZoneColor || '#8b5cf6'}20`,
+                      borderColor: `${data.roleZoneColor || '#8b5cf6'}66`,
+                      color: data.roleZoneColor || '#8b5cf6',
+                    }}
+                    title={`Designation: L${data.roleZoneLevel ?? 0} ${data.roleZoneRole}${data.roleZoneName ? ` · ${data.roleZoneName}` : ''}`}
+                  >
+                    L{data.roleZoneLevel ?? 0} {data.roleZoneRole}
+                  </span>
+                )}
+                {data.inWorkspaceZone && (
+                  <>
+                    <span
+                      className="crab-pod-pill"
+                      style={{
+                        background: `${data.workspaceZoneColor || '#38bdf8'}20`,
+                        borderColor: `${data.workspaceZoneColor || '#38bdf8'}55`,
+                        color: data.workspaceZoneColor || '#38bdf8',
+                      }}
+                      title={`Member of ${data.workspaceZoneName || 'Office Space'} pod`}
+                    >
+                      <Building2 size={9} aria-hidden="true" />
+                      <span>{data.workspaceZoneName || 'Pod'}</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="crab-btn-collapse-avatar nodrag nopan"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPodCardExpanded(data.id, false);
+                      }}
+                      title="Collapse to Avatar Representation in pod"
+                    >
+                      <Minimize2 size={10} />
+                      <span>Avatar</span>
+                    </button>
+                  </>
+                )}
               </div>
+              {(data.roleZoneRole || data.role || data.specialty) && (
+                <div
+                  className="crab-role-badge"
+                  title={data.roleZoneRole ? `Inherited from ${data.roleZoneName || 'zone'}` : (data.description || data.role || '')}
+                >
+                  {data.roleZoneRole ? (
+                    <span className="role-tag">{data.roleZoneRole}</span>
+                  ) : (
+                    data.role && <span className="role-tag">{data.role}</span>
+                  )}
+                  {data.specialty && <span className="specialty-tag">• {data.specialty}</span>}
+                </div>
+              )}
             </div>
           </div>
-          {hasUnconfiguredMcps && !isRunning ? (
-            <div
-              className="status-pill"
-              style={{
-                background: 'rgba(245, 158, 11, 0.15)',
-                color: '#f59e0b',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-              title="Agent has attached MCPs that require credentials"
-            >
-              <AlertTriangle size={10} />
-              <span>Needs Config</span>
-            </div>
-          ) : (
-            <div className={`status-pill ${data.status}`}>
-              {data.status === 'running' && <span className="status-dot-pulse" />}
-              {data.status}
-            </div>
-          )}
+          <div className="crab-header-pills">
+            {((data.activeThreadsCount ?? 0) > 0 || isRunning) && (
+              <div
+                className="crab-thread-pill"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onToggleThreads?.(data.id);
+                }}
+                title="Active graphical execution thread in space. Click to inspect."
+              >
+                <span className="crab-thread-pulse-dot" />
+                <span>Thread</span>
+              </div>
+            )}
+            {(data.unreadAssetsCount ?? 0) > 0 && (
+              <div
+                className="crab-thread-pill crab-assets-pill"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onToggleAssets?.(data.id);
+                }}
+                title={`${data.unreadAssetsCount} unread deliverables await review. Click to inspect.`}
+              >
+                <span className="crab-thread-pulse-dot assets-pulse-dot" />
+                <span>Assets ({data.unreadAssetsCount})</span>
+              </div>
+            )}
+            {hasUnconfiguredMcps && !isRunning ? (
+              <div
+                className="status-pill"
+                style={{
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#f59e0b',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+                title="Agent has attached MCPs that require credentials"
+              >
+                <AlertTriangle size={10} />
+                <span>Needs Config</span>
+              </div>
+            ) : (
+              <div className={`status-pill ${data.status}`}>
+                {data.status === 'running' ? (
+                  <span className="status-dot-pulse" aria-hidden="true" />
+                ) : (
+                  <span className="status-dot" aria-hidden="true" />
+                )}
+                {data.status}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Mobile Attached Badges Tray */}
@@ -417,14 +1114,40 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
                   data.onAddMcp(data.id, m.mcp_name || m.label);
                 }}
               >
-                <Cpu size={10} />
+                {getBrandIcon((m.mcp_name || '') + ' ' + (m.label || ''), 11) ?? <Cpu size={10} />}
                 <span>{m.label || m.mcp_name}</span>
+                {data.onDeleteMcp && (
+                  <button
+                    type="button"
+                    className="skill-chip-remove-btn"
+                    title={`Remove MCP "${m.label || m.mcp_name}"`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      data.onDeleteMcp(data.id, m.id);
+                    }}
+                  >
+                    <X size={8} />
+                  </button>
+                )}
               </span>
             ))}
             {data.skills.map((s) => (
-              <span key={s.id} className="attachment-chip skill">
+              <span key={s.id} className="attachment-chip skill" title={s.skill_name}>
                 <Sparkles size={10} />
                 <span>{s.skill_name}</span>
+                {data.onDeleteSkill && (
+                  <button
+                    type="button"
+                    className="skill-chip-remove-btn"
+                    title={`Remove skill "${s.skill_name}"`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      data.onDeleteSkill(data.id, s.id);
+                    }}
+                  >
+                    <X size={8} />
+                  </button>
+                )}
               </span>
             ))}
             {personalityItems.map((p) => (
@@ -437,7 +1160,15 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
         )}
 
         {/* Row 2: Premium Model & Provider Bar */}
-        <div className={`crab-model-bar ${isMobile ? 'is-mobile' : ''}`} title={`${data.model} (${providerLabel})`}>
+        <div
+          className={`crab-model-bar ${isMobile ? 'is-mobile' : ''} nodrag nopan`}
+          title={`${data.model} (${providerLabel}) — Click to configure model in settings`}
+          onClick={(e) => {
+            e.stopPropagation();
+            data.onEdit(data, 'model');
+          }}
+          style={{ cursor: 'pointer' }}
+        >
           <div className="model-bar-left">
             <div className="crab-model-provider">
               {ProviderIcon ? <ProviderIcon size={12} /> : <Cpu size={12} />}
@@ -586,7 +1317,7 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
               ) : (
                 <>
                   <Play size={13} fill="currentColor" />
-                  <span>Run Now</span>
+                  <span>Run</span>
                 </>
               )}
             </button>
@@ -701,6 +1432,38 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
             </button>
           </div>
         )}
+
+        {/* Miro-Style Peer Delegation Connector Dock */}
+        <div
+          className="crab-peer-socket"
+          title="Drag the glowing connector to another agent to establish a peer delegation link"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Full-dock drop target overlay */}
+          <Handle
+            type="target"
+            position={Position.Bottom}
+            id="peer-target"
+            className="peer-dock-target-overlay"
+            title="Drop peer connection here"
+            isConnectable={true}
+          />
+          <div className="peer-socket-pill">
+            <span className="peer-socket-icon" aria-hidden="true"><Handshake size={12} /></span>
+            <span className="peer-socket-label">Peer Delegation</span>
+            <span className="peer-socket-hint">Pull dot to link</span>
+          </div>
+          <div className="miro-connector-btn" title="Drag to connect to another peer agent">
+            <div className="miro-handle-ring" />
+            <Handle
+              type="source"
+              position={Position.Bottom}
+              id="peer-source"
+              className="miro-source-handle"
+              isConnectable={true}
+            />
+          </div>
+        </div>
       </div>
 
       {/* ── Right Claw Hands (Skills & Policies Attachments) — Desktop Only ── */}
@@ -784,6 +1547,14 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
           }}
         />
       )}
+
+      {/* ── Avatar Face Customizer Modal ── */}
+      <AvatarPickerModal
+        isOpen={showAvatarPicker}
+        agentId={data.id}
+        agentName={data.name}
+        onClose={() => setShowAvatarPicker(false)}
+      />
     </div>
   );
 }, areAgentNodePropsEqual);

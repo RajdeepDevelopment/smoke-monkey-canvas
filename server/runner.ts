@@ -137,7 +137,7 @@ export class AgentRunner {
       // 4. Instantiate harness agent
       const harnessAgent = createAgent({
         provider,
-        model: agent.model || 'meta/llama-3.3-70b-instruct',
+        model: agent.model || 'nvidia/nemotron-3-super-120b-a12b',
         apiKey,
         workspacePath: process.cwd(),
         systemPrompt: agent.system_prompt,

@@ -85,7 +85,7 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
                 className="btn-secondary"
                 style={{ fontSize: 11, padding: '3px 8px' }}
                 onClick={handleEnableAll}
-                title="Enable all 24 tools"
+                title="Enable all tools"
               >
                 Enable All
               </button>

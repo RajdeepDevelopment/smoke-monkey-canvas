@@ -41,6 +41,8 @@
   </dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Smoke Monkey Canvas requires microphone access to enable voice commands, speech-to-text, and conversational interaction with autonomous agents.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Smoke Monkey Canvas uses on-device speech recognition to transcribe your voice into prompts for autonomous agents.</string>
   <key>NSCameraUsageDescription</key>
   <string>Smoke Monkey Canvas requires camera access for multi-modal visual inspection.</string>
   <key>NSDocumentsFolderUsageDescription</key>

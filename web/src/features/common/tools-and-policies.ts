@@ -36,6 +36,10 @@ export const BUILTIN_TOOLS: BuiltinToolMeta[] = [
   { name: 'finish_task', label: 'Finish Task & Finalize', category: 'Agent', description: 'Signal task completion with final prose report summary' },
   { name: 'todo_write', label: 'Update Task TODOs', category: 'Agent', description: 'Maintain step-by-step progress checklist for the run' },
 
+  // Canvas custom tools
+  { name: 'canvas_ping', label: 'Canvas Ping (Custom)', category: 'Agent', description: 'Dummy canvas-owned custom tool — verifies custom tool wiring end-to-end' },
+  { name: 'delegate_task', label: 'Peer Agent Delegation (Custom)', category: 'Agent', description: 'Synchronously delegate tasks with markdown requirements to connected peer agents on the canvas' },
+
   // Skills & MCP (4)
   { name: 'mcp_inspect', label: 'Inspect Stock MCPs', category: 'Skills & MCP', description: 'Discover available external MCP server capabilities' },
   { name: 'mcp_approve', label: 'Request MCP Approval', category: 'Skills & MCP', description: 'Ask user permission to attach a new MCP server' },

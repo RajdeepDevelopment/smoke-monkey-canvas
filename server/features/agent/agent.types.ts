@@ -17,8 +17,18 @@ export interface AgentRecord {
   personalities?: string | null;
   /** Preset ids from OUTPUT_STYLE_PRESETS. JSON array, like `policies`. */
   output_styles?: string | null;
+  role?: string | null;
+  description?: string | null;
+  specialty?: string | null;
   working_dir?: string | null;
   max_memory_mb?: number | null;
+  created_at: string;
+}
+
+export interface AgentConnectionRecord {
+  id: string;
+  source_agent_id: string;
+  target_agent_id: string;
   created_at: string;
 }
 
@@ -129,3 +139,28 @@ export interface ChatMessageRecord {
   run_id: string | null;
   created_at: string;
 }
+
+export type CronJobSource = 'user' | 'agent' | 'system';
+
+export interface AgentCronJobRecord {
+  id: string;
+  agent_id: string;
+  name: string;
+  prompt: string;
+  cron_schedule: string;
+  enabled: number;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_by: CronJobSource;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentCronJobInput {
+  name: string;
+  prompt: string;
+  cron_schedule: string;
+  enabled?: boolean | number;
+  created_by?: CronJobSource;
+}
+

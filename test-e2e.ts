@@ -27,7 +27,7 @@ async function runTest() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: 'Firecrawl Job Searcher',
-        model: 'meta/llama-3.3-70b-instruct',
+        model: 'nvidia/nemotron-3-super-120b-a12b',
         provider: 'nvidia',
         system_prompt: 'Search the web for remote AI engineer jobs and extract details.',
         cron_enabled: 1,

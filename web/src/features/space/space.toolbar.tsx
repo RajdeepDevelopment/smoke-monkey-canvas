@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Bot, Clock, Maximize2, ShieldCheck, Sun, Moon, Check } from 'lucide-react';
+import { Plus, Bot, Clock, Maximize2, ShieldCheck, Sun, Moon, Check, LayoutGrid } from 'lucide-react';
 import type { SpaceAgentEntity } from '../agent/agent.types.js';
 
 export type ThemeMode =
@@ -8,7 +8,8 @@ export type ThemeMode =
   | 'theme-light-pastel'
   | 'theme-dark-midnight'
   | 'theme-dark-carbon'
-  | 'theme-dark-nebula';
+  | 'theme-dark-nebula'
+  | 'theme-dark-matrix';
 
 export interface ThemeOption {
   id: ThemeMode;
@@ -22,10 +23,11 @@ export const THEMES: ThemeOption[] = [
   { id: 'theme-light-studio', name: '☀️ Studio White', type: 'light', icon: '☀️' },
   { id: 'theme-light-paper', name: '📜 Warm Paper', type: 'light', icon: '📜' },
   { id: 'theme-light-pastel', name: '🌸 Pastel Sky', type: 'light', icon: '🌸' },
-  // 3 Dark Modes
+  // 4 Dark Modes
   { id: 'theme-dark-midnight', name: '🌌 Cyber Midnight', type: 'dark', icon: '🌌' },
   { id: 'theme-dark-carbon', name: '⬛ Obsidian Carbon', type: 'dark', icon: '⬛' },
   { id: 'theme-dark-nebula', name: '🔮 Deep Nebula', type: 'dark', icon: '🔮' },
+  { id: 'theme-dark-matrix', name: '📟 Emerald Matrix', type: 'dark', icon: '📟' },
 ];
 
 interface SpaceToolbarProps {
@@ -35,6 +37,7 @@ interface SpaceToolbarProps {
   onOpenSettings: () => void;
   onAddAgent: () => void;
   onFitView: () => void;
+  onAutoArrange?: () => void;
 }
 
 function areToolbarPropsEqual(prev: SpaceToolbarProps, next: SpaceToolbarProps) {
@@ -58,6 +61,7 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
   onOpenSettings,
   onAddAgent,
   onFitView,
+  onAutoArrange,
 }) => {
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const runningCount = agents.filter((a) => a.status === 'running').length;
@@ -144,7 +148,7 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
           onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
           data-tooltip="Switch Theme"
           data-tooltip-side="bottom"
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 999 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999 }}
         >
           {currentThemeObj.type === 'light' ? <Sun size={13} color="#f59e0b" /> : <Moon size={13} color="#8b5cf6" />}
           <span className="toolbar-theme-label" style={{ fontSize: 11, fontWeight: 600 }}>
@@ -157,16 +161,6 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
             className="theme-dropdown-menu"
             onClick={(e) => e.stopPropagation()}
             style={{
-              position: 'absolute',
-              top: 'calc(100% + 8px)',
-              right: 0,
-              minWidth: 230,
-              background: 'hsl(var(--card))',
-              border: '1px solid hsl(var(--border))',
-              borderRadius: 12,
-              padding: 6,
-              boxShadow: '0 16px 36px -4px rgba(0, 0, 0, 0.45)',
-              zIndex: 1000,
               display: 'flex',
               flexDirection: 'column',
               gap: 2,
@@ -201,14 +195,20 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
                     width: '100%',
                     padding: '7px 10px',
                     borderRadius: 7,
-                    border: isActive ? '1px solid #2563eb' : '1px solid transparent',
-                    background: isActive ? 'rgba(37, 99, 235, 0.12)' : 'transparent',
-                    color: isActive ? '#3b82f6' : 'hsl(var(--foreground))',
+                    border: isActive ? '1px solid rgba(59, 130, 246, 0.7)' : '1px solid transparent',
+                    background: isActive ? 'rgba(59, 130, 246, 0.14)' : 'transparent',
+                    color: isActive ? '#60a5fa' : 'hsl(var(--foreground))',
                     fontWeight: isActive ? 600 : 500,
-                    fontSize: 12,
+                    fontSize: 11.5,
                     cursor: 'pointer',
                     textAlign: 'left',
-                    transition: 'all 0.12s ease',
+                    transition: 'background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.12s cubic-bezier(0.23, 1, 0.32, 1)',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) e.currentTarget.style.background = 'hsl(var(--secondary) / 0.6)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) e.currentTarget.style.background = 'transparent';
                   }}
                   onClick={() => {
                     onSelectTheme(t.id);
@@ -246,7 +246,7 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
               }}
             >
               <Moon size={11} color="#8b5cf6" />
-              <span>Dark Modes (3)</span>
+              <span>Dark Modes (4)</span>
             </div>
             {THEMES.filter((t) => t.type === 'dark').map((t) => {
               const isActive = currentTheme === t.id;
@@ -286,6 +286,19 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
           </div>
         )}
       </div>
+
+      {/* Auto-Arrange / Tidy Canvas Button */}
+      {onAutoArrange && (
+        <button
+          className="toolbar-icon-btn"
+          onClick={onAutoArrange}
+          data-tooltip="Auto-arrange & tidy canvas"
+          data-tooltip-shortcut="⌘⇧A"
+          data-tooltip-side="bottom"
+        >
+          <LayoutGrid size={13} />
+        </button>
+      )}
 
       {/* Fit View Button */}
       <button

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Maximize2, ShieldCheck, Sun, Moon, Check, Bot } from 'lucide-react';
+import { Plus, Maximize2, ShieldCheck, Sun, Moon, Check, Bot, LayoutGrid } from 'lucide-react';
 import type { SpaceAgentEntity } from '../../agent/agent.types.js';
 import { type ThemeMode, THEMES } from '../space.toolbar.js';
 
@@ -10,6 +10,7 @@ interface SpaceToolbarMobileProps {
   onOpenSettings: () => void;
   onAddAgent: () => void;
   onFitView: () => void;
+  onAutoArrange?: () => void;
 }
 
 export const SpaceToolbarMobile: React.FC<SpaceToolbarMobileProps> = React.memo(({
@@ -19,6 +20,7 @@ export const SpaceToolbarMobile: React.FC<SpaceToolbarMobileProps> = React.memo(
   onOpenSettings,
   onAddAgent,
   onFitView,
+  onAutoArrange,
 }) => {
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const runningCount = agents.filter((a) => a.status === 'running').length;
@@ -104,6 +106,19 @@ export const SpaceToolbarMobile: React.FC<SpaceToolbarMobileProps> = React.memo(
             </div>
           )}
         </div>
+
+        {/* Auto-Arrange */}
+        {onAutoArrange && (
+          <button
+            type="button"
+            className="mobile-tool-btn"
+            onClick={onAutoArrange}
+            title="Auto-Arrange Canvas"
+            aria-label="Auto-Arrange Canvas"
+          >
+            <LayoutGrid size={14} />
+          </button>
+        )}
 
         {/* Fit View */}
         <button

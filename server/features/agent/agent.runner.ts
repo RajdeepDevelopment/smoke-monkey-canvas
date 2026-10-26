@@ -7,6 +7,7 @@ import type { AgentRecord, RunRecord } from './agent.types.js';
 import { CoreWsServer } from '../core/ws.server.js';
 import { CoreDatabase } from '../core/database.db.js';
 import { STOCK_MCPS } from '../mcp/mcp.stock.js';
+import { getAccessToken } from '../mcp/mcp.oauth.js';
 import {
   writeAgentManifest,
   writeCommonAgentRegistry,
@@ -24,6 +25,10 @@ import {
 import { buildSubPrompts, mergeEffectivePolicies, resolveAgentWorkspace } from './agent.prompt.js';
 import { parsePolicies } from './agent.types.js';
 import { detectGitRepository, ensureRepoMemory } from './agent.repo-memory.js';
+import { CUSTOM_AGENT_TOOLS } from './agent.custom-tools.js';
+import { checkAgentConfigStatus } from './agent.config-check.js';
+import { SpaceDb } from '../space/space.db.js';
+import { buildAgentTeamWorkflowBlock } from '../space/space.workflow.js';
 
 export interface ActiveRunContext {
   runId: string;
@@ -47,6 +52,11 @@ export class AgentRunner {
   private ws: CoreWsServer;
   private activeRuns = new Map<string, ActiveRunContext>();
   private agentStores = new Map<string, MemoryStore>();
+  private runWaiters = new Map<string, Array<(run: RunRecord) => void>>();
+
+  getDb(): AgentDb {
+    return this.db;
+  }
 
   getOrCreateStore(agentId: string, sessionId?: string, excludeRunId?: string): MemoryStore {
     let store = this.agentStores.get(agentId);
@@ -423,6 +433,25 @@ export class AgentRunner {
     return run;
   }
 
+  async runAgentAndWait(
+    agentId: string,
+    triggerType: 'cron' | 'manual' = 'manual',
+    customPrompt?: string,
+    sessionId?: string,
+    msgIds?: { userMsgId?: string; assistantMsgId?: string },
+  ): Promise<RunRecord> {
+    const run = await this.runAgent(agentId, triggerType, customPrompt, sessionId, msgIds);
+    const existing = this.db.getRun(run.id);
+    if (existing && existing.status !== 'running') {
+      return existing;
+    }
+    return new Promise<RunRecord>((resolve) => {
+      const list = this.runWaiters.get(run.id) || [];
+      list.push(resolve);
+      this.runWaiters.set(run.id, list);
+    });
+  }
+
   private async execute(
     agent: AgentRecord,
     run: RunRecord,
@@ -482,7 +511,45 @@ export class AgentRunner {
         const serverId = m.mcp_name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
         const serverDesc = stock?.description ?? m.label ?? m.mcp_name;
 
-        if (stock) {
+        // A stock entry may be remote (streamable-HTTP) rather than a local
+        // stdio package. Those must be attached over `url`, never spawned via
+        // `npx -y <name>` — there is no such npm package for a hosted server.
+        const remoteUrl = (config.url as string) ?? stock?.url;
+        const isRemote = !!remoteUrl;
+
+        if (isRemote) {
+          // Remote servers authenticate with a bearer token. Use the OAuth
+          // access token when the user completed "Connect" (it refreshes
+          // itself when expired); otherwise fall back to a provider token the
+          // user pasted. Without a header the request is anonymous and the
+          // server answers 401 even though the account is connected.
+          const headers: Record<string, string> = {};
+          const configuredHeaders = config.headers as Record<string, unknown> | undefined;
+          if (configuredHeaders && typeof configuredHeaders === 'object') {
+            for (const [k, v] of Object.entries(configuredHeaders)) {
+              if (typeof v === 'string' && v) headers[k] = v;
+            }
+          }
+          if (!headers.Authorization && !headers.authorization) {
+            const token = await getAccessToken(m.mcp_name, remoteUrl!).catch(() => null);
+            if (token) {
+              headers.Authorization = `Bearer ${token}`;
+            } else {
+              const pasted = (stock?.envKeys ?? [])
+                .map((k) => env[k] || coreDb.getSetting(k))
+                .find(Boolean);
+              if (pasted) headers.Authorization = `Bearer ${pasted}`;
+            }
+          }
+          mcpConfigs.push({
+            id: serverId,
+            name: m.mcp_name,
+            description: serverDesc,
+            url: remoteUrl,
+            headers,
+          });
+          mcpConfigRecords.push(m);
+        } else if (stock) {
           mcpConfigs.push({
             id: serverId,
             name: m.mcp_name,
@@ -500,14 +567,6 @@ export class AgentRunner {
             command: config.command as string,
             args: (config.args as string[]) ?? [],
             env,
-          });
-          mcpConfigRecords.push(m);
-        } else if (config.url) {
-          mcpConfigs.push({
-            id: serverId,
-            name: m.mcp_name,
-            description: serverDesc,
-            url: config.url as string,
           });
           mcpConfigRecords.push(m);
         }
@@ -532,6 +591,7 @@ export class AgentRunner {
         openai: 'OPENAI_API_KEY',
         anthropic: 'ANTHROPIC_API_KEY',
         gemini: 'GEMINI_API_KEY',
+  google: 'GEMINI_API_KEY',
         openrouter: 'OPENROUTER_API_KEY',
         groq: 'GROQ_API_KEY',
         xai: 'XAI_API_KEY',
@@ -558,7 +618,7 @@ export class AgentRunner {
 
       // Safe model fallback if user had the retired llama-3.3-70b-instruct
       let resolvedModel = agent.model;
-      if (!resolvedModel || resolvedModel === 'meta/llama-3.3-70b-instruct') {
+      if (!resolvedModel || resolvedModel === 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' || resolvedModel === 'meta/llama-3.3-70b-instruct') {
         resolvedModel = 'nvidia/nemotron-3-super-120b-a12b';
       }
 
@@ -634,6 +694,26 @@ export class AgentRunner {
         systemPrompt: agent.system_prompt,
       });
 
+      // GitHub plugin skills are installed into the agent workspace on the first
+      // deployment that uses them. Stock skills stay in the bundled catalog and
+      // are passed to the harness directly, so they are never copied here.
+      const isGitHubPluginSkill = (s: (typeof skillRecords)[number]) =>
+        s.skill_name.includes('/') ||
+        (s.content.includes('## Provenance') && s.content.includes('https://github.com/'));
+      for (const s of skillRecords) {
+        if (!isGitHubPluginSkill(s)) continue;
+        const slug = s.skill_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'plugin-skill';
+        const targetDir = join(manifest.skillsDir, slug);
+        const targetFile = join(targetDir, 'SKILL.md');
+        if (fs.existsSync(targetFile)) continue;
+        try {
+          fs.mkdirSync(targetDir, { recursive: true });
+          fs.writeFileSync(targetFile, s.content, 'utf8');
+        } catch (err) {
+          console.warn(`[agent.runner] Failed to install plugin skill ${s.skill_name}:`, err);
+        }
+      }
+
       // Shared registry every agent can read/append to (MCP servers + env names).
       const commonRoot = join(homedir(), SMOKE_AGENTS_ROOT, COMMON_DIR);
       const sharedMcps: SharedMcpInfo[] = STOCK_MCPS.map((s) => ({
@@ -703,6 +783,16 @@ export class AgentRunner {
         dbPolicies,
         readAgentPolicyManifest(manifest),
       );
+      const rawPeers = this.db.getConnectedPeers(agentId);
+      const peerAgents = rawPeers.map((p) => {
+        const configStatus = checkAgentConfigStatus(p.id, this.db);
+        return {
+          ...p,
+          isConfigured: configStatus.isConfigured,
+          unconfiguredReasons: configStatus.reasons,
+        };
+      });
+      const teamWorkflow = buildAgentTeamWorkflowBlock(agentId, this.db, new SpaceDb());
       const combinedSubPrompts = buildSubPrompts({
         policyEntries: effectivePolicies,
         disabledTools,
@@ -713,9 +803,14 @@ export class AgentRunner {
         manifest,
         common,
         agentId,
+        agentName: agent.name,
+        peerAgents,
+        teamWorkflow,
       });
 
       // 6. Instantiate harness agent with stable session and store
+      // Crucial: Pass skillsDir scoped strictly to the agent's private workspace
+      // so harness does NOT fallback to scanning the entire host system / home directory (which would leak 120+ global skills)
       const harnessAgent = createAgent({
         provider,
         model: resolvedModel,
@@ -729,9 +824,17 @@ export class AgentRunner {
           : 'allow-all',
         mcp: mcpConfigs.length > 0 ? mcpConfigs : undefined,
         skills: skills.length > 0 ? skills : undefined,
+        skillsDir: manifest.skillsDir ? [manifest.skillsDir] : [],
         sessionId,
         store,
       });
+
+      // Add canvas-owned custom tools on top of the built-in groups. The
+      // constructor keeps all default tools; registerTool is the documented
+      // dynamic path for tools the host owns (see harness.d.ts).
+      for (const tool of CUSTOM_AGENT_TOOLS) {
+        harnessAgent.registerTool(tool);
+      }
 
       runContext.harness = harnessAgent;
 
@@ -895,6 +998,7 @@ export class AgentRunner {
             toolName: e.data.toolName,
             toolCallId: e.data.toolCallId,
             args: e.data.args,
+            presentation: e.data.presentation,
           },
           {
             type: 'tool:start',
@@ -902,6 +1006,7 @@ export class AgentRunner {
             toolName: e.data.toolName,
             input: e.data.args,
             args: e.data.args,
+            presentation: e.data.presentation,
           },
         ),
       );
@@ -912,11 +1017,13 @@ export class AgentRunner {
             toolName: e.data.toolName,
             toolCallId: e.data.toolCallId,
             result: e.data.result,
+            presentation: e.data.presentation,
           },
           {
             type: 'tool:result',
             toolCallId: e.data.toolCallId,
             result: e.data.result,
+            presentation: e.data.presentation,
           },
         );
 
@@ -949,13 +1056,34 @@ export class AgentRunner {
         ),
       );
       harnessAgent.on('ask_user.required', (e) => {
-        broadcastAndLog('ask_user.required', { question: e.data.question }, { type: 'prompt:ask', question: e.data.question });
+        const prompt = {
+          kind: 'ask',
+          toolCallId: String(e.data.toolCallId ?? ''),
+          question: String(e.data.question ?? ''),
+          ...(Array.isArray(e.data.options) ? { options: e.data.options } : {}),
+          ...(typeof e.data.multiple === 'boolean' ? { multiple: e.data.multiple } : {}),
+        };
+        broadcastAndLog(
+          'ask_user.required',
+          { question: e.data.question },
+          { type: 'prompt:ask', prompt },
+        );
         harnessAgent.respond?.(e.data.toolCallId as string, 'Proceed with the optimal resolution.');
       });
       harnessAgent.on('permission.required', (e) => {
         broadcastAndLog('permission.required', { toolName: e.data.toolName });
         harnessAgent.resolvePermission?.(e.data.toolCallId as string, 'allow');
       });
+      harnessAgent.on('todo.updated', (e) =>
+        broadcastAndLog('todo.updated', { todos: e.data.todos }, { type: 'todos:updated', todos: e.data.todos }),
+      );
+      harnessAgent.on('context.updated', (e) =>
+        broadcastAndLog(
+          'context.updated',
+          { active: e.data.active, count: e.data.count, maxActive: e.data.maxActive },
+          { type: 'context:updated', active: e.data.active, count: e.data.count, maxActive: e.data.maxActive },
+        ),
+      );
 
       // 8. Announce execution environment & run task
       broadcastAndLog('agent.envelope', {
@@ -1126,6 +1254,14 @@ export class AgentRunner {
       });
     } finally {
       this.activeRuns.delete(runId);
+      const waiters = this.runWaiters.get(runId);
+      if (waiters) {
+        const finalRun = this.db.getRun(runId) || run;
+        for (const resolve of waiters) {
+          resolve(finalRun);
+        }
+        this.runWaiters.delete(runId);
+      }
       const stillRunning = this.isAgentRunning(agentId);
       const nextStatus = stillRunning ? 'running' : (agent.cron_enabled === 1 ? 'scheduled' : 'idle');
       const completedAt = new Date().toISOString();

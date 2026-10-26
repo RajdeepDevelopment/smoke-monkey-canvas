@@ -12,17 +12,19 @@ import {
   AlertCircle,
   Send,
   Cpu,
+  Zap,
 } from 'lucide-react';
 import type { SpaceAgentEntity, RunRecord, ChatSessionRecord } from '../agent.types.js';
 import type { LiveLogEvent } from '../agent.drawer.js';
 import type { ChatMessage } from '@smoke-monkey/ui';
 import { ChatVoiceButton } from '../../voice/chat-voice-button.js';
 import { AgentFileExplorer } from '../agent.file-explorer.js';
+import { AgentAvatar } from '../agent-avatar.js';
 
 export interface AgentDrawerMobileProps {
   agent: SpaceAgentEntity;
-  activeTab: 'chat' | 'terminal' | 'history' | 'files';
-  setActiveTab: (tab: 'chat' | 'terminal' | 'history' | 'files') => void;
+  activeTab: 'chat' | 'terminal' | 'history' | 'files' | 'cron';
+  setActiveTab: (tab: 'chat' | 'terminal' | 'history' | 'files' | 'cron') => void;
   filesCount?: number;
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -97,7 +99,7 @@ export const AgentDrawerMobile: React.FC<AgentDrawerMobileProps> = React.memo(({
 
       {/* Mobile Drawer Sheet */}
       <section 
-        className="agent-mobile-sheet"
+        className="agent-mobile-sheet ap-agent-mobile-sheet"
         role="dialog"
         aria-modal="true"
         aria-label={`Agent ${agent.name}`}
@@ -112,12 +114,23 @@ export const AgentDrawerMobile: React.FC<AgentDrawerMobileProps> = React.memo(({
         <div className="agent-mobile-header">
           <div className="agent-mobile-header-left">
             <div className="agent-mobile-mascot-wrap">
-              <img
-                src="/smoke-monkey-mascot.png"
-                alt="Agent Mascot"
-                className="agent-mobile-mascot"
-              />
-              <span className={`agent-mobile-status-dot ${agent.status}`} />
+              <div className="mobile-collab-avatar" title={`${agent.name} × Smoke Monkey`}>
+                <div className="mobile-collab-disc">
+                  <AgentAvatar
+                    agentId={agent.id}
+                    size={34}
+                    className="mobile-collab-agent-avatar"
+                  />
+                </div>
+                <div className="mobile-collab-mascot-badge" title="Smoke Monkey Canvas Engine">
+                  <img
+                    src="/smoke-monkey-mascot.png"
+                    alt="Smoke Monkey"
+                    className="agent-mobile-mascot"
+                  />
+                </div>
+              </div>
+              <span className={`agent-mobile-status-dot ${agent.status}`} aria-hidden="true" />
             </div>
             <div className="agent-mobile-title-col">
               <div className="agent-mobile-name-row">
@@ -125,7 +138,7 @@ export const AgentDrawerMobile: React.FC<AgentDrawerMobileProps> = React.memo(({
                 <span className="agent-mobile-id-badge">{shortId}</span>
               </div>
               <div className="agent-mobile-meta-row">
-                <span className="agent-mobile-model-tag">
+                <span className="agent-mobile-model-tag" title={agent.model}>
                   <Cpu size={10} />
                   <span>{agent.model.split('/').pop()}</span>
                 </span>
@@ -220,11 +233,11 @@ export const AgentDrawerMobile: React.FC<AgentDrawerMobileProps> = React.memo(({
               <div className="agent-mobile-messages-scroll">
                 {messages.length === 0 ? (
                   <div className="agent-mobile-empty-chat">
-                    <img src="/smoke-monkey-mascot.png" alt="Mascot" style={{ width: 44, height: 44, opacity: 0.8 }} />
-                    <div style={{ fontWeight: 600, fontSize: 13, color: '#f8fafc', marginTop: 10 }}>
-                      Ready to collaborate
-                    </div>
-                    <div style={{ fontSize: 11.5, color: '#94a3b8', maxWidth: 240, textAlign: 'center', marginTop: 4 }}>
+                    <span className="ap-mobile-empty-mark">
+                      <img src="/smoke-monkey-mascot.png" alt="" />
+                    </span>
+                    <div className="agent-mobile-empty-title">Ready to collaborate</div>
+                    <div className="agent-mobile-empty-desc">
                       Send an instruction or ask {agent.name} to perform a task.
                     </div>
                   </div>
@@ -250,7 +263,7 @@ export const AgentDrawerMobile: React.FC<AgentDrawerMobileProps> = React.memo(({
                             <div className="agent-bubble-tools">
                               {msg.toolCalls.map((tc) => (
                                 <div key={tc.id} className="mobile-tool-chip">
-                                  <span className="tool-indicator">⚡</span>
+                                  <Zap size={10} className="tool-indicator" aria-hidden="true" />
                                   <span className="tool-name">{tc.name || (tc as any).title}</span>
                                 </div>
                               ))}

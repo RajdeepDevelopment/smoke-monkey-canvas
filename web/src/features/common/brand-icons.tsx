@@ -457,6 +457,18 @@ export const BrandIcons: Record<string, React.FC<{ size?: number; className?: st
       <circle cx="12" cy="16" r="6" fill="#EAB308" />
     </svg>
   ),
+  // ── MCP ──────────────────────────────────────────────────────────────────
+  // Mark for any server that speaks MCP. Vendor logos (github, slack, ...)
+  // still win when we recognise them; this is the fallback for catalog/custom.
+  mcp: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="#5B5BF6" />
+      <path d="M12 11.3v2.3M10.4 13.4 8.3 14.8M13.6 13.4l2.1 1.4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="12" cy="9.1" r="2.15" fill="#fff" />
+      <circle cx="7.1" cy="16.1" r="1.75" fill="#fff" />
+      <circle cx="16.9" cy="16.1" r="1.75" fill="#fff" />
+    </svg>
+  ),
 };
 
 export interface BrandMeta {
@@ -467,6 +479,12 @@ export interface BrandMeta {
 }
 
 export const BRAND_CONFIGS: Record<string, BrandMeta> = {
+  mcp: {
+    color: '#8E8EFF',
+    bgColor: 'rgba(91, 91, 246, 0.18)',
+    borderColor: 'rgba(91, 91, 246, 0.38)',
+    glowColor: 'rgba(91, 91, 246, 0.35)',
+  },
   github: {
     color: '#FFFFFF',
     bgColor: 'rgba(255, 255, 255, 0.08)',
@@ -801,3 +819,60 @@ export const getBrandVisuals = (key: string, size = 26): BrandVisuals => {
     glowColor: 'rgba(167, 139, 250, 0.3)',
   };
 };
+
+export interface McpBrandIconProps {
+  mcp?: {
+    name?: string;
+    label?: string;
+    iconUrl?: string;
+  } | null;
+  size?: number;
+  className?: string;
+  fallback?: React.ReactNode;
+}
+
+export const McpBrandIcon: React.FC<McpBrandIconProps> = ({
+  mcp,
+  size = 24,
+  className = '',
+  fallback,
+}) => {
+  const [hasError, setHasError] = React.useState(false);
+
+  const iconUrl =
+    mcp?.iconUrl ||
+    (mcp?.name?.startsWith('mcpai-')
+      ? `https://mcp-ai-public-assets.s3.amazonaws.com/logos/${mcp.name.replace(/^mcpai-/, '')}.svg`
+      : undefined);
+
+  React.useEffect(() => {
+    setHasError(false);
+  }, [iconUrl]);
+
+  if (!iconUrl || hasError) {
+    if (fallback) return <>{fallback}</>;
+    const defaultVisuals = getBrandVisuals(`${mcp?.label || ''} ${mcp?.name || ''}`, size);
+    return <>{defaultVisuals.icon}</>;
+  }
+
+  return (
+    <img
+      src={iconUrl}
+      alt={mcp?.label || mcp?.name || 'MCP'}
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setHasError(true)}
+      className={`lib-mcp-brand-img ${className}`}
+      style={{
+        width: size,
+        height: size,
+        maxWidth: '100%',
+        maxHeight: '100%',
+        objectFit: 'contain',
+        display: 'block',
+      }}
+    />
+  );
+};
+

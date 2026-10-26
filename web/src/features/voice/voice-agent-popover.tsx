@@ -9,7 +9,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useSpeechToText } from './use-speech-to-text.js';
-import { SUPPORTED_VOICE_LANGUAGES } from './voice.types.js';
+import { getAvailableVoiceLanguages, type VoiceLanguage } from './voice.types.js';
 import type { SpaceAgentEntity } from '../agent/agent.types.js';
 
 interface VoiceAgentPopoverProps {
@@ -69,9 +69,10 @@ export const VoiceAgentPopover: React.FC<VoiceAgentPopoverProps> = ({
     }
   }, [displayText]);
 
+  // Offer only what this platform's speech engine can recognize.
+  const availableLanguages = getAvailableVoiceLanguages();
   const currentLangObj =
-    SUPPORTED_VOICE_LANGUAGES.find((l) => l.code === language) ||
-    SUPPORTED_VOICE_LANGUAGES[0];
+    availableLanguages.find((l: VoiceLanguage) => l.code === language) || availableLanguages[0];
 
   const handleConfirmAndSend = () => {
     const finalClean = displayText.trim();
@@ -180,7 +181,7 @@ export const VoiceAgentPopover: React.FC<VoiceAgentPopoverProps> = ({
               onChange={(e) => setLanguage(e.target.value)}
               aria-label="Select speech language"
             >
-              {SUPPORTED_VOICE_LANGUAGES.map((l) => (
+              {availableLanguages.map((l: VoiceLanguage) => (
                 <option key={l.code} value={l.code}>
                   {l.flag} {l.label}
                 </option>

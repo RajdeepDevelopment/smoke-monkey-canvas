@@ -6,7 +6,17 @@ import {
   Network, Activity, Scale, Kanban, Server, CircleUserRound,
   Compass, PencilLine, FolderOpen, Terminal, FlaskConical as Beaker,
   GitBranch, ListTodo, Box, Rocket, UserRoundCog, TextCursorInput,
-  Database, BookOpen,
+  Database, BookOpen, Building2,
+  Armchair, Smile, Leaf, Zap, Target, PartyPopper, Meh, ThumbsUp,
+  Heart, HandHeart, HeartHandshake, Flower2, Hourglass, Shield, Sparkles,
+  Coffee, Glasses, Radio, Gamepad2, Briefcase, Star, Crown, ClipboardList,
+  Newspaper, TrendingUp, Sword, CircleCheck, Annoyed, Minus, TriangleAlert,
+  Handshake, CircleHelp, Search, Lightbulb, Brain, ScrollText, Feather,
+  Swords, Laugh, Smartphone, Table, Workflow, BarChart3, Blocks, GanttChart,
+  GitFork, SquareCode, SquareTerminal, ArrowRightLeft, FileDiff, AlignLeft,
+  AlignJustify, ListOrdered, List, Heading, Type, MessageCircleQuestion,
+  Braces, Settings2, FileSpreadsheet, FileText, Presentation, Columns3,
+  ListTree, MessagesSquare,
 } from 'lucide-react';
 
 /**
@@ -19,6 +29,8 @@ import {
 /** Section header marks for the collapsed icon rail. */
 export const LIB_TAB_ICONS: Record<string, LucideIcon> = {
   mcp: Package,
+  spaces: Building2,
+  zones: Network,
   skills: WandSparkles,
   agents: BrainCircuit,
   tools: Wrench,
@@ -29,6 +41,8 @@ export const LIB_TAB_ICONS: Record<string, LucideIcon> = {
 /** Fallback accent per rail tab, used for the tile gradient. */
 export const LIB_TAB_COLORS: Record<string, string> = {
   mcp: '#f97316',
+  spaces: '#38bdf8',
+  zones: '#a855f7',
   skills: '#a78bfa',
   agents: '#10b981',
   tools: '#06b6d4',
@@ -167,3 +181,160 @@ export const pluginCategoryIcon = (category: string): LucideIcon =>
 
 export const pluginCategoryColor = (category: string): string =>
   PLUGIN_CATEGORY_COLORS[category] || '#64748b';
+
+/**
+ * Curated glyph per personality-preset id. Ids come from the server catalogue in
+ * `server/features/agent/agent.presets.ts`; when a preset is added there and not
+ * registered here it falls back to its category mark, so the sidebar never
+ * regresses to a single repeated tab icon.
+ */
+const PERSONALITY_PRESET_ICONS: Record<string, LucideIcon> = {
+  // Tone & Mood
+  'cool-laidback': Armchair,
+  'warm-friendly': Smile,
+  'calm-gentle': Leaf,
+  'energetic-upbeat': Zap,
+  'serious-focused': Target,
+  'playful-witty': PartyPopper,
+  'dry-humorous': Meh,
+  encouraging: ThumbsUp,
+  // Warm & Emotional
+  'loving-affectionate': Heart,
+  'caring-nurturing': HandHeart,
+  empathetic: HeartHandshake,
+  'romantic-poetic': Flower2,
+  sentimental: Hourglass,
+  protective: Shield,
+  // Age & Generation
+  'gen-z': Sparkles,
+  millennial: Coffee,
+  'gen-x': Glasses,
+  boomer: Radio,
+  teenager: Gamepad2,
+  'young-professional': Briefcase,
+  'childlike-wonder': Star,
+  // Professional Personas
+  'formal-corporate': Building2,
+  'executive-brief': Crown,
+  'startup-hustle': Rocket,
+  'enterprise-architect': Network,
+  consultant: ClipboardList,
+  'news-anchor': Newspaper,
+  'legal-counsel': Scale,
+  'financial-advisor': TrendingUp,
+  'mentor-coach': Compass,
+  // Direct & Blunt
+  'blunt-direct': Sword,
+  'no-nonsense': CircleCheck,
+  sardonic: Annoyed,
+  terse: Minus,
+  'brutally-honest': TriangleAlert,
+  diplomatic: Handshake,
+  // Academic & Scholarly
+  socratic: CircleHelp,
+  researcher: BookOpen,
+  skeptic: Search,
+  philosopher: Lightbulb,
+  'technical-sage': Brain,
+  scientific: FlaskConical,
+  // Creative & Narrative
+  storyteller: ScrollText,
+  poet: Feather,
+  gamemaster: Swords,
+  comedian: Laugh,
+  // Technical & Domain
+  'senior-engineer': Code2,
+  sre: Activity,
+  'data-scientist': ChartColumnIncreasing,
+  troubleshooter: Wrench,
+};
+
+const PERSONALITY_CATEGORY_ICONS: Record<string, LucideIcon> = {
+  'Tone & Mood': Smile,
+  'Warm & Emotional': Heart,
+  'Age & Generation': Smartphone,
+  'Professional Personas': Briefcase,
+  'Direct & Blunt': Sword,
+  'Academic & Scholarly': BookOpen,
+  'Creative & Narrative': Feather,
+  'Technical & Domain': Code2,
+};
+
+/** Curated glyph per output-style id; falls back to the category mark. */
+const OUTPUT_PRESET_ICONS: Record<string, LucideIcon> = {
+  // Visual & Structured
+  'table-first': Table,
+  'mermaid-diagram': Workflow,
+  'charts-widgets': BarChart3,
+  'ascii-diagram': Blocks,
+  'mind-map': Network,
+  timeline: GanttChart,
+  flowchart: GitFork,
+  // Code & Technical
+  'code-blocks': SquareCode,
+  'shell-commands': SquareTerminal,
+  'sql-queries': Database,
+  'api-curl': ArrowRightLeft,
+  'diff-patch': FileDiff,
+  'unit-tests': FlaskConical,
+  // Structure & Length
+  'tldr-first': AlignLeft,
+  'verbose-detailed': AlignJustify,
+  'numbered-steps': ListOrdered,
+  'bullets-only': List,
+  'headed-sections': Heading,
+  'prose-essay': Type,
+  faq: MessageCircleQuestion,
+  // Data & Config
+  'json-output': Braces,
+  'yaml-config': Settings2,
+  'csv-delimited': FileSpreadsheet,
+  'markdown-report': FileText,
+  'executive-summary': Presentation,
+  // Reasoning & Interaction
+  'comparison-matrix': Columns3,
+  checklist: ListChecks,
+  'decision-tree': ListTree,
+  'leading-questions': MessagesSquare,
+  'one-line-answers': Minus,
+};
+
+const OUTPUT_CATEGORY_ICONS: Record<string, LucideIcon> = {
+  'Visual & Structured': LayoutGrid,
+  'Code & Technical': Code2,
+  'Structure & Length': ListOrdered,
+  'Data & Config': Database,
+  'Reasoning & Interaction': Workflow,
+};
+
+/**
+ * Resolve a distinctive icon for a persona card: exact preset id first, then the
+ * category, then the section mark as a last resort.
+ */
+export const personalityPresetIcon = (id: string, category?: string): LucideIcon =>
+  PERSONALITY_PRESET_ICONS[id] ||
+  (category ? PERSONALITY_CATEGORY_ICONS[category] : undefined) ||
+  UserRoundCog;
+
+/** Resolve a distinctive icon for an output-style card (same fallback order). */
+export const outputPresetIcon = (id: string, category?: string): LucideIcon =>
+  OUTPUT_PRESET_ICONS[id] ||
+  (category ? OUTPUT_CATEGORY_ICONS[category] : undefined) ||
+  TextCursorInput;
+
+/** `owner/repo` -> `owner`, tolerating a bare owner or a full URL. */
+export const githubOwner = (repo: string): string => {
+  const cleaned = (repo || '')
+    .replace(/^https?:\/\/[^/]+\//i, '')
+    .replace(/^\/+/, '')
+    .trim();
+  return cleaned.split('/')[0] || cleaned;
+};
+
+/**
+ * Canonical live logo URL for a repo's owner. GitHub serves a public avatar for
+ * any account at `github.com/<owner>.png`, so the real project mark loads
+ * without bundling a per-repo image map.
+ */
+export const githubOwnerAvatarUrl = (repo: string, size = 64): string =>
+  `https://github.com/${githubOwner(repo)}.png?size=${size}`;

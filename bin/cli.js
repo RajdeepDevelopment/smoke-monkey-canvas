@@ -96,6 +96,17 @@ function isProcessAlive(pid) {
   }
 }
 
+// Only remove the PID file when it still belongs to this process. Without this,
+// a dying daemon can delete the file a freshly restarted daemon just wrote.
+function releasePidFile(ownerPid) {
+  try {
+    if (!existsSync(PID_FILE)) return;
+    if (readFileSync(PID_FILE, 'utf8').trim() === String(ownerPid)) {
+      unlinkSync(PID_FILE);
+    }
+  } catch {}
+}
+
 function getPidOnPort(p) {
   if (process.platform === 'win32') return null;
   try {
@@ -201,7 +212,7 @@ function stopRunningDaemon() {
         try { process.kill(pid, 'SIGKILL'); } catch {}
       }
     }, 1500);
-    if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
+    if (existsSync(PID_FILE)) releasePidFile(pid);
     return pid;
   } catch (err) {
     return null;
@@ -334,9 +345,7 @@ if (openBrowser && !process.env.SMOKE_CANVAS_DAEMON_CHILD) {
 }
 
 const cleanup = () => {
-  if (existsSync(PID_FILE)) {
-    try { unlinkSync(PID_FILE); } catch {}
-  }
+  releasePidFile(process.pid);
   if (serverProc && !serverProc.killed) {
     serverProc.kill('SIGTERM');
   }
@@ -347,9 +356,7 @@ process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
 
 serverProc.on('exit', (code) => {
-  if (existsSync(PID_FILE)) {
-    try { unlinkSync(PID_FILE); } catch {}
-  }
+  releasePidFile(process.pid);
   process.exit(code ?? 0);
 });
 

@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import fs from 'node:fs';
 import { resolve, join } from 'node:path';
 import { homedir } from 'node:os';
+import { spawn, execFile } from 'node:child_process';
 import { CoreDatabase } from '../core/database.db.js';
 import { STOCK_MCPS } from '../mcp/mcp.stock.js';
 
@@ -121,7 +122,7 @@ export function createSettingsRouter(): Router {
   router.get('/version', async (_req: Request, res: Response) => {
     try {
       const versionInfo = await checkVersion();
-      res.json(versionInfo);
+      res.json({ ...versionInfo, canUpgrade: await isNpmAvailable() });
     } catch {
       res.json({
         currentVersion: '1.3.2',
@@ -132,8 +133,57 @@ export function createSettingsRouter(): Router {
         upgradeCommand: 'npm install -g @smoke-monkey/canvas@latest',
         releaseNotesUrl: 'https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases',
         checkedAt: new Date().toISOString(),
+        canUpgrade: false,
       });
     }
+  });
+
+  // ── In-app upgrade job ─────────────────────────────────────────────────────
+
+  // GET /api/settings/upgrade/status
+  router.get('/upgrade/status', (_req: Request, res: Response) => {
+    res.json(upgradeJob);
+  });
+
+  // POST /api/settings/upgrade
+  router.post('/upgrade', async (_req: Request, res: Response) => {
+    if (upgradeJob.state === 'installing') {
+      res.status(409).json({ error: 'An update is already being installed.' });
+      return;
+    }
+
+    if (!(await isNpmAvailable())) {
+      res.status(400).json({
+        error: 'npm was not found on this machine. Install Node.js (which includes npm) or run the update manually.',
+      });
+      return;
+    }
+
+    let versionInfo: VersionInfo;
+    try {
+      cachedVersionInfo = null;
+      versionInfo = await checkVersion();
+    } catch {
+      res.status(500).json({ error: 'Could not check for updates right now.' });
+      return;
+    }
+
+    if (!versionInfo.hasUpdate) {
+      res.status(400).json({ error: 'You are already on the latest release.' });
+      return;
+    }
+
+    upgradeJob = {
+      state: 'installing',
+      log: '',
+      error: null,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+    };
+
+    res.status(202).json({ ...upgradeJob, targetVersion: versionInfo.latestVersion });
+
+    runUpgradeJob();
   });
 
   return router;
@@ -231,4 +281,102 @@ async function checkVersion(): Promise<VersionInfo> {
 
   cachedVersionInfo = { timestamp: now, data };
   return data;
+}
+
+// ── In-app upgrade executor ──────────────────────────────────────────────────
+
+interface UpgradeJob {
+  state: 'idle' | 'installing' | 'success' | 'failed';
+  log: string;
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+let upgradeJob: UpgradeJob = {
+  state: 'idle',
+  log: '',
+  error: null,
+  startedAt: null,
+  finishedAt: null,
+};
+
+const UPGRADE_LOG_CAP = 4096;
+
+function appendUpgradeLog(chunk: string) {
+  upgradeJob.log = (upgradeJob.log + chunk).slice(-UPGRADE_LOG_CAP);
+}
+
+let npmAvailableCache: boolean | null = null;
+
+function isNpmAvailable(): Promise<boolean> {
+  if (npmAvailableCache !== null) return Promise.resolve(npmAvailableCache);
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  return new Promise((resolveP) => {
+    execFile(npmCmd, ['--version'], { timeout: 5000 }, (err) => {
+      npmAvailableCache = !err;
+      resolveP(!err);
+    });
+  });
+}
+
+function describeUpgradeFailure(log: string): string {
+  const lower = log.toLowerCase();
+  if (lower.includes('eacces') || lower.includes('eperm') || lower.includes('permission denied')) {
+    return 'Installation needs elevated permissions. Run the update manually in Terminal.';
+  }
+  if (lower.includes('enotfound') || lower.includes('econnrefused') || lower.includes('etimedout') || lower.includes('network')) {
+    return "Couldn't reach the npm registry. Check your internet connection and try again.";
+  }
+  const lastLine = log.trim().split('\n').filter(Boolean).pop();
+  return lastLine ? `Update failed: ${lastLine.slice(0, 200)}` : 'Update failed for an unknown reason.';
+}
+
+function runUpgradeJob() {
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const child = spawn(npmCmd, ['install', '-g', '@smoke-monkey/canvas@latest'], {
+    env: { ...process.env, npm_config_update_notifier: 'false' },
+    cwd: process.cwd(),
+  });
+
+  child.stdout?.on('data', (d: Buffer) => appendUpgradeLog(d.toString()));
+  child.stderr?.on('data', (d: Buffer) => appendUpgradeLog(d.toString()));
+
+  child.on('error', (err) => {
+    upgradeJob.state = 'failed';
+    upgradeJob.error = describeUpgradeFailure(err.message);
+    upgradeJob.finishedAt = new Date().toISOString();
+  });
+
+  child.on('close', (code) => {
+    upgradeJob.finishedAt = new Date().toISOString();
+    if (code === 0) {
+      upgradeJob.state = 'success';
+      upgradeJob.error = null;
+      cachedVersionInfo = null;
+      // Give the HTTP response a beat to flush, then restart the daemon so the
+      // freshly installed package is picked up.
+      setTimeout(() => {
+        const rootDir = process.cwd();
+        const cliPath = resolve(rootDir, 'bin', 'cli.js');
+        if (!fs.existsSync(cliPath)) return;
+        try {
+          // Drop the daemon-child marker we inherited so `restart` daemonizes
+          // properly (detached, own PID file) instead of running in-process.
+          const restartEnv = { ...process.env };
+          delete restartEnv.SMOKE_CANVAS_DAEMON_CHILD;
+          const restart = spawn(process.execPath, [cliPath, 'restart'], {
+            detached: true,
+            stdio: 'ignore',
+            cwd: rootDir,
+            env: restartEnv,
+          });
+          restart.unref();
+        } catch {}
+      }, 500);
+    } else {
+      upgradeJob.state = 'failed';
+      upgradeJob.error = describeUpgradeFailure(upgradeJob.log);
+    }
+  });
 }

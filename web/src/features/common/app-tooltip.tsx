@@ -16,7 +16,10 @@ interface ActiveTooltipState {
   x: number;
   y: number;
   side: 'top' | 'bottom' | 'left' | 'right';
+  instant: boolean;
 }
+
+const TOOLTIP_DELAY_MS = 400;
 
 /**
  * Ensure tooltip text is concise, clean, and strictly 2 to 3 words.
@@ -52,6 +55,7 @@ export const GlobalTooltipProvider: React.FC = () => {
   const [active, setActive] = useState<ActiveTooltipState | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTargetRef = useRef<HTMLElement | null>(null);
+  const hasShownRef = useRef(false);
 
   useEffect(() => {
     const handlePointerEnter = (e: PointerEvent) => {
@@ -75,9 +79,13 @@ export const GlobalTooltipProvider: React.FC = () => {
 
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-      // Only show after user holds hover for at least 1.5 seconds (1500ms)
+      // Delay the first tooltip so accidental hover doesn't fire it, then show
+      // subsequent ones instantly — a long delay on every tooltip makes a
+      // toolbar feel broken (Emil Kowalski's tooltip rule).
+      const instant = hasShownRef.current;
       timeoutRef.current = setTimeout(() => {
         if (currentTargetRef.current !== target) return;
+        hasShownRef.current = true;
 
         const rect = target.getBoundingClientRect();
         let side = requestedSide;
@@ -112,8 +120,9 @@ export const GlobalTooltipProvider: React.FC = () => {
           x,
           y,
           side,
+          instant,
         });
-      }, 1500);
+      }, instant ? 0 : TOOLTIP_DELAY_MS);
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
@@ -157,7 +166,7 @@ export const GlobalTooltipProvider: React.FC = () => {
 
   return createPortal(
     <div
-      className="global-glass-tooltip"
+      className={`global-glass-tooltip${active.instant ? ' is-instant' : ''}`}
       style={{
         position: 'fixed',
         left: `${active.x}px`,

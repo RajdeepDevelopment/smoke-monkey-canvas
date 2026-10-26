@@ -6,27 +6,37 @@ import {
   Clock, ShieldCheck, Copy, Check, Plus, WandSparkles,
   GripHorizontal, SlidersHorizontal, Eye, Edit3, Zap,
   Trash2, Sparkles, ArrowUpCircle, ExternalLink, RefreshCw,
+  Building2, Network, Download, Loader2, AlertTriangle, LogOut,
+  Terminal, Scale, Car, Shield, BarChart3, Megaphone, CheckSquare,
+  Briefcase, Palette, Headphones, ShoppingBag, Users, Compass, Heart,
+  GraduationCap, Landmark, Wrench, Play,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { getBrandVisuals } from '../common/brand-icons.js';
-import type { StockMcp } from '../mcp/mcp.types.js';
+import { getBrandVisuals, BrandIcons, McpBrandIcon } from '../common/brand-icons.js';
+import type { StockMcp, McpReadiness } from '../mcp/mcp.types.js';
+import { buildStockMcpLookup, canonicalStockMcps } from '../mcp/mcp.catalog.js';
 import type { AgentTemplate } from '../agent/agent.templates.js';
 import { ENTERPRISE_AGENT_TEMPLATES } from '../agent/agent.templates.js';
-import type { LibraryTab, LibDragPayload, PromptPreset, StockSkillItem, ToolKit } from './library.types.js';
+import type { LibraryTab, LibDragPayload, PromptPreset, RoleZonePreset, StockSkillItem, ToolKit } from './library.types.js';
 import { writeLibDragPayload, setActiveDragPayload, PLUGIN_CATEGORY_ORDER } from './library.types.js';
-import { STOCK_SKILLS, TOOL_KITS } from './library.data.js';
-import { CUSTOM_PLUGINS, pluginToSkillItem, formatStars, VERIFIED_AT } from './library.plugins.js';
+import { STOCK_SKILLS, TOOL_KITS, SPACE_PRESETS, ROLE_ZONE_PRESETS, HIERARCHICAL_CHAINS } from './library.data.js';
+import { CUSTOM_PLUGINS, pluginToSkillItem, formatStars, VERIFIED_AT, type PluginCategory } from './library.plugins.js';
 import {
   LIB_TAB_ICONS, LIB_TAB_COLORS, skillCategoryIcon, skillCategoryColor,
   agentCategoryIcon, agentCategoryColor, toolkitIcon, pluginCategoryIcon, pluginCategoryColor,
+  personalityPresetIcon, outputPresetIcon,
 } from './library.icons.js';
-import { LibGlyph } from './library-glyph.js';
+import { LibGlyph, GhAvatar } from './library-glyph.js';
+import { AgentResourceRows } from './agent-resource-badges.js';
+import { AgentAvatar } from '../agent/agent-avatar.js';
 import { PROVIDER_CATALOG } from '../common/provider-catalog.js';
 import { getPersonalityMarkdown, getOutputStyleMarkdown } from './library-rich-content.js';
 import { AgentClockScheduler, describeCron } from './agent-clock-scheduler.js';
 import { openExternalLink, isTauri } from '../../config/desktop.bridge.js';
 import { useIsMobile } from '../common/use-mobile.js';
 import { LibrarySidebarMobile } from './mobile/library-sidebar.mobile.js';
+import { ZoneBuilderModal, type ZoneDraft } from '../space/zone-builder.modal.js';
+import type { RoleZone } from '../space/space.types.js';
 
 function formatAgentModelBadge(modelId: string): string {
   if (!modelId) return 'Default Model';
@@ -42,10 +52,34 @@ function formatAgentModelBadge(modelId: string): string {
 
 const MCP_CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Custom MCPs': <Sparkles size={12} />,
-  'Code & Git': <Code2 size={12} />,
-  'Web & Scraping': <Globe size={12} />,
+  'Development & infra': <Terminal size={12} />,
+  'Artificial intelligence': <Brain size={12} />,
   'Databases & Storage': <Database size={12} />,
   'DevOps & Cloud': <Cloud size={12} />,
+  'Web Scraping & Search': <Globe size={12} />,
+  'Code & Git': <Code2 size={12} />,
+  'Tax & compliance': <ShieldCheck size={12} />,
+  'Legal': <Scale size={12} />,
+  'Vehicles & traffic': <Car size={12} />,
+  'Public data lookups': <Search size={12} />,
+  'Security & identity': <Shield size={12} />,
+  'Analytics & BI': <BarChart3 size={12} />,
+  'Marketing': <Megaphone size={12} />,
+  'Productivity': <CheckSquare size={12} />,
+  'Sales & CRM': <Briefcase size={12} />,
+  'Finance & payments': <DollarSign size={12} />,
+  'Documents & files': <FileText size={12} />,
+  'Communication': <MessageSquare size={12} />,
+  'Content & design': <Palette size={12} />,
+  'Customer support': <Headphones size={12} />,
+  'E-commerce & retail': <ShoppingBag size={12} />,
+  'HR & people': <Users size={12} />,
+  'Lifestyle': <Compass size={12} />,
+  'Health & wellness': <Heart size={12} />,
+  'Education': <GraduationCap size={12} />,
+  'Government & tenders': <Landmark size={12} />,
+  // aliases
+  'Web & Scraping': <Globe size={12} />,
   'Communication & Support': <MessageSquare size={12} />,
   'Productivity & Office': <FileText size={12} />,
   'CRM, Sales & Finance': <DollarSign size={12} />,
@@ -55,17 +89,69 @@ const MCP_CATEGORY_ICONS: Record<string, React.ReactNode> = {
 
 const MCP_CATEGORY_COLORS: Record<string, string> = {
   'Custom MCPs': '#10b981',
-  'Code & Git': '#f97316', 'Web & Scraping': '#06b6d4',
-  'Databases & Storage': '#8b5cf6', 'DevOps & Cloud': '#3b82f6',
-  'Communication & Support': '#10b981', 'Productivity & Office': '#f59e0b',
-  'CRM, Sales & Finance': '#ec4899', 'AI & Reasoning': '#a78bfa',
+  'Development & infra': '#3b82f6',
+  'Artificial intelligence': '#8b5cf6',
+  'Databases & Storage': '#8b5cf6',
+  'DevOps & Cloud': '#38bdf8',
+  'Web Scraping & Search': '#06b6d4',
+  'Code & Git': '#f97316',
+  'Tax & compliance': '#10b981',
+  'Legal': '#eab308',
+  'Vehicles & traffic': '#f97316',
+  'Public data lookups': '#06b6d4',
+  'Security & identity': '#ef4444',
+  'Analytics & BI': '#6366f1',
+  'Marketing': '#ec4899',
+  'Productivity': '#facc15',
+  'Sales & CRM': '#f59e0b',
+  'Finance & payments': '#14b8a6',
+  'Documents & files': '#84cc16',
+  'Communication': '#0ea5e9',
+  'Content & design': '#d946ef',
+  'Customer support': '#22c55e',
+  'E-commerce & retail': '#fb923c',
+  'HR & people': '#a855f7',
+  'Lifestyle': '#38bdf8',
+  'Health & wellness': '#f43f5e',
+  'Education': '#c084fc',
+  'Government & tenders': '#94a3b8',
+  // aliases
+  'Web & Scraping': '#06b6d4',
+  'Communication & Support': '#10b981',
+  'Productivity & Office': '#f59e0b',
+  'CRM, Sales & Finance': '#ec4899',
+  'AI & Reasoning': '#a78bfa',
   'Social & Promotion': '#fb923c',
 };
 
 const MCP_CATEGORIES = [
-  'All', 'Code & Git', 'Web & Scraping', 'Databases & Storage',
-  'DevOps & Cloud', 'Communication & Support', 'Productivity & Office',
-  'CRM, Sales & Finance', 'AI & Reasoning', 'Social & Promotion',
+  'All',
+  'Development & infra',
+  'Artificial intelligence',
+  'Databases & Storage',
+  'DevOps & Cloud',
+  'Web Scraping & Search',
+  'Code & Git',
+  'Tax & compliance',
+  'Legal',
+  'Vehicles & traffic',
+  'Public data lookups',
+  'Security & identity',
+  'Analytics & BI',
+  'Marketing',
+  'Productivity',
+  'Sales & CRM',
+  'Finance & payments',
+  'Documents & files',
+  'Communication',
+  'Content & design',
+  'Customer support',
+  'E-commerce & retail',
+  'HR & people',
+  'Lifestyle',
+  'Health & wellness',
+  'Education',
+  'Government & tenders',
 ];
 
 const AGENT_CATEGORIES = [
@@ -107,10 +193,12 @@ export const TOOLKIT_PALETTE = [
 const STORAGE_KEYS = {
   mcps: 'smoke_canvas_custom_mcps',
   skills: 'smoke_canvas_custom_skills',
+  plugins: 'smoke_canvas_custom_plugins',
   agents: 'smoke_canvas_custom_agents',
   toolkits: 'smoke_canvas_custom_toolkits',
   personas: 'smoke_canvas_custom_personas',
   outputs: 'smoke_canvas_custom_outputs',
+  zones: 'smoke_canvas_custom_zone_presets',
 } as const;
 
 function loadCustomStorage<T>(key: string): T[] {
@@ -165,7 +253,7 @@ export const createBlankCustomAgent = (): AgentTemplate => ({
   suggested_cron: null,
   policies: ['Require user confirmation before executing irreversible operations', 'Log telemetry on tool errors'],
   recommended_mcps: ['git-mcp'],
-  recommended_skills: ['ci-cd-and-automation'],
+  recommended_skills: [],
   isCustom: true,
 });
 
@@ -364,8 +452,17 @@ export const MCP_JSON_SAMPLES = {
   ),
 };
 
-/** Which half of the Skills tab is showing. */
+/** Which part of the Skills tab is showing: Git stock skills or GitHub Plugins. */
 type SkillSource = 'stock' | 'plugins';
+
+/** Stock skills relevant to git workflows. Kept narrow on purpose. */
+const GIT_STOCK_IDS = new Set(['git-workflow-and-versioning', 'git-workflow-governance', 'git-commit-writer']);
+
+const isGitStockSkill = (skill: StockSkillItem): boolean => {
+  if (GIT_STOCK_IDS.has(skill.id)) return true;
+  if ((skill.tags || []).some((tag) => /^git$/i.test(tag) || /^git-/i.test(tag))) return true;
+  return /\bgit\b/i.test(`${skill.name} ${skill.description}`);
+};
 
 /** Detail inspector item types */
 export type DetailItem =
@@ -381,6 +478,8 @@ const PLUGIN_SKILLS: StockSkillItem[] = CUSTOM_PLUGINS.map(pluginToSkillItem);
 
 const TABS: { id: LibraryTab; label: string; shortLabel: string; color: string }[] = [
   { id: 'mcp', label: 'MCP Servers', shortLabel: 'MCP', color: LIB_TAB_COLORS.mcp },
+  { id: 'spaces', label: 'Office Spaces', shortLabel: 'Spaces', color: LIB_TAB_COLORS.spaces },
+  { id: 'zones', label: 'Zones', shortLabel: 'Zones', color: LIB_TAB_COLORS.zones },
   { id: 'skills', label: 'Skills', shortLabel: 'Skills', color: LIB_TAB_COLORS.skills },
   { id: 'agents', label: 'Agents', shortLabel: 'Agents', color: LIB_TAB_COLORS.agents },
   { id: 'tools', label: 'Toolkits', shortLabel: 'Tools', color: LIB_TAB_COLORS.tools },
@@ -390,6 +489,8 @@ const TABS: { id: LibraryTab; label: string; shortLabel: string; color: string }
 
 const TAB_DESCRIPTIONS: Record<LibraryTab, string> = {
   mcp: 'MCP Servers',
+  spaces: 'Office Spaces & Pods',
+  zones: 'Hierarchical Role Zones',
   skills: 'Agent Skills',
   agents: 'Agent Templates',
   tools: 'Custom Toolkits',
@@ -411,19 +512,33 @@ interface LibrarySidebarProps {
   serverStockSkills?: StockSkillItem[];
   /** Open the connect/credential flow for a stock MCP that is missing keys. */
   onConnectKey: (mcp: StockMcp) => void;
+  /** Revoke stored OAuth tokens / credentials for a connected MCP. */
+  onDisconnectKey?: (mcp: StockMcp) => void;
+  /**
+   * Server-computed readiness (from `/api/mcp/status`). Authoritative: unlike
+   * env-key presence it also knows about OAuth tokens, so an OAuth-connected
+   * server is not wrongly shown as locked.
+   */
+  mcpReadiness?: Record<string, McpReadiness>;
   /** Fired when an agent template item is activated (double-click / Enter / Spawn button). */
   onSpawnTemplate?: (template: AgentTemplate) => void;
+  /** Name of the MCP currently executing dynamic client registration / OAuth connect */
+  connectingMcpName?: string | null;
+  /** Persisted hierarchical role zones currently on the canvas. */
+  roleZones?: RoleZone[];
 }
 
 const RAIL_WIDTH = 58;
 const PANEL_WIDTH = 380; // Widened for spacious card layout & category pills
 const DETAIL_WIDTH = 460; // Widened for rich markdown, forms & live previews
 
-/** Free-text match across any of the supplied fields. */
+import { fuzzyMatch } from '../common/fuzzy-search.js';
+
+/** Fuzzy match across any of the supplied fields with typo tolerance and token scoring. */
 const matchQuery = (fields: string[], query: string) => {
-  const q = query.trim().toLowerCase();
-  return !q || fields.some((f) => f.toLowerCase().includes(q));
+  return fuzzyMatch(fields, query);
 };
+
 
 export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   stockMcps,
@@ -432,13 +547,21 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   outputStylePresets,
   serverStockSkills,
   onConnectKey,
+  onDisconnectKey,
+  mcpReadiness,
   onSpawnTemplate,
+  connectingMcpName,
+  roleZones = [],
 }) => {
   const [activeTab, setActiveTab] = useState<LibraryTab | null>(null);
+  const AGENT_PAGE_SIZE = 60;
+  const [agentVisibleCount, setAgentVisibleCount] = useState(AGENT_PAGE_SIZE);
+  const agentSentinelRef = useRef<HTMLDivElement | null>(null);
   const isMobile = useIsMobile();
   const [selectedDetail, setSelectedDetail] = useState<DetailItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [skillSource, setSkillSource] = useState<SkillSource>('stock');
+  const [skillSource, setSkillSource] = useState<SkillSource>('plugins');
+  const [zoneSubTab, setZoneSubTab] = useState<'chains' | 'single'>('chains');
   const [searchQuery, setSearchQuery] = useState('');
   const [manualCats, setManualCats] = useState<Set<string>>(new Set(['Custom MCPs', 'Code & Git', 'Web & Scraping']));
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
@@ -464,10 +587,29 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     hasUpdate: boolean;
     upgradeCommand: string;
     releaseNotesUrl: string;
+    canUpgrade?: boolean;
   } | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [upgradeCopied, setUpgradeCopied] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [upgradeJob, setUpgradeJob] = useState<{
+    state: 'idle' | 'installing' | 'success' | 'failed';
+    log: string;
+    error: string | null;
+  } | null>(null);
+  const [upgradeStartError, setUpgradeStartError] = useState<string | null>(null);
+  const [isStartingUpgrade, setIsStartingUpgrade] = useState(false);
+  const [showManualUpgrade, setShowManualUpgrade] = useState(false);
+
+  const upgradePhase: 'idle' | 'installing' | 'success' | 'failed' =
+    upgradeJob?.state && upgradeJob.state !== 'idle' ? upgradeJob.state : 'idle';
+  const upgradeLogTail = (upgradeJob?.log || '')
+    .split('\n')
+    .filter((l) => l.trim().length > 0)
+    .slice(-4)
+    .join('\n');
+  const showManualCommand =
+    showManualUpgrade || upgradePhase === 'failed' || versionInfo?.canUpgrade === false;
 
   const checkAppVersion = useCallback(async () => {
     setIsCheckingUpdate(true);
@@ -484,9 +626,75 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     }
   }, []);
 
+  const startUpgrade = useCallback(async () => {
+    setUpgradeStartError(null);
+    setIsStartingUpgrade(true);
+    try {
+      const res = await fetch('/api/settings/upgrade', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUpgradeStartError(data.error || 'Could not start the update.');
+        return;
+      }
+      setUpgradeJob(data);
+    } catch {
+      setUpgradeStartError('Could not reach the update service.');
+    } finally {
+      setIsStartingUpgrade(false);
+    }
+  }, []);
+
   useEffect(() => {
     checkAppVersion();
   }, [checkAppVersion]);
+
+  // Poll the upgrade job while it installs
+  useEffect(() => {
+    if (upgradeJob?.state !== 'installing') return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch('/api/settings/upgrade/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        // A successful install restarts the daemon, which wipes the in-memory
+        // job — treat a reset back to idle as a completed install.
+        if (data.state === 'idle') {
+          setUpgradeJob({ ...data, state: 'success' });
+          return;
+        }
+        setUpgradeJob(data);
+      } catch {}
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [upgradeJob?.state]);
+
+  // After a successful install, wait for the restarted server to report the new
+  // version (tolerating brief downtime), then reload the window.
+  useEffect(() => {
+    if (upgradeJob?.state !== 'success') return;
+    const target = versionInfo?.latestVersion;
+    if (!target) return;
+    let attempts = 0;
+    const timer = setInterval(async () => {
+      attempts += 1;
+      try {
+        const res = await fetch('/api/settings/version');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.currentVersion === target) {
+            clearInterval(timer);
+            window.location.reload();
+            return;
+          }
+        }
+      } catch {}
+      if (attempts >= 20) {
+        clearInterval(timer);
+        window.location.reload();
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [upgradeJob?.state, versionInfo?.latestVersion]);
 
   // ── Native Desktop Menu & Global Key Action Listeners ──
   useEffect(() => {
@@ -516,10 +724,50 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   // ── Custom Persistent Collections (Stored in localStorage) ──
   const [customMcps, setCustomMcps] = useState<StockMcp[]>(() => loadCustomStorage<StockMcp>(STORAGE_KEYS.mcps));
   const [customSkills, setCustomSkills] = useState<StockSkillItem[]>(() => loadCustomStorage<StockSkillItem>(STORAGE_KEYS.skills));
+  const [customPlugins, setCustomPlugins] = useState<StockSkillItem[]>(() => loadCustomStorage<StockSkillItem>(STORAGE_KEYS.plugins));
   const [customAgents, setCustomAgents] = useState<AgentTemplate[]>(() => loadCustomStorage<AgentTemplate>(STORAGE_KEYS.agents));
   const [customToolkits, setCustomToolkits] = useState<ToolKit[]>(() => loadCustomStorage<ToolKit>(STORAGE_KEYS.toolkits));
   const [customPersonas, setCustomPersonas] = useState<PromptPreset[]>(() => loadCustomStorage<PromptPreset>(STORAGE_KEYS.personas));
   const [customOutputs, setCustomOutputs] = useState<PromptPreset[]>(() => loadCustomStorage<PromptPreset>(STORAGE_KEYS.outputs));
+  const [customZones, setCustomZones] = useState<RoleZonePreset[]>(() => loadCustomStorage<RoleZonePreset>(STORAGE_KEYS.zones));
+
+  // Sync custom plugins from browser storage to server database so agent search can find them
+  useEffect(() => {
+    if (customPlugins && customPlugins.length > 0) {
+      const payload = customPlugins.map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        description: p.description,
+        content: p.content,
+      }));
+      fetch('/api/skills/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    }
+  }, [customPlugins]);
+  const [isZoneBuilderOpen, setIsZoneBuilderOpen] = useState(false);
+  const [editingZonePreset, setEditingZonePreset] = useState<RoleZonePreset | null>(null);
+
+  // ── GitHub Plugin Import Modal State ──
+  const [showGhImportModal, setShowGhImportModal] = useState(false);
+  const [ghImportInput, setGhImportInput] = useState('');
+  const [ghImportLoading, setGhImportLoading] = useState(false);
+  const [ghImportError, setGhImportError] = useState<string | null>(null);
+  const [ghImportPreview, setGhImportPreview] = useState<{
+    repo: string;
+    owner: string;
+    name: string;
+    description: string;
+    stars: number;
+    license: string;
+    category: PluginCategory;
+    avatarUrl?: string;
+    topics?: string[];
+    content?: string;
+  } | null>(null);
 
   // ── Form States for Live Editing & Previewing ──
   // Agent Form State
@@ -862,6 +1110,187 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     }
   };
 
+  const handleFetchGithubRepo = async (inputStr: string) => {
+    const cleaned = inputStr.trim().replace(/^https?:\/\/(www\.)?github\.com\//i, '').replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '');
+    const parts = cleaned.split('/');
+    if (parts.length < 2 || !parts[0] || !parts[1]) {
+      setGhImportError('Please enter a valid format like "owner/repo" or a full GitHub repository URL');
+      return;
+    }
+    const [owner, repo] = parts;
+    setGhImportLoading(true);
+    setGhImportError(null);
+    try {
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+      if (res.ok) {
+        const data = await res.json();
+
+        // Auto-detect best category from topics, description, and name
+        const topics: string[] = Array.isArray(data.topics) ? data.topics : [];
+        const fullText = `${data.name} ${data.description || ''} ${topics.join(' ')}`.toLowerCase();
+        let detectedCategory: PluginCategory = 'Skills';
+        if (fullText.includes('mcp') && (fullText.includes('server') || fullText.includes('tool'))) {
+          detectedCategory = 'MCP Servers';
+        } else if (fullText.includes('registry') || fullText.includes('catalog')) {
+          detectedCategory = 'MCP Registries';
+        } else if (fullText.includes('marketplace') || fullText.includes('store')) {
+          detectedCategory = 'Plugin Marketplace';
+        } else if (fullText.includes('coding') || fullText.includes('code') || fullText.includes('dev') || fullText.includes('engineer')) {
+          detectedCategory = 'Coding Agents';
+        } else if (fullText.includes('runtime') || fullText.includes('engine') || fullText.includes('orchestrat')) {
+          detectedCategory = 'Agent Runtimes';
+        } else if (fullText.includes('memory') || fullText.includes('vector') || fullText.includes('store') || fullText.includes('cache')) {
+          detectedCategory = 'Agent Memory';
+        } else if (fullText.includes('observability') || fullText.includes('monitor') || fullText.includes('eval') || fullText.includes('trace') || fullText.includes('log')) {
+          detectedCategory = 'Observability';
+        } else if (fullText.includes('rag') || fullText.includes('knowledge') || fullText.includes('document') || fullText.includes('search')) {
+          detectedCategory = 'Knowledge & RAG';
+        }
+
+        const avatarUrl = data.owner?.avatar_url || `https://github.com/${owner}.png?size=128`;
+        const branch = data.default_branch || 'main';
+
+        // Try to fetch SKILL.md or README.md from GitHub raw content
+        let fetchedSkillDoc = '';
+        try {
+          const rawSkillRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/SKILL.md`);
+          if (rawSkillRes.ok) {
+            fetchedSkillDoc = await rawSkillRes.text();
+          } else {
+            const rawReadmeRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/README.md`);
+            if (rawReadmeRes.ok) {
+              const readmeText = await rawReadmeRes.text();
+              fetchedSkillDoc = readmeText.slice(0, 5000);
+            }
+          }
+        } catch {
+          // ignore network failure for raw docs
+        }
+
+        setGhImportPreview({
+          repo: `${owner}/${repo}`,
+          owner: data.owner?.login || owner,
+          name: data.name || repo,
+          description: data.description || 'Imported GitHub agent skill package.',
+          stars: typeof data.stargazers_count === 'number' ? data.stargazers_count : 0,
+          license: data.license?.spdx_id || data.license?.name || 'MIT',
+          category: detectedCategory,
+          avatarUrl,
+          topics,
+          content: fetchedSkillDoc,
+        });
+      } else {
+        const avatarUrl = `https://github.com/${owner}.png?size=128`;
+        setGhImportPreview({
+          repo: `${owner}/${repo}`,
+          owner,
+          name: repo,
+          description: `GitHub repository by ${owner}`,
+          stars: 0,
+          license: 'MIT',
+          category: 'Skills',
+          avatarUrl,
+        });
+        if (res.status === 404) {
+          setGhImportError('Repository not found on GitHub public API. You can still save it with the fallback preview.');
+        } else if (res.status === 403) {
+          setGhImportError('GitHub API rate limit reached. Fallback preview created.');
+        }
+      }
+    } catch {
+      const avatarUrl = `https://github.com/${owner}.png?size=128`;
+      setGhImportPreview({
+        repo: `${owner}/${repo}`,
+        owner,
+        name: repo,
+        description: `GitHub repository by ${owner}`,
+        stars: 0,
+        license: 'MIT',
+        category: 'Skills',
+        avatarUrl,
+      });
+    } finally {
+      setGhImportLoading(false);
+    }
+  };
+
+  const handleSaveImportedGithubSkill = () => {
+    if (!ghImportPreview) return;
+    const newPlugin: StockSkillItem = {
+      id: `custom-plugin-${ghImportPreview.owner}-${ghImportPreview.name}-${Date.now()}`,
+      name: ghImportPreview.repo,
+      category: ghImportPreview.category,
+      description: ghImportPreview.description,
+      tags: ['github', 'custom', ghImportPreview.category.toLowerCase(), ...(ghImportPreview.topics || [])],
+      isCustom: true,
+      plugin: {
+        repo: ghImportPreview.repo,
+        stars: ghImportPreview.stars,
+        license: ghImportPreview.license,
+        description: ghImportPreview.description,
+        category: ghImportPreview.category,
+        usage: `Teach your agent to leverage ${ghImportPreview.name} directives and workflows.`,
+        avatarUrl: ghImportPreview.avatarUrl,
+      },
+      content: ghImportPreview.content || [
+        `# ${ghImportPreview.repo}`,
+        '',
+        ghImportPreview.description,
+        '',
+        '## Provenance',
+        `- Repository: https://github.com/${ghImportPreview.repo}`,
+        `- Stars: ~${ghImportPreview.stars.toLocaleString()}`,
+        `- License: ${ghImportPreview.license}`,
+        `- Category: ${ghImportPreview.category}`,
+        '',
+        '## How to use it',
+        `Attach to an agent and reference ${ghImportPreview.repo} capabilities in prompts.`,
+        '',
+        '## Getting it locally',
+        '```bash',
+        `git clone https://github.com/${ghImportPreview.repo}.git`,
+        '```',
+      ].join('\n'),
+    };
+
+    setCustomPlugins((prev) => {
+      const next = [newPlugin, ...prev.filter((p) => p.name !== newPlugin.name)];
+      saveCustomStorage(STORAGE_KEYS.plugins, next);
+      return next;
+    });
+
+    // Also persist to server SQLite database so agents and backend tools have it!
+    fetch('/api/skills/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: newPlugin.id,
+        name: newPlugin.name,
+        category: newPlugin.category,
+        description: newPlugin.description,
+        content: newPlugin.content,
+      }),
+    }).catch((err) => console.warn('[LibrarySidebar] Failed to upload custom plugin to server:', err));
+
+    triggerSaveToast(`Imported "${ghImportPreview.repo}" into Skills!`);
+    setSelectedDetail({ kind: 'skill', item: newPlugin, isCustom: true });
+    setShowGhImportModal(false);
+    setGhImportInput('');
+    setGhImportPreview(null);
+  };
+
+  const handleDeleteCustomPlugin = (id: string) => {
+    setCustomPlugins((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      saveCustomStorage(STORAGE_KEYS.plugins, next);
+      return next;
+    });
+    if (selectedDetail?.kind === 'skill' && selectedDetail.item.id === id) {
+      setSelectedDetail(null);
+    }
+    triggerSaveToast('Skill removed from library.');
+  };
+
   const handleSaveCustomAgent = () => {
     const agent = getCustomizedAgent();
     setCustomAgents((prev) => {
@@ -1015,13 +1444,22 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     setSelectedDetail({ kind: 'outputStyle', item: copy, isCustom: true });
   };
 
-  const stockSkills = serverStockSkills && serverStockSkills.length > 0 ? serverStockSkills : STOCK_SKILLS;
+  const stockSkills = (serverStockSkills && serverStockSkills.length > 0 ? serverStockSkills : STOCK_SKILLS).filter(isGitStockSkill);
 
   const searching = searchQuery.trim().length > 0;
-  const expandedCats = useMemo(
-    () => (searching ? new Set<string>() : manualCats),
-    [searching, manualCats],
-  );
+  // Categories the user explicitly collapsed *while searching*. Reset on each
+  // new query so matches open by default — searching should reveal results,
+  // not hide them behind collapsed category headers.
+  const [searchCollapsed, setSearchCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setSearchCollapsed(new Set());
+  }, [searchQuery, activeTab]);
+
+  // The imported catalogue holds thousands of remote servers, so a category
+  // renders a first page of cards and offers an explicit expand. Rendering the
+  // whole catalogue at once is what makes the panel janky, not the data itself.
+  const MCP_PAGE_SIZE = 30;
+  const [mcpShowAll, setMcpShowAll] = useState<Set<string>>(new Set());
 
   // ── Universal Multi-Header Dock Drag Handler ──
   // Works from Column 1 (.lib-icon-rail), Column 2 (.lib-panel-header), and Column 3 (.lib-detail-header)
@@ -1081,11 +1519,16 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     [],
   );
 
-  // Collapse the expanded panel when clicking outside (but never mid-reposition).
+  // Collapse the expanded panel when clicking outside (but never mid-reposition or inside any modal).
   useEffect(() => {
     if (!activeTab) return;
     const handler = (e: MouseEvent) => {
       if (isDraggingRef.current) return;
+      if (isZoneBuilderOpen) return;
+      const target = e.target as Element | null;
+      if (target?.closest('.modal-overlay, .modal-content, .zone-builder-modal, .agent-modal, .settings-modal')) {
+        return;
+      }
       const el = document.querySelector('.lib-sidebar-root');
       if (el && !el.contains(e.target as Node)) {
         setActiveTab(null);
@@ -1094,9 +1537,39 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     };
     window.addEventListener('mousedown', handler);
     return () => window.removeEventListener('mousedown', handler);
-  }, [activeTab]);
+  }, [activeTab, isZoneBuilderOpen]);
+
+  // Infinite scroll for the agent list: 60 cards at a time, growing on reach-bottom.
+  useEffect(() => {
+    if (activeTab !== 'agents') return;
+    const el = agentSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setAgentVisibleCount((count) => count + AGENT_PAGE_SIZE);
+      },
+      { rootMargin: '400px 0px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [activeTab, agentVisibleCount, AGENT_PAGE_SIZE]);
+
+  // Reset the agent window whenever filters change so results start from the top.
+  useEffect(() => {
+    setAgentVisibleCount(AGENT_PAGE_SIZE);
+  }, [selectedCategory, searchQuery, AGENT_PAGE_SIZE]);
 
   const toggleCat = (cat: string) => {
+    if (searching) {
+      setSearchCollapsed((prev) => {
+        const next = new Set(prev);
+        if (next.has(cat)) next.delete(cat);
+        else next.add(cat);
+        return next;
+      });
+      return;
+    }
     setManualCats((prev) => {
       const next = new Set(prev);
       if (next.has(cat)) next.delete(cat);
@@ -1144,7 +1617,17 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   };
 
   // ── Filtered data with custom items & category pills support ──
-  const allMcps = useMemo(() => [...customMcps, ...stockMcps], [customMcps, stockMcps]);
+  // Show every canonical stock server (MCP.ai + manual-only), but hide legacy
+  // aliases such as `gmail` when `mcpai-gmail` is the same server.
+  const catalogStockMcps = useMemo(() => canonicalStockMcps(stockMcps), [stockMcps]);
+  const allMcps = useMemo(() => [...customMcps, ...catalogStockMcps], [customMcps, catalogStockMcps]);
+  const catalogMcpMap = useMemo(() => {
+    const map = buildStockMcpLookup(stockMcps);
+    for (const m of customMcps) {
+      if (!map.has(m.name)) map.set(m.name, m);
+    }
+    return map;
+  }, [customMcps, stockMcps]);
   const allStockSkills = useMemo(() => [...customSkills, ...stockSkills], [customSkills, stockSkills]);
   const allEnterpriseAgents = useMemo(() => [...customAgents, ...ENTERPRISE_AGENT_TEMPLATES], [customAgents]);
   const allKits = useMemo(() => [...customToolkits, ...TOOL_KITS], [customToolkits]);
@@ -1160,19 +1643,12 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   }, [customOutputs, outputStylePresets]);
 
   const groupedMcps = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
     const filtered = allMcps.filter((m) => {
       if (selectedCategory !== 'All') {
         if (selectedCategory === 'Custom') return Boolean(m.isCustom);
         if (m.category !== selectedCategory) return false;
       }
-      if (!q) return true;
-      return (
-        m.label.toLowerCase().includes(q) ||
-        m.name.toLowerCase().includes(q) ||
-        m.category.toLowerCase().includes(q) ||
-        m.description.toLowerCase().includes(q)
-      );
+      return matchQuery([m.label, m.name, m.category, m.description || '', (m as any).whenToUse || ''], searchQuery);
     });
     const groups: Record<string, StockMcp[]> = {};
     for (const m of filtered) {
@@ -1181,6 +1657,14 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     }
     return groups;
   }, [allMcps, searchQuery, selectedCategory]);
+
+  // While searching, every category that has matches opens automatically (and
+  // can still be collapsed individually). Otherwise the user's manual
+  // expand/collapse set applies.
+  const expandedCats = useMemo(() => {
+    if (!searching) return manualCats;
+    return new Set(Object.keys(groupedMcps).filter((c) => !searchCollapsed.has(c)));
+  }, [searching, manualCats, groupedMcps, searchCollapsed]);
 
   const filteredSkills = useMemo(
     () =>
@@ -1194,10 +1678,18 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     [allStockSkills, searchQuery, selectedCategory],
   );
 
+  const allPlugins = useMemo(
+    () => [...customPlugins, ...PLUGIN_SKILLS],
+    [customPlugins],
+  );
+
   const filteredPlugins = useMemo(
     () =>
-      PLUGIN_SKILLS.filter((s) => {
-        if (selectedCategory !== 'All' && s.category !== selectedCategory) return false;
+      allPlugins.filter((s) => {
+        if (selectedCategory !== 'All') {
+          if (selectedCategory === 'Custom') return Boolean(s.isCustom);
+          if (s.category !== selectedCategory) return false;
+        }
         return matchQuery(
           [
             s.name,
@@ -1209,7 +1701,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
           searchQuery,
         );
       }),
-    [searchQuery, selectedCategory],
+    [allPlugins, searchQuery, selectedCategory],
   );
 
   const filteredAgents = useMemo(
@@ -1268,8 +1760,15 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     [groupPresets, allOutputs],
   );
 
-  const isMcpReady = (mcp: StockMcp) =>
-    mcp.isCustom || mcp.envKeys.length === 0 || mcp.envKeys.every((k) => Boolean(configuredKeys[k]));
+  const isMcpReady = (mcp: StockMcp) => {
+    const readiness = mcpReadiness?.[mcp.name];
+    if (readiness?.stock) return readiness.configured;
+    return (
+      mcp.isCustom ||
+      mcp.envKeys.length === 0 ||
+      mcp.envKeys.every((k) => Boolean(configuredKeys[k]))
+    );
+  };
 
   const startDrag = (key: string, e: React.DragEvent, payload: LibDragPayload) => {
     writeLibDragPayload(e.dataTransfer, payload);
@@ -1285,16 +1784,118 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
     `${base} ${draggingKey === key ? 'lib-dragging' : ''}`;
 
   const activeTabMeta = TABS.find((t) => t.id === activeTab);
-  const totalMcps = allMcps.length;
   const activeSkillCount = skillSource === 'plugins' ? filteredPlugins.length : filteredSkills.length;
+  const detailRecommendedMcps =
+    selectedDetail?.kind === 'agent'
+      ? (selectedDetail.item.recommended_mcps || []).filter((name) => catalogMcpMap.has(name))
+      : [];
+
+  const filteredSpaces = useMemo(() => {
+    return SPACE_PRESETS.filter((preset) => {
+      const matchesCat = selectedCategory === 'All' || preset.category === selectedCategory;
+      return matchesCat && matchQuery([preset.name, preset.description || '', preset.category || ''], searchQuery);
+    });
+  }, [selectedCategory, searchQuery]);
+
+  const allZones = useMemo<RoleZonePreset[]>(
+    () => [...customZones, ...ROLE_ZONE_PRESETS],
+    [customZones],
+  );
+
+  const filteredZones = useMemo(() => {
+    return allZones.filter((p) => {
+      const matchesCat =
+        selectedCategory === 'All' ||
+        (selectedCategory === 'Custom' ? Boolean(p.id) : p.category === selectedCategory);
+      const matchesSearch = matchQuery(
+        [p.name, p.description || '', p.category || '', p.roleTitle || ''],
+        searchQuery,
+      );
+      return matchesCat && matchesSearch;
+    });
+  }, [allZones, selectedCategory, searchQuery]);
+
+  const filteredChains = useMemo(() => {
+    return HIERARCHICAL_CHAINS.filter((c) => {
+      const matchesCat =
+        selectedCategory === 'All' || c.category === selectedCategory || c.industryCategory === selectedCategory;
+      const matchesSearch = matchQuery(
+        [
+          c.name,
+          c.companyName || '',
+          c.description || '',
+          c.category || '',
+          c.industryCategory || '',
+          ...c.nodes.map((n) => `${n.roleTitle} ${n.name}`),
+        ],
+        searchQuery,
+      );
+      return matchesCat && matchesSearch;
+    });
+  }, [selectedCategory, searchQuery]);
+
+  const saveZonePreset = (draft: ZoneDraft) => {
+    const id = draft.id || `zone-preset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const preset: RoleZonePreset = {
+      ...draft,
+      id,
+      category: editingZonePreset?.category || 'Custom',
+      icon: 'Network',
+    };
+    setCustomZones((prev) => {
+      const exists = prev.some((zone) => zone.id === id);
+      const next = exists ? prev.map((zone) => (zone.id === id ? preset : zone)) : [preset, ...prev];
+      saveCustomStorage(STORAGE_KEYS.zones, next);
+      return next;
+    });
+    setIsZoneBuilderOpen(false);
+    setEditingZonePreset(null);
+  };
+
+  const deleteZonePreset = (id?: string) => {
+    if (!id) return;
+    setCustomZones((prev) => {
+      const next = prev.filter((zone) => zone.id !== id);
+      saveCustomStorage(STORAGE_KEYS.zones, next);
+      return next;
+    });
+  };
 
   // Compute category pills list dynamically for current tab
   const currentCategoryList = useMemo(() => {
     if (activeTab === 'mcp') {
-      return customMcps.length > 0 ? ['All', 'Custom', ...MCP_CATEGORIES.slice(1)] : MCP_CATEGORIES;
+      // Curated categories first, then any category the catalogue adds (e.g.
+      // the imported MCP.ai list) so it can be filtered like the rest.
+      const extra = Array.from(new Set(allMcps.map((m) => m.category))).filter(
+        (c) => c && !MCP_CATEGORIES.includes(c) && c !== 'Custom MCPs'
+      );
+      const base = customMcps.length > 0 ? ['All', 'Custom', ...MCP_CATEGORIES.slice(1)] : MCP_CATEGORIES;
+      return [...base, ...extra];
+    }
+    if (activeTab === 'spaces') {
+      return ['All', ...Array.from(new Set(SPACE_PRESETS.map((preset) => preset.category || 'Space')))];
+    }
+    if (activeTab === 'zones') {
+      if (zoneSubTab === 'chains') {
+        const chainCats = Array.from(new Set(HIERARCHICAL_CHAINS.map((c) => c.category || c.industryCategory || 'General'))).sort();
+        return ['All', ...chainCats];
+      }
+      const set = new Set(
+        allZones
+          .map((z) => z.category)
+          .filter((c): c is string => typeof c === 'string' && c.length > 0),
+      );
+      const sorted: string[] = Array.from(set).sort();
+      return customZones.length > 0 ? ['All', ...sorted, 'Custom'] : ['All', ...sorted];
     }
     if (activeTab === 'agents') {
-      return customAgents.length > 0 ? ['All', 'Custom', ...AGENT_CATEGORIES.slice(1)] : AGENT_CATEGORIES;
+      // Keep curated order first, then surface any extra domain the catalogue
+      // contributes (generated AI / strategy agents etc.) so it stays filterable.
+      const extra = Array.from(new Set(allEnterpriseAgents.map((a) => a.category)))
+        .filter((c) => c && !AGENT_CATEGORIES.includes(c))
+        .sort((a, b) => a.localeCompare(b));
+      const base = customAgents.length > 0 ? ['All', 'Custom', ...AGENT_CATEGORIES.slice(1)] : AGENT_CATEGORIES;
+      return [...base, ...extra];
     }
     if (activeTab === 'tools') {
       return customToolkits.length > 0 ? ['All', 'Custom', ...TOOL_CATEGORIES.slice(1)] : TOOL_CATEGORIES;
@@ -1306,13 +1907,15 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
       return customOutputs.length > 0 ? ['All', 'Custom', ...OUTPUT_STYLE_CATEGORIES.slice(1)] : OUTPUT_STYLE_CATEGORIES;
     }
     if (activeTab === 'skills') {
-      if (skillSource === 'plugins') return ['All', ...PLUGIN_CATEGORY_ORDER];
+      if (skillSource === 'plugins') {
+        return customPlugins.length > 0 ? ['All', 'Custom', ...PLUGIN_CATEGORY_ORDER] : ['All', ...PLUGIN_CATEGORY_ORDER];
+      }
       const set = new Set(allStockSkills.map((s) => s.category));
       const base = Array.from(set).sort();
       return customSkills.length > 0 ? ['All', 'Custom', ...base.filter((c) => c !== 'Custom')] : ['All', ...base];
     }
     return ['All'];
-  }, [activeTab, skillSource, allStockSkills, customMcps.length, customSkills.length, customAgents.length, customToolkits.length, customPersonas.length, customOutputs.length]);
+  }, [activeTab, zoneSubTab, allZones, skillSource, allStockSkills, allMcps, customPlugins.length, customMcps.length, customSkills.length, customAgents.length, customToolkits.length, customPersonas.length, customOutputs.length]);
 
   return (
     <div
@@ -1430,16 +2033,20 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
               </span>
               <span className="lib-panel-count">
                 {activeTab === 'mcp'
-                  ? totalMcps
-                  : activeTab === 'skills'
-                    ? activeSkillCount
-                    : activeTab === 'agents'
-                      ? filteredAgents.length
-                      : activeTab === 'personality'
-                        ? personalityGroups.reduce((n, [, items]) => n + items.length, 0)
-                        : activeTab === 'output'
-                          ? outputGroups.reduce((n, [, items]) => n + items.length, 0)
-                          : filteredKits.length}
+                  ? allMcps.length
+                  : activeTab === 'spaces'
+                    ? filteredSpaces.length
+                    : activeTab === 'zones'
+                      ? (zoneSubTab === 'single' ? filteredZones.length : filteredChains.length)
+                      : activeTab === 'skills'
+                      ? activeSkillCount
+                      : activeTab === 'agents'
+                        ? filteredAgents.length
+                        : activeTab === 'personality'
+                          ? personalityGroups.reduce((n, [, items]) => n + items.length, 0)
+                          : activeTab === 'output'
+                            ? outputGroups.reduce((n, [, items]) => n + items.length, 0)
+                            : filteredKits.length}
               </span>
             </div>
 
@@ -1460,18 +2067,9 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
               )}
             </div>
 
-            {/* Skills Sub-tab Switcher (Stock vs Curated GitHub Plugins) */}
+            {/* Skills Sub-tab Switcher (Git stock skills vs Curated GitHub Plugins) */}
             {activeTab === 'skills' && (
               <div className="lib-segmented" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className={skillSource === 'stock' ? 'active' : ''}
-                  onClick={() => {
-                    setSkillSource('stock');
-                    setSelectedCategory('All');
-                  }}
-                >
-                  Stock Skills <span>{filteredSkills.length}</span>
-                </button>
                 <button
                   className={skillSource === 'plugins' ? 'active' : ''}
                   onClick={() => {
@@ -1481,6 +2079,42 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                   title={`Popular GitHub plugins (2k+ stars, verified ${VERIFIED_AT})`}
                 >
                   GitHub Plugins <span>{filteredPlugins.length}</span>
+                </button>
+                <button
+                  className={skillSource === 'stock' ? 'active' : ''}
+                  onClick={() => {
+                    setSkillSource('stock');
+                    setSelectedCategory('All');
+                  }}
+                  title="Git stock skills bundled with Smoke Monkey Canvas"
+                >
+                  Git Skills <span>{filteredSkills.length}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Zones Sub-tab Switcher (Single Designation Zones vs Hierarchical Company Chains) */}
+            {activeTab === 'zones' && (
+              <div className="lib-segmented" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className={zoneSubTab === 'single' ? 'active' : ''}
+                  onClick={() => {
+                    setZoneSubTab('single');
+                    setSelectedCategory('All');
+                  }}
+                  title="250+ single designation zones across all industries"
+                >
+                  Single Zones <span>{filteredZones.length}</span>
+                </button>
+                <button
+                  className={zoneSubTab === 'chains' ? 'active' : ''}
+                  onClick={() => {
+                    setZoneSubTab('chains');
+                    setSelectedCategory('All');
+                  }}
+                  title="Pre-structured multi-tier company organizational charts based on Mermaid flowcharts"
+                >
+                  Hierarchical Chains <span>{filteredChains.length}</span>
                 </button>
               </div>
             )}
@@ -1502,7 +2136,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
             </div>
           </div>
 
-          <div className="lib-scroll-body">
+          <div className="lib-scroll-body" id="lib-agents-scroll">
             {/* ── MCP Servers ── */}
             {activeTab === 'mcp' && (
               <>
@@ -1571,9 +2205,9 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
 
                     {expandedCats.has(cat) && (
                       <div className="lib-items-list lib-mcp-items-list">
-                        {mcps.map((mcp) => {
+                        {(mcpShowAll.has(cat) ? mcps : mcps.slice(0, MCP_PAGE_SIZE)).map((mcp) => {
                           const ready = isMcpReady(mcp);
-                          const brand = getBrandVisuals(`${mcp.label} ${mcp.name}`, 26);
+                          const brand = getBrandVisuals(`${mcp.label} ${mcp.name}`, 30);
                           const isSelected = selectedDetail?.kind === 'mcp' && selectedDetail.item.name === mcp.name;
                           return (
                             <div
@@ -1603,22 +2237,25 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                                   }}
                                   title={`${mcp.label} Brand Integration`}
                                 >
-                                  {brand.icon}
+                                  <McpBrandIcon mcp={mcp} size={30} fallback={brand.icon} />
                                 </div>
 
                                 <div className="lib-mcp-card-main">
                                   <div className="lib-mcp-card-header-line">
-                                    <div className="lib-mcp-title-wrap">
-                                      <span className="lib-mcp-title" title={mcp.label}>{mcp.label}</span>
-                                      {mcp.isCustom ? (
-                                        <span className="lib-custom-badge">Custom</span>
-                                      ) : (
-                                        <span className="lib-mcp-category-pill">{mcp.category}</span>
-                                      )}
-                                    </div>
+                                    <span className="lib-mcp-title" title={mcp.label}>{mcp.label}</span>
 
                                     <div className="lib-mcp-actions-wrap">
-                                      {ready ? (
+                                      {connectingMcpName === mcp.name ? (
+                                        <button
+                                          className="lib-connect-btn lib-connect-btn-prominent lib-connecting"
+                                          disabled
+                                          title={`Connecting ${mcp.label}...`}
+                                          style={{ opacity: 0.85, cursor: 'wait' }}
+                                        >
+                                          <Loader2 size={11} className="lib-spin" />
+                                          <span>Connecting...</span>
+                                        </button>
+                                      ) : ready ? (
                                         <span className="lib-badge-status-ready" title="Configured and ready">
                                           <CheckCircle2 size={13} color="#10b981" />
                                           <span className="lib-ready-text">Ready</span>
@@ -1652,23 +2289,88 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                                     </div>
                                   </div>
 
+                                  <div className="lib-mcp-badges-line">
+                                    {mcp.isCustom ? (
+                                      <span className="lib-custom-badge">Custom</span>
+                                    ) : (
+                                      <span
+                                        className="lib-mcp-category-pill"
+                                        style={{
+                                          color: MCP_CATEGORY_COLORS[mcp.category] || '#60a5fa',
+                                          borderColor: `${MCP_CATEGORY_COLORS[mcp.category] || '#60a5fa'}40`,
+                                          background: `${MCP_CATEGORY_COLORS[mcp.category] || '#60a5fa'}15`,
+                                        }}
+                                      >
+                                        {mcp.category}
+                                      </span>
+                                    )}
+                                    {mcp.toolsCount ? (
+                                      <span className="lib-mcp-tools-pill">
+                                        <Wrench size={9.5} />
+                                        {mcp.toolsCount} {mcp.toolsCount === 1 ? 'tool' : 'tools'}
+                                      </span>
+                                    ) : null}
+                                  </div>
+
                                   <p className="lib-mcp-desc">{mcp.description}</p>
+                                  {mcp.whenToUse && (
+                                    <div className="lib-mcp-whentouse" title={mcp.whenToUse}>
+                                      <span className="lib-wtu-label">When to use:</span> {mcp.whenToUse}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
                               {mcp.envKeys.length > 0 && (
                                 <div className="lib-mcp-footer-chips">
-                                  {mcp.envKeys.map((k) => (
-                                    <span key={k} className="lib-mcp-key-chip" style={{ color: '#f59e0b' }}>
-                                      <KeyRound size={9} />
-                                      <code>{k}</code>
-                                    </span>
-                                  ))}
+                                  {mcp.envKeys.map((k) => {
+                                    const perKey = mcp.keyLinks?.[k];
+                                    const getUrl = perKey?.url || mcp.keyGetUrl;
+                                    return (
+                                      <span key={k} className="lib-mcp-key-chip" style={{ color: '#f59e0b' }}>
+                                        <KeyRound size={9} />
+                                        <code>{k}</code>
+                                        {!configuredKeys[k] && getUrl && (
+                                          <a
+                                            href={getUrl}
+                                            target="_blank"
+                                            rel="noreferrer noopener"
+                                            className="lib-mcp-key-getlink"
+                                            title={`Get ${k} — ${getUrl}`}
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <span>Get key</span>
+                                            <ExternalLink size={8} />
+                                          </a>
+                                        )}
+                                      </span>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
                           );
                         })}
+                        {mcps.length > MCP_PAGE_SIZE && (
+                          <button
+                            className="lib-cat-header"
+                            style={{ justifyContent: 'center', marginTop: 4 }}
+                            onClick={() =>
+                              setMcpShowAll((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(cat)) next.delete(cat);
+                                else next.add(cat);
+                                return next;
+                              })
+                            }
+                          >
+                            <span className="lib-cat-label">
+                              {mcpShowAll.has(cat)
+                                ? 'Show less'
+                                : `Show all ${mcps.length} servers`}
+                            </span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1682,14 +2384,531 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
               </>
             )}
 
-            {/* ── Skills (bundled stock) ── */}
-            {activeTab === 'skills' && skillSource === 'stock' && (
+            {/* ── Office Spaces (visual team rooms) ── */}
+            {activeTab === 'spaces' && (
               <>
                 <p className="lib-drag-hint">
-                  Click a skill to inspect workflow · Drag onto agent to teach it.
+                  Drag a visual space onto the canvas · Drop agents inside to collapse them into a working pod.
                 </p>
 
-                {/* + Create Custom Skill Card */}
+                <div className="lib-spaces-list">
+                  {filteredSpaces.map((preset) => {
+                    const presetKey = `space:${preset.name}`;
+                    return (
+                      <div
+                        key={presetKey}
+                        className={itemClass(presetKey, 'lib-item lib-item-ready lib-card-item lib-space-card-item')}
+                        draggable
+                        onDragStart={(e) =>
+                          startDrag(presetKey, e, { kind: 'workspace_zone', zonePreset: preset })
+                        }
+                        onDragEnd={endDrag}
+                      >
+                        <div className="lib-card-header">
+                          <div className="lib-card-identity">
+                            <LibGlyph icon={Building2} color={preset.color} size={15} />
+                            <div className="lib-card-heading">
+                              <span className="lib-card-title">{preset.name}</span>
+                              <span
+                                className="lib-category-badge"
+                                style={{ color: preset.color, borderColor: `${preset.color}40`, background: `${preset.color}15` }}
+                              >
+                                {preset.category || 'Space'}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="lib-space-dim-tag">{preset.width} × {preset.height}</span>
+                        </div>
+
+                        {preset.description && <p className="lib-card-desc">{preset.description}</p>}
+                        {preset.workflowPrompt && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#10b981', marginTop: 4, fontWeight: 500 }}>
+                            <Zap size={11} style={{ flexShrink: 0 }} />
+                            <span>Runtime Workflow & Ethics Active</span>
+                          </div>
+                        )}
+
+                        <div className="lib-space-card-footer">
+                          <div className="lib-space-drag-badge">
+                            <GripHorizontal size={12} />
+                            <span>Drag onto Canvas</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="lib-space-deploy-btn"
+                            style={{ '--space-accent': preset.color } as React.CSSProperties}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.dispatchEvent(new CustomEvent('canvas:spawn-zone', { detail: preset }));
+                            }}
+                          >
+                            <Plus size={12} />
+                            <span>Deploy Space</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {filteredSpaces.length === 0 && (
+                    <div className="lib-empty">
+                      <Building2 size={24} />
+                      <p>No spaces match &quot;{selectedCategory !== 'All' ? selectedCategory : searchQuery}&quot;</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ── Zones (hierarchical designations inside a space) ── */}
+            {activeTab === 'zones' && (
+              <>
+                <p className="lib-drag-hint">
+                  {zoneSubTab === 'single'
+                    ? 'Drag a zone inside a Space · Drop an agent in the zone to assign its designation and reporting line.'
+                    : 'Drag a company org tree inside a Space · Deploys complete hierarchy with reporting lines connected.'}
+                </p>
+
+                {zoneSubTab === 'single' ? (
+                  <>
+                    <div
+                      className="lib-create-action-card lib-zone-create-card"
+                      style={{ '--cac': '#8b5cf6' } as React.CSSProperties}
+                      onClick={() => {
+                        setEditingZonePreset(null);
+                        setIsZoneBuilderOpen(true);
+                      }}
+                      title="Create a hierarchical role zone with responsibilities and project context"
+                    >
+                      <div className="lib-create-card-left">
+                        <div className="lib-create-card-icon-wrap">
+                          <Plus size={15} />
+                        </div>
+                        <div>
+                          <div className="lib-create-card-title">Create Zone</div>
+                          <div className="lib-create-card-sub">Designation · level · reporting line · project</div>
+                        </div>
+                      </div>
+                      <ChevronRight size={13} className="lib-create-card-arrow" />
+                    </div>
+
+                    <div className="lib-spaces-list">
+                      {filteredZones.map((preset) => {
+                        const parentZone = preset.parentZoneId
+                          ? roleZones.find((zone) => zone.id === preset.parentZoneId)
+                          : null;
+                        const isCustom = Boolean(preset.id);
+                        const presetKey = `role-zone:${preset.id || preset.name}`;
+                        return (
+                          <div
+                            key={presetKey}
+                            className={itemClass(presetKey, 'lib-item lib-item-ready lib-card-item lib-space-card-item lib-role-zone-card-item')}
+                            style={{ '--zone-accent': preset.color } as React.CSSProperties}
+                            draggable
+                            onDragStart={(e) =>
+                              startDrag(presetKey, e, { kind: 'role_zone', roleZonePreset: preset })
+                            }
+                            onDragEnd={endDrag}
+                          >
+                            <div className="lib-card-header">
+                              <div className="lib-card-identity">
+                                <LibGlyph icon={Network} color={preset.color} size={15} />
+                                <div className="lib-card-heading">
+                                  <span className="lib-card-title">{preset.name}</span>
+                                  <span className="lib-category-badge" style={{ color: preset.color, borderColor: `${preset.color}40`, background: `${preset.color}15` }}>
+                                    {preset.roleTitle || preset.category || 'Zone'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="lib-space-card-meta">
+                                <span className="lib-space-level-tag">L{preset.level}</span>
+                                <span className="lib-space-dim-tag">{preset.width} × {preset.height}</span>
+                              </div>
+                            </div>
+
+                            {preset.description && <p className="lib-card-desc">{preset.description}</p>}
+
+                            {parentZone && (
+                              <div className="lib-space-parent-line">
+                                Reports into <strong>{parentZone.roleTitle || parentZone.name}</strong>
+                              </div>
+                            )}
+
+                            <div className="lib-space-card-footer">
+                              <div className="lib-space-drag-badge">
+                                <GripHorizontal size={12} />
+                                <span>{isCustom ? 'Custom zone' : 'Drag into a Space'}</span>
+                              </div>
+                              <div className="lib-space-card-actions">
+                                <button
+                                  type="button"
+                                  className="lib-space-icon-btn"
+                                  title={isCustom ? 'Edit zone' : 'Customize this zone'}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingZonePreset(preset);
+                                    setIsZoneBuilderOpen(true);
+                                  }}
+                                >
+                                  <Edit3 size={12} />
+                                </button>
+                                {isCustom && (
+                                  <button
+                                    type="button"
+                                    className="lib-space-icon-btn danger"
+                                    title="Delete custom zone"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteZonePreset(preset.id);
+                                    }}
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="lib-space-deploy-btn"
+                                  style={{ '--space-accent': preset.color } as React.CSSProperties}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.dispatchEvent(new CustomEvent('canvas:spawn-role-zone', { detail: preset }));
+                                  }}
+                                >
+                                  <Plus size={12} />
+                                  <span>Deploy Zone</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {filteredZones.length === 0 && (
+                        <div className="lib-empty">
+                          <Network size={24} />
+                          <p>No zones match &quot;{selectedCategory !== 'All' ? selectedCategory : searchQuery}&quot;</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="lib-spaces-list">
+                    {filteredChains.map((chain) => {
+                      const presetKey = `chain:${chain.id}`;
+                      const tierCount = chain.nodes.reduce((m, n) => Math.max(m, n.level + 1), 0);
+                      const rootNode = chain.nodes.find((n) => n.level === 0) || chain.nodes[0];
+                      const accentColor = chain.color || chain.industryColor || '#8b5cf6';
+                      return (
+                        <div
+                          key={presetKey}
+                          className={itemClass(presetKey, 'lib-item lib-item-ready lib-card-item lib-space-card-item lib-chain-card-item')}
+                          style={{ '--zone-accent': accentColor } as React.CSSProperties}
+                          draggable
+                          onDragStart={(e) =>
+                            startDrag(presetKey, e, {
+                              kind: 'hierarchical_chain',
+                              hierarchicalChainPreset: chain,
+                            })
+                          }
+                          onDragEnd={endDrag}
+                        >
+                          <div className="lib-card-header">
+                            <div className="lib-card-identity">
+                              <LibGlyph icon={Network} color={accentColor} size={15} />
+                              <div className="lib-card-heading">
+                                <span className="lib-card-title">{chain.name || chain.companyName}</span>
+                                <span
+                                  className="lib-category-badge"
+                                  style={{
+                                    color: accentColor,
+                                    borderColor: `${accentColor}40`,
+                                    background: `${accentColor}15`,
+                                  }}
+                                >
+                                  {chain.category || chain.industryCategory}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="lib-space-card-meta">
+                              <span className="lib-space-level-tag">{chain.nodes.length} Zones</span>
+                              <span className="lib-space-dim-tag">{tierCount} Tiers</span>
+                            </div>
+                          </div>
+
+                          {chain.description && <p className="lib-card-desc">{chain.description}</p>}
+
+                          <div className="lib-chain-preview-tree">
+                            <div className="lib-chain-root-preview">
+                              <span className="lib-chain-crown-tag">Executive:</span>
+                              <strong>{rootNode.roleTitle}</strong> ({rootNode.name})
+                            </div>
+                            <div className="lib-chain-tags-cloud">
+                              {chain.nodes.slice(1, 8).map((n) => (
+                                <span key={n.id} className="lib-chain-node-tag" style={{ borderColor: `${n.color}35` }}>
+                                  L{n.level} {n.roleTitle}
+                                </span>
+                              ))}
+                              {chain.nodes.length > 8 && (
+                                <span className="lib-chain-node-tag more">
+                                  +{chain.nodes.length - 8} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="lib-space-card-footer">
+                            <div className="lib-space-drag-badge">
+                              <GripHorizontal size={12} />
+                              <span>Drag into a Space</span>
+                            </div>
+                            <div className="lib-space-card-actions">
+                              <button
+                                type="button"
+                                className="lib-space-deploy-btn"
+                                style={{ '--space-accent': accentColor } as React.CSSProperties}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.dispatchEvent(
+                                    new CustomEvent('canvas:spawn-hierarchical-chain', {
+                                      detail: { chain },
+                                    }),
+                                  );
+                                }}
+                              >
+                                <Plus size={12} />
+                                <span>Deploy Hierarchy</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {filteredChains.length === 0 && (
+                      <div className="lib-empty">
+                        <Network size={24} />
+                        <p>No chains match &quot;{selectedCategory !== 'All' ? selectedCategory : searchQuery}&quot;</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Role Hierarchy & Live Workflow ── */}
+                <div className="lib-hierarchical-preview-card">
+                  <div className="lib-hierarchical-header">
+                    <div className="lib-hierarchical-tag">
+                      <Sparkles size={11} />
+                      <span>Live Hierarchy</span>
+                    </div>
+                    <span className="lib-hierarchical-badge">{roleZones.length} Active</span>
+                  </div>
+
+                  <div className="lib-hierarchical-title-row">
+                    <div className="lib-hierarchical-icon">
+                      <Network size={16} />
+                    </div>
+                    <div>
+                      <div className="lib-hierarchical-title">Zones &amp; Reporting Lines</div>
+                      <div className="lib-hierarchical-sub">Designation · delegation · project context</div>
+                    </div>
+                  </div>
+
+                  <p className="lib-hierarchical-desc">
+                    Zones live inside visual Spaces. Place a CTO, manager, lead or specialist zone over a Space,
+                    then drop agents into it. Each agent inherits the zone designation and receives a live
+                    delegation workflow generated from current skills, MCP servers and provider readiness.
+                  </p>
+
+                  <div className="lib-hierarchical-flow-mini">
+                    <div className="flow-mini-node flow-lead">CTO</div>
+                    <div className="flow-mini-arrow">↓</div>
+                    <div className="flow-mini-row">
+                      <div className="flow-mini-node flow-manager">Eng Manager</div>
+                      <div className="flow-mini-node flow-manager">Product Lead</div>
+                    </div>
+                    <div className="flow-mini-arrow">↓</div>
+                    <div className="flow-mini-row">
+                      <div className="flow-mini-node flow-lead">Tech Lead</div>
+                      <div className="flow-mini-node flow-manager">QA Guild</div>
+                    </div>
+                  </div>
+
+                  <div className="lib-hierarchical-actions">
+                    <button
+                      type="button"
+                      className="lib-hierarchical-action primary"
+                      onClick={() => {
+                        setEditingZonePreset(null);
+                        setIsZoneBuilderOpen(true);
+                      }}
+                    >
+                      <Plus size={12} />
+                      <span>Create Zone</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Skills Tab (All / Stock / Plugins) ── */}
+            {activeTab === 'skills' && (() => {
+              const renderStockCard = (skill: StockSkillItem) => {
+                const color = skillCategoryColor(skill.category);
+                const Icon = skillCategoryIcon(skill.category);
+                const isSelected = selectedDetail?.kind === 'skill' && selectedDetail.item.id === skill.id;
+                return (
+                  <div
+                    key={skill.id}
+                    className={`${itemClass(`skill:${skill.id}`, 'lib-item lib-item-ready lib-card-item lib-skill-item')} ${isSelected ? 'lib-item-selected' : ''}`}
+                    draggable
+                    onDragStart={(e) => startDrag(`skill:${skill.id}`, e, { kind: 'skill', skill })}
+                    onDragEnd={endDrag}
+                    onClick={() => handleSelectDetail({ kind: 'skill', item: skill, isCustom: skill.isCustom })}
+                  >
+                    <div className="lib-skill-card-top">
+                      <div className="lib-skill-avatar-wrap">
+                        <LibGlyph icon={Icon} color={color} size={20} />
+                      </div>
+                      <div className="lib-skill-info">
+                        <div className="lib-skill-title-row">
+                          <span className="lib-skill-title">{skill.name}</span>
+                          <div className="lib-card-header-right">
+                            {skill.isCustom && (
+                              <button
+                                className="lib-item-delete-btn"
+                                title="Delete this custom skill"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCustomSkill(skill.id);
+                                }}
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
+                            <ChevronRight size={14} className="lib-item-arrow" />
+                          </div>
+                        </div>
+                        <div className="lib-skill-sub-row">
+                          {skill.isCustom ? (
+                            <span className="lib-custom-badge">Custom</span>
+                          ) : (
+                            <span className="lib-card-badge" style={{ color, background: `${color}18`, borderColor: `${color}35` }}>
+                              {skill.category}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="lib-card-desc">{skill.description}</p>
+                    {skill.tags && skill.tags.length > 0 && (
+                      <div className="lib-card-chips">
+                        {skill.tags.slice(0, 4).map((t) => (
+                          <span key={t} className="lib-tool-chip">
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              const renderPluginCard = (skill: StockSkillItem) => {
+                const color = pluginCategoryColor(skill.category);
+                const Icon = pluginCategoryIcon(skill.category);
+                const isSelected = selectedDetail?.kind === 'skill' && selectedDetail.item.id === skill.id;
+                const rawRepo = skill.plugin?.repo || skill.name;
+                const parts = rawRepo.split('/');
+                const owner = parts.length > 1 ? parts[0] : '';
+                const repoName = parts.length > 1 ? parts[1] : rawRepo;
+                const stars = skill.plugin?.stars ?? 0;
+                const license = skill.plugin?.license;
+
+                return (
+                  <div
+                    key={skill.id}
+                    className={`${itemClass(`skill:${skill.id}`, 'lib-item lib-item-ready lib-card-item lib-plugin-item')} ${isSelected ? 'lib-item-selected' : ''}`}
+                    draggable
+                    onDragStart={(e) => startDrag(`skill:${skill.id}`, e, { kind: 'skill', skill })}
+                    onDragEnd={endDrag}
+                    onClick={() => handleSelectDetail({ kind: 'skill', item: skill, isCustom: skill.isCustom })}
+                  >
+                    <div className="lib-plugin-card-top">
+                      <div className="lib-plugin-avatar-wrap">
+                        <GhAvatar repo={rawRepo} avatarUrl={skill.plugin?.avatarUrl} fallbackIcon={Icon} color={color} size={38} />
+                      </div>
+                      <div className="lib-plugin-info">
+                        <div className="lib-plugin-title-row">
+                          <span className="lib-plugin-title" title={skill.name}>{repoName}</span>
+                          <div className="lib-plugin-top-actions">
+                            {skill.isCustom && (
+                              <button
+                                className="lib-item-delete-btn"
+                                title="Remove this imported skill"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCustomPlugin(skill.id);
+                                }}
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
+                            <a
+                              href={`https://github.com/${rawRepo}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="lib-plugin-gh-icon-btn"
+                              title={`Open https://github.com/${rawRepo} in new tab`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isTauri()) {
+                                  e.preventDefault();
+                                  openExternalLink(`https://github.com/${rawRepo}`);
+                                }
+                              }}
+                            >
+                              <BrandIcons.github size={12} />
+                            </a>
+                            <ChevronRight size={14} className="lib-item-arrow" />
+                          </div>
+                        </div>
+
+                        <div className="lib-plugin-sub-row">
+                          {owner && (
+                            <span className="lib-plugin-author-tag">
+                              by <strong>@{owner}</strong>
+                            </span>
+                          )}
+                          {stars > 0 && (
+                            <span
+                              className="lib-plugin-star-badge"
+                              title={`${stars.toLocaleString()} GitHub stars (snapshot ${skill.plugin?.verified ?? VERIFIED_AT})`}
+                            >
+                              <Star size={9.5} fill="currentColor" />
+                              <span>{formatStars(stars)}</span>
+                            </span>
+                          )}
+                          {license && (
+                            <span className="lib-plugin-lic-badge" title={`License: ${license}`}>
+                              {license}
+                            </span>
+                          )}
+                          {skill.isCustom ? (
+                            <span className="lib-custom-badge">Custom</span>
+                          ) : (
+                            <span className="lib-card-badge" style={{ color, background: `${color}18`, borderColor: `${color}35` }}>
+                              {skill.category}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="lib-card-desc">{skill.description}</p>
+                  </div>
+                );
+              };
+
+              const createCustomSkillCard = (
                 <div
                   className="lib-create-action-card"
                   style={{ '--cac': '#8b5cf6' } as React.CSSProperties}
@@ -1710,128 +2929,61 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                   </div>
                   <ChevronRight size={13} className="lib-create-card-arrow" />
                 </div>
+              );
 
-                {filteredSkills.map((skill) => {
-                  const color = skillCategoryColor(skill.category);
-                  const Icon = skillCategoryIcon(skill.category);
-                  const isSelected = selectedDetail?.kind === 'skill' && selectedDetail.item.id === skill.id;
-                  return (
-                    <div
-                      key={skill.id}
-                      className={`${itemClass(`skill:${skill.id}`, 'lib-item lib-item-ready lib-card-item')} ${isSelected ? 'lib-item-selected' : ''}`}
-                      draggable
-                      onDragStart={(e) => startDrag(`skill:${skill.id}`, e, { kind: 'skill', skill })}
-                      onDragEnd={endDrag}
-                      onClick={() => handleSelectDetail({ kind: 'skill', item: skill, isCustom: skill.isCustom })}
-                    >
-                      <div className="lib-card-header">
-                        <div className="lib-card-identity">
-                          <LibGlyph icon={Icon} color={color} size={14} />
-                          <div className="lib-card-heading">
-                            <span className="lib-card-title">{skill.name}</span>
-                            {skill.isCustom ? (
-                              <span className="lib-custom-badge">Custom</span>
-                            ) : (
-                              <span className="lib-card-badge" style={{ color, background: `${color}18`, borderColor: `${color}35` }}>
-                                {skill.category}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          {skill.isCustom && (
-                            <button
-                              className="lib-item-delete-btn"
-                              title="Delete this custom skill"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteCustomSkill(skill.id);
-                              }}
-                            >
-                              <Trash2 size={11} />
-                            </button>
-                          )}
-                          <ChevronRight size={13} className="lib-item-arrow" />
-                        </div>
-                      </div>
-                      <p className="lib-card-desc">{skill.description}</p>
-                      {skill.tags && skill.tags.length > 0 && (
-                        <div className="lib-card-chips">
-                          {skill.tags.slice(0, 4).map((t) => (
-                            <span key={t} className="lib-tool-chip">
-                              #{t}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+              const importGhBtn = (
+                <button
+                  className="lib-import-gh-btn"
+                  onClick={() => setShowGhImportModal(true)}
+                  title="Import any repository from GitHub into your skills catalog"
+                >
+                  <div className="lib-import-gh-left">
+                    <div className="lib-import-gh-icon">
+                      <BrandIcons.github size={18} />
                     </div>
-                  );
-                })}
-                {filteredSkills.length === 0 && (
-                  <div className="lib-empty">
-                    <LibGlyph icon={skillCategoryIcon('')} color="#64748b" size={22} />
-                    <p>No skills match your search or filter</p>
+                    <div className="lib-import-gh-text">
+                      <span className="lib-import-gh-title">+ Import Skill from GitHub</span>
+                      <span className="lib-import-gh-subtitle">Paste repo URL or owner/repo to add</span>
+                    </div>
                   </div>
-                )}
-              </>
-            )}
+                  <Plus size={16} className="lib-import-gh-plus" />
+                </button>
+              );
 
-            {/* ── Skills (curated GitHub plugins) ── */}
-            {activeTab === 'skills' && skillSource === 'plugins' && (
-              <>
-                <p className="lib-drag-hint">
-                  Popular GitHub plugins. Click for usage details · Drag onto agent to attach.
-                </p>
-                {filteredPlugins.map((skill) => {
-                  const color = pluginCategoryColor(skill.category);
-                  const Icon = pluginCategoryIcon(skill.category);
-                  const isSelected = selectedDetail?.kind === 'skill' && selectedDetail.item.id === skill.id;
-                  return (
-                    <div
-                      key={skill.id}
-                      className={`${itemClass(`skill:${skill.id}`, 'lib-item lib-item-ready lib-card-item lib-plugin-item')} ${isSelected ? 'lib-item-selected' : ''}`}
-                      draggable
-                      onDragStart={(e) => startDrag(`skill:${skill.id}`, e, { kind: 'skill', skill })}
-                      onDragEnd={endDrag}
-                      onClick={() => handleSelectDetail({ kind: 'skill', item: skill })}
-                    >
-                      <div className="lib-card-header">
-                        <div className="lib-card-identity">
-                          <LibGlyph icon={Icon} color={color} size={14} />
-                          <div className="lib-card-heading">
-                            <span className="lib-card-title" title={skill.name}>{skill.name}</span>
-                            {skill.plugin && (
-                              <div className="lib-plugin-header-badges">
-                                <span className="lib-plugin-star-badge" title={`${skill.plugin.stars.toLocaleString()} GitHub stars`}>
-                                  <Star size={8.5} fill="currentColor" />
-                                  <span>{formatStars(skill.plugin.stars)}</span>
-                                </span>
-                                {skill.plugin.license && (
-                                  <span className="lib-plugin-lic-badge" title={`License: ${skill.plugin.license}`}>
-                                    {skill.plugin.license}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            <span className="lib-card-badge" style={{ color, background: `${color}18`, borderColor: `${color}35` }}>
-                              {skill.category}
-                            </span>
-                          </div>
-                        </div>
-                        <ChevronRight size={13} className="lib-item-arrow" />
+              if (skillSource === 'stock') {
+                return (
+                  <>
+                    <p className="lib-drag-hint">
+                      Click a skill to inspect workflow · Drag onto agent to teach it.
+                    </p>
+                    {createCustomSkillCard}
+                    {filteredSkills.map(renderStockCard)}
+                    {filteredSkills.length === 0 && (
+                      <div className="lib-empty">
+                        <LibGlyph icon={skillCategoryIcon('')} color="#64748b" size={22} />
+                        <p>No skills match your search or filter</p>
                       </div>
-                      <p className="lib-card-desc">{skill.description}</p>
+                    )}
+                  </>
+                );
+              }
+
+              return (
+                <>
+                  <p className="lib-drag-hint">
+                    Popular GitHub plugins. Click for usage details · Drag onto agent to attach.
+                  </p>
+                  {importGhBtn}
+                  {filteredPlugins.map(renderPluginCard)}
+                  {filteredPlugins.length === 0 && (
+                    <div className="lib-empty">
+                      <LibGlyph icon={pluginCategoryIcon('')} color="#64748b" size={22} />
+                      <p>No plugins match your search or filter</p>
                     </div>
-                  );
-                })}
-                {filteredPlugins.length === 0 && (
-                  <div className="lib-empty">
-                    <LibGlyph icon={pluginCategoryIcon('')} color="#64748b" size={22} />
-                    <p>No plugins match your search or filter</p>
-                  </div>
-                )}
-              </>
-            )}
+                  )}
+                </>
+              );
+            })()}
 
             {/* ── Agent Templates ── */}
             {activeTab === 'agents' && (
@@ -1865,7 +3017,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                   <ChevronRight size={13} className="lib-create-card-arrow" />
                 </div>
 
-                {filteredAgents.slice(0, 60).map((agent) => {
+                {filteredAgents.slice(0, agentVisibleCount).map((agent) => {
                   const color = agentCategoryColor(agent.category);
                   const isSelected = selectedDetail?.kind === 'agent' && selectedDetail.item.id === agent.id;
                   const agentToDrag = isSelected ? getCustomizedAgent() : agent;
@@ -1873,7 +3025,8 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                   return (
                     <div
                       key={agent.id}
-                      className={`${itemClass(`agent:${agent.id}`, 'lib-item lib-item-ready lib-card-item')} ${isSelected ? 'lib-item-selected' : ''}`}
+                      className={`${itemClass(`agent:${agent.id}`, 'lib-item lib-item-ready lib-card-item lib-agent-card')} ${isSelected ? 'lib-item-selected' : ''}`}
+                      style={{ '--ac': color } as React.CSSProperties}
                       draggable
                       onDragStart={(e) => startDrag(`agent:${agent.id}`, e, { kind: 'agent', agent: agentToDrag })}
                       onDragEnd={endDrag}
@@ -1883,7 +3036,13 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                     >
                       <div className="lib-card-header">
                         <div className="lib-card-identity">
-                          <LibGlyph icon={agentCategoryIcon(agent.category)} color={color} size={15} />
+                          <div className="lib-agent-avatar-wrap">
+                            <AgentAvatar
+                              agentId={agent.id}
+                              size={38}
+                              className="lib-agent-avatar"
+                            />
+                          </div>
                           <div className="lib-card-heading">
                             <span className="lib-card-title" title={agent.name}>{agent.name}</span>
                             {agent.isCustom ? (
@@ -1895,11 +3054,27 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                             )}
                           </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <div className="lib-agent-card-actions">
+                          {onSpawnTemplate && (
+                            <button
+                              type="button"
+                              className="lib-agent-spawn-btn"
+                              title="Spawn agent into space"
+                              aria-label={`Spawn ${agent.name} into space`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSpawnTemplate(agentToDrag);
+                              }}
+                            >
+                              <Play size={10} fill="currentColor" />
+                            </button>
+                          )}
                           {agent.isCustom && (
                             <button
+                              type="button"
                               className="lib-item-delete-btn"
                               title="Delete this custom agent"
+                              aria-label={`Delete ${agent.name}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeleteCustomAgent(agent.id);
@@ -1912,6 +3087,13 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                         </div>
                       </div>
                       <p className="lib-card-desc">{agent.role}</p>
+                      <div className="lib-agent-meta-row">
+                        {agent.category && agent.category !== 'Uncategorized' && (
+                          <span className="lib-agent-meta-chip" title={`Specialization: ${agent.category}`}>
+                            <span>{agent.category}</span>
+                          </span>
+                        )}
+                      </div>
                       <div className="lib-agent-chips-row">
                         <span className="lib-tool-chip lib-chip-model" title={`Model: ${agent.default_model}`}>
                           <Cpu size={9} />
@@ -1923,13 +3105,15 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                             <span>{agent.suggested_cron}</span>
                           </span>
                         )}
-                        {agent.recommended_mcps && agent.recommended_mcps.length > 0 && (
-                          <span className="lib-tool-chip lib-chip-mcp" title={`${agent.recommended_mcps.length} Recommended MCPs`}>
-                            <Zap size={9} />
-                            <span>{agent.recommended_mcps.length} MCPs</span>
-                          </span>
-                        )}
                       </div>
+                      <AgentResourceRows
+                        agent={agent}
+                        catalogMcps={catalogMcpMap}
+                        onSelectMcp={(mcp) => {
+                          setMcpEditMode('form');
+                          handleSelectDetail({ kind: 'mcp', item: mcp, isCustom: mcp.isCustom });
+                        }}
+                      />
                     </div>
                   );
                 })}
@@ -1938,6 +3122,26 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                   <div className="lib-empty">
                     <LibGlyph icon={agentCategoryIcon('')} color="#64748b" size={22} />
                     <p>No agent templates match your query</p>
+                  </div>
+                )}
+
+                {filteredAgents.length > 0 && (
+                  <div className="lib-agent-loadmore">
+                    <span className="lib-agent-loadmore-count">
+                      Showing {Math.min(agentVisibleCount, filteredAgents.length)} of {filteredAgents.length} agents
+                    </span>
+                    {agentVisibleCount < filteredAgents.length ? (
+                      <button
+                        type="button"
+                        className="lib-agent-loadmore-btn"
+                        onClick={() => setAgentVisibleCount((count) => count + AGENT_PAGE_SIZE)}
+                      >
+                        Load more
+                      </button>
+                    ) : (
+                      <span className="lib-agent-loadmore-end">All agents loaded</span>
+                    )}
+                    <div ref={agentSentinelRef} className="lib-agent-sentinel" aria-hidden="true" />
                   </div>
                 )}
               </>
@@ -2090,7 +3294,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                         >
                           <div className="lib-card-header">
                             <div className="lib-card-identity">
-                              <LibGlyph icon={LIB_TAB_ICONS.personality} color={LIB_TAB_COLORS.personality} size={14} />
+                              <LibGlyph icon={personalityPresetIcon(preset.id, preset.category)} color={LIB_TAB_COLORS.personality} size={14} />
                               <div className="lib-card-heading">
                                 <span className="lib-card-title">{preset.name}</span>
                                 {preset.isCustom ? (
@@ -2182,7 +3386,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                         >
                           <div className="lib-card-header">
                             <div className="lib-card-identity">
-                              <LibGlyph icon={LIB_TAB_ICONS.output} color={LIB_TAB_COLORS.output} size={14} />
+                              <LibGlyph icon={outputPresetIcon(preset.id, preset.category)} color={LIB_TAB_COLORS.output} size={14} />
                               <div className="lib-card-heading">
                                 <span className="lib-card-title">{preset.name}</span>
                                 {preset.isCustom ? (
@@ -2369,13 +3573,13 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                 </div>
 
                 {/* Recommended MCPs */}
-                {selectedDetail.item.recommended_mcps && selectedDetail.item.recommended_mcps.length > 0 && (
+                {detailRecommendedMcps.length > 0 && (
                   <div className="lib-detail-section">
                     <span className="lib-detail-section-title">
-                      Recommended MCP Servers ({selectedDetail.item.recommended_mcps.length})
+                      Recommended MCP Servers ({detailRecommendedMcps.length})
                     </span>
                     <div className="lib-detail-chips">
-                      {selectedDetail.item.recommended_mcps.map((m) => (
+                      {detailRecommendedMcps.map((m) => (
                         <span key={m} className="lib-detail-chip mcp">
                           <Package size={10} />
                           <span>{m.replace('-mcp-server', '').replace('-mcp', '')}</span>
@@ -2606,7 +3810,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                               boxShadow: `0 4px 16px -3px ${brand.glowColor}`,
                             }}
                           >
-                            {brand.icon}
+                            <McpBrandIcon mcp={selectedDetail.item} size={30} fallback={brand.icon} />
                           </div>
                         );
                       })()}
@@ -2879,6 +4083,45 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                         </div>
                       </div>
 
+                      {selectedDetail.item.whenToUse && (
+                        <div className="lib-detail-section">
+                          <span className="lib-detail-section-title">When to Use (Agent Directive)</span>
+                          <div className="lib-when-to-use-card">
+                            <Compass size={14} className="lib-when-to-use-icon" />
+                            <div className="lib-when-to-use-body">
+                              <span className="lib-when-to-use-title">Recommended Activation</span>
+                              <p className="lib-when-to-use-text">{selectedDetail.item.whenToUse}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {(selectedDetail.item.category || selectedDetail.item.toolsCount !== undefined) && (
+                        <div className="lib-detail-section">
+                          <span className="lib-detail-section-title">Capabilities & Taxonomy</span>
+                          <div className="lib-tools-badge-row">
+                            {selectedDetail.item.category && (
+                              <span
+                                className="lib-cat-pill"
+                                style={{
+                                  background: `${MCP_CATEGORY_COLORS[selectedDetail.item.category] || '#6366f1'}20`,
+                                  color: MCP_CATEGORY_COLORS[selectedDetail.item.category] || '#a5b4fc',
+                                  borderColor: `${MCP_CATEGORY_COLORS[selectedDetail.item.category] || '#6366f1'}40`,
+                                }}
+                              >
+                                {selectedDetail.item.category}
+                              </span>
+                            )}
+                            {selectedDetail.item.toolsCount !== undefined && (
+                              <span className="lib-tools-count-badge">
+                                <Wrench size={11} />
+                                {selectedDetail.item.toolsCount} {selectedDetail.item.toolsCount === 1 ? 'tool' : 'tools'} included
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="lib-detail-section">
                         <span className="lib-detail-section-title">Operational Status</span>
                         <div className="lib-status-pill-wrap">
@@ -2898,13 +4141,31 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                         <div className="lib-detail-section">
                           <span className="lib-detail-section-title">Required Credentials</span>
                           <div className="lib-detail-chips">
-                            {selectedDetail.item.envKeys.map((k) => (
-                              <span key={k} className="lib-detail-chip key">
-                                <KeyRound size={10} />
-                                <code>{k}</code>
-                                {configuredKeys[k] && <Check size={10} color="#10b981" />}
-                              </span>
-                            ))}
+                            {selectedDetail.item.envKeys.map((k) => {
+                              const perKey = selectedDetail.item.keyLinks?.[k];
+                              const getUrl = perKey?.url || selectedDetail.item.keyGetUrl;
+                              return (
+                                <span key={k} className="lib-detail-chip key">
+                                  <KeyRound size={10} />
+                                  <code>{k}</code>
+                                  {configuredKeys[k] ? (
+                                    <Check size={10} color="#10b981" />
+                                  ) : getUrl ? (
+                                    <a
+                                      href={getUrl}
+                                      target="_blank"
+                                      rel="noreferrer noopener"
+                                      className="lib-detail-chip-getlink"
+                                      title={`Get ${k} — ${getUrl}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <span>Get key</span>
+                                      <ExternalLink size={9} />
+                                    </a>
+                                  ) : null}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -2984,12 +4245,37 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                   {!isCustom && !isMcpReady(selectedDetail.item) && (
                     <button
                       className="lib-spawn-btn connect"
+                      disabled={connectingMcpName === selectedDetail.item.name}
                       onClick={() => onConnectKey(selectedDetail.item)}
+                      style={connectingMcpName === selectedDetail.item.name ? { opacity: 0.85, cursor: 'wait' } : undefined}
                     >
-                      <KeyRound size={13} />
-                      <span>Connect {selectedDetail.item.label}</span>
+                      {connectingMcpName === selectedDetail.item.name ? (
+                        <>
+                          <Loader2 size={13} className="lib-spin" />
+                          <span>Connecting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound size={13} />
+                          <span>Connect {selectedDetail.item.label}</span>
+                        </>
+                      )}
                     </button>
                   )}
+
+                  {!isCustom &&
+                    isMcpReady(selectedDetail.item) &&
+                    selectedDetail.item.authType === 'oauth' &&
+                    onDisconnectKey && (
+                      <button
+                        className="lib-spawn-btn disconnect"
+                        onClick={() => onDisconnectKey(selectedDetail.item)}
+                        title={`Revoke stored credentials for ${selectedDetail.item.label}`}
+                      >
+                        <LogOut size={13} />
+                        <span>Disconnect {selectedDetail.item.label}</span>
+                      </button>
+                    )}
 
                   <div className="lib-btn-row">
                     {isCustom ? (
@@ -3080,14 +4366,109 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                       </div>
                     </div>
                   ) : (
-                    <>
-                      <h3 className="lib-detail-title">{selectedDetail.item.name}</h3>
-                      {selectedDetail.item.plugin && (
-                        <p className="lib-detail-role">
-                          <Star size={11} fill="currentColor" color="#eab308" /> {formatStars(selectedDetail.item.plugin.stars)} stars · {selectedDetail.item.plugin.license}
-                        </p>
-                      )}
-                    </>
+                    <div className="lib-detail-hero">
+                      <div className="lib-detail-hero-avatar">
+                        {selectedDetail.item.plugin ? (
+                          <GhAvatar
+                            repo={selectedDetail.item.plugin.repo || selectedDetail.item.name}
+                            avatarUrl={selectedDetail.item.plugin.avatarUrl}
+                            fallbackIcon={pluginCategoryIcon(selectedDetail.item.category)}
+                            color={pluginCategoryColor(selectedDetail.item.category)}
+                            size={48}
+                          />
+                        ) : (
+                          <LibGlyph
+                            icon={skillCategoryIcon(selectedDetail.item.category)}
+                            color={skillCategoryColor(selectedDetail.item.category)}
+                            size={24}
+                          />
+                        )}
+                      </div>
+                      <div className="lib-detail-hero-content">
+                        <div className="lib-detail-hero-top">
+                          <h3 className="lib-detail-title" title={selectedDetail.item.name}>
+                            {(() => {
+                              const raw = selectedDetail.item.name;
+                              const parts = raw.split('/');
+                              return parts.length > 1 ? parts[1] : raw;
+                            })()}
+                          </h3>
+                        </div>
+
+                        {/* Author info with link */}
+                        {(() => {
+                          const rawRepo = selectedDetail.item.plugin?.repo || selectedDetail.item.name;
+                          const parts = rawRepo.split('/');
+                          const owner = parts.length > 1 ? parts[0] : '';
+                          if (!owner) return null;
+                          return (
+                            <div className="lib-detail-author-row">
+                              <span className="lib-detail-author-label">Author</span>
+                              <a
+                                href={`https://github.com/${owner}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="lib-detail-author-link"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isTauri()) {
+                                    e.preventDefault();
+                                    openExternalLink(`https://github.com/${owner}`);
+                                  }
+                                }}
+                              >
+                                @{owner}
+                              </a>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Stats / pills row */}
+                        <div className="lib-detail-stat-row">
+                          {selectedDetail.item.plugin && (
+                            <>
+                              <span
+                                className="lib-detail-stat-pill stars"
+                                title={`${selectedDetail.item.plugin.stars.toLocaleString()} GitHub stars (snapshot ${selectedDetail.item.plugin.verified ?? VERIFIED_AT})`}
+                              >
+                                <Star size={11} fill="currentColor" />
+                                <span>{formatStars(selectedDetail.item.plugin.stars)} stars</span>
+                              </span>
+                              <span
+                                className="lib-detail-stat-pill verified"
+                                title="GitHub API star-count snapshot date"
+                              >
+                                <Clock size={11} />
+                                <span>Snapshot {selectedDetail.item.plugin.verified ?? VERIFIED_AT}</span>
+                              </span>
+                              {selectedDetail.item.plugin.license && (
+                                <span className="lib-detail-stat-pill license">
+                                  {selectedDetail.item.plugin.license}
+                                </span>
+                              )}
+                              <a
+                                href={`https://github.com/${selectedDetail.item.plugin.repo}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="lib-detail-stat-pill github-link"
+                                title="Open repository on GitHub"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isTauri()) {
+                                    e.preventDefault();
+                                    openExternalLink(`https://github.com/${selectedDetail.item.plugin?.repo}`);
+                                  }
+                                }}
+                              >
+                                <BrandIcons.github size={12} />
+                                <span>GitHub</span>
+                                <ExternalLink size={10} />
+                              </a>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -3800,138 +5181,206 @@ ${selectedDetail.item.tools.map((t) => `- \`${t}\`: Built-in safe workspace prim
       {/* ── Version & Upgrade Modal (Desktop App Only) ── */}
       {isTauri() && showVersionModal && (
         <div
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
-          style={{ background: 'rgba(0, 0, 0, 0.72)', backdropFilter: 'blur(10px)' }}
-          onClick={() => setShowVersionModal(false)}
+          className="sm-ver-overlay"
+          onClick={() => {
+            if (upgradePhase !== 'installing') setShowVersionModal(false);
+          }}
         >
-          <div
-            className="w-full max-w-[460px] rounded-2xl border p-6 shadow-2xl relative"
-            style={{
-              background: '#0d1322',
-              borderColor: 'rgba(255, 255, 255, 0.12)',
-              color: '#f8fafc',
-              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="sm-ver-panel" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="flex items-start justify-between pb-4 border-b border-white/10">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-b from-white/10 to-white/5 border border-white/15 p-2 flex items-center justify-center shadow-lg shrink-0">
-                  <img
-                    src="/smoke-monkey-mascot.png"
-                    alt="Smoke Monkey"
-                    className="w-full h-full object-contain filter drop-shadow"
-                  />
+            <div className="sm-ver-header">
+              <div className="sm-ver-brand">
+                <div className="sm-ver-logo">
+                  <img src="/smoke-monkey-mascot.png" alt="Smoke Monkey" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-white tracking-tight">Smoke Monkey Canvas</h3>
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30">
-                      v{versionInfo?.currentVersion || '1.3.2'}
-                    </span>
+                  <div className="sm-ver-title-row">
+                    <h3 className="sm-ver-title">Smoke Monkey Canvas</h3>
+                    <span className="sm-ver-badge">v{versionInfo?.currentVersion || '1.3.2'}</span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">Spatial Multi-Agent Runtime &amp; Library</p>
+                  <p className="sm-ver-subtitle">Spatial Multi-Agent Runtime &amp; Library</p>
                 </div>
               </div>
               <button
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                onClick={() => setShowVersionModal(false)}
+                className="sm-ver-close"
+                onClick={() => {
+                  if (upgradePhase !== 'installing') setShowVersionModal(false);
+                }}
+                aria-label="Close"
+                disabled={upgradePhase === 'installing'}
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Status Card */}
-            <div className="my-4">
+            <div className="sm-ver-status">
               {versionInfo?.hasUpdate ? (
                 <div
-                  className="p-4 rounded-xl border flex flex-col gap-2.5"
-                  style={{ background: 'rgba(245, 158, 11, 0.08)', borderColor: 'rgba(245, 158, 11, 0.3)' }}
+                  className={
+                    'sm-ver-card sm-ver-card-update' +
+                    (upgradePhase === 'failed' ? ' sm-ver-card-failed' : '') +
+                    (upgradePhase === 'success' ? ' sm-ver-card-done' : '')
+                  }
                 >
-                  <div className="flex items-center gap-2">
-                    <ArrowUpCircle size={18} className="text-amber-400 animate-pulse" />
-                    <span className="font-semibold text-amber-300 text-sm">
-                      New Release Available: v{versionInfo.latestVersion}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    A newer version of Smoke Monkey Canvas &amp; Harness has been published.
-                  </p>
-                  <div
-                    className="flex items-center justify-between p-2.5 rounded-lg border text-xs font-mono"
-                    style={{ background: 'rgba(0, 0, 0, 0.45)', borderColor: 'rgba(255, 255, 255, 0.1)' }}
-                  >
-                    <code className="text-amber-200 select-all truncate mr-2">
-                      {versionInfo.upgradeCommand}
-                    </code>
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-colors shrink-0"
-                      onClick={() => {
-                        navigator.clipboard.writeText(versionInfo.upgradeCommand);
-                        setUpgradeCopied(true);
-                        setTimeout(() => setUpgradeCopied(false), 2000);
-                      }}
-                    >
-                      {upgradeCopied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                      <span>{upgradeCopied ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
+                  {upgradePhase === 'idle' && (
+                    <>
+                      <div className="sm-ver-card-head">
+                        <ArrowUpCircle size={18} className="sm-ver-amber-pulse" />
+                        <span>A newer version is ready</span>
+                      </div>
+                      <p className="sm-ver-card-text">
+                        v{versionInfo.currentVersion} → v{versionInfo.latestVersion}
+                        {versionInfo.latestHarnessVersion !== versionInfo.harnessVersion && (
+                          <> · Harness Core v{versionInfo.harnessVersion} → v{versionInfo.latestHarnessVersion}</>
+                        )}
+                      </p>
+                      {upgradeStartError && <p className="sm-ver-error-text">{upgradeStartError}</p>}
+                      {versionInfo.canUpgrade !== false && (
+                        <button
+                          type="button"
+                          className="sm-ver-btn-primary"
+                          onClick={startUpgrade}
+                          disabled={isStartingUpgrade}
+                        >
+                          {isStartingUpgrade ? (
+                            <Loader2 size={13} className="sm-ver-spin" />
+                          ) : (
+                            <Download size={13} />
+                          )}
+                          <span>{isStartingUpgrade ? 'Starting…' : 'Update & Restart'}</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="sm-ver-disclosure-toggle"
+                        onClick={() => setShowManualUpgrade((v) => !v)}
+                      >
+                        <ChevronRight size={12} className={showManualCommand ? 'sm-ver-chevron-open' : ''} />
+                        <span>Install manually</span>
+                      </button>
+                      {showManualCommand && (
+                        <div className="sm-ver-command">
+                          <code>{versionInfo.upgradeCommand}</code>
+                          <button
+                            type="button"
+                            className="sm-ver-copy"
+                            onClick={() => {
+                              navigator.clipboard.writeText(versionInfo.upgradeCommand);
+                              setUpgradeCopied(true);
+                              setTimeout(() => setUpgradeCopied(false), 2000);
+                            }}
+                          >
+                            {upgradeCopied ? <Check size={12} /> : <Copy size={12} />}
+                            <span>{upgradeCopied ? 'Copied' : 'Copy'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {upgradePhase === 'installing' && (
+                    <>
+                      <div className="sm-ver-card-head">
+                        <Loader2 size={18} className="sm-ver-spin" />
+                        <span>Installing v{versionInfo.latestVersion}…</span>
+                      </div>
+                      <div className="sm-ver-progress">
+                        <span>Downloading and installing the update. Keep this window open.</span>
+                      </div>
+                      {upgradeLogTail && <pre className="sm-ver-log">{upgradeLogTail}</pre>}
+                    </>
+                  )}
+
+                  {upgradePhase === 'success' && (
+                    <>
+                      <div className="sm-ver-card-head sm-ver-head-green">
+                        <CheckCircle2 size={18} />
+                        <span>Update installed — restarting…</span>
+                      </div>
+                      <p className="sm-ver-card-text">
+                        Smoke Monkey Canvas is restarting with v{versionInfo.latestVersion}. This window will refresh
+                        automatically.
+                      </p>
+                      <div className="sm-ver-progress">
+                        <Loader2 size={13} className="sm-ver-spin" />
+                        <span>Waiting for the new version to come online…</span>
+                      </div>
+                    </>
+                  )}
+
+                  {upgradePhase === 'failed' && (
+                    <>
+                      <div className="sm-ver-card-head sm-ver-head-rose">
+                        <AlertTriangle size={18} />
+                        <span>Update failed</span>
+                      </div>
+                      <p className="sm-ver-card-text">
+                        {upgradeJob?.error || 'Something went wrong while installing the update.'}
+                      </p>
+                      {upgradeLogTail && <pre className="sm-ver-log">{upgradeLogTail}</pre>}
+                      <button type="button" className="sm-ver-btn-primary" onClick={startUpgrade} disabled={isStartingUpgrade}>
+                        <RefreshCw size={13} className={isStartingUpgrade ? 'sm-ver-spin' : ''} />
+                        <span>Try again</span>
+                      </button>
+                      <div className="sm-ver-command">
+                        <code>{versionInfo.upgradeCommand}</code>
+                        <button
+                          type="button"
+                          className="sm-ver-copy"
+                          onClick={() => {
+                            navigator.clipboard.writeText(versionInfo.upgradeCommand);
+                            setUpgradeCopied(true);
+                            setTimeout(() => setUpgradeCopied(false), 2000);
+                          }}
+                        >
+                          {upgradeCopied ? <Check size={12} /> : <Copy size={12} />}
+                          <span>{upgradeCopied ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
-                <div
-                  className="p-3.5 rounded-xl border flex items-center gap-3"
-                  style={{ background: 'rgba(16, 185, 129, 0.07)', borderColor: 'rgba(16, 185, 129, 0.22)' }}
-                >
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                    <CheckCircle2 size={17} className="text-emerald-400" />
+                <div className="sm-ver-card sm-ver-card-latest">
+                  <div className="sm-ver-latest-icon">
+                    <CheckCircle2 size={17} />
                   </div>
                   <div>
-                    <span className="text-xs font-semibold text-emerald-300">You are on the latest release</span>
-                    <p className="text-[11px] text-slate-400 mt-0.5">All spatial runtime engines and harness libraries are up to date.</p>
+                    <span className="sm-ver-latest-title">You are on the latest release</span>
+                    <p className="sm-ver-card-text">All spatial runtime engines and harness libraries are up to date.</p>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Spec Sheet List */}
-            <div
-              className="rounded-xl border divide-y text-xs mb-5"
-              style={{
-                background: 'rgba(255, 255, 255, 0.02)',
-                borderColor: 'rgba(255, 255, 255, 0.08)',
-              }}
-            >
-              <div className="flex items-center justify-between px-3.5 py-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
-                <span className="text-slate-400 font-medium">Canvas Workspace</span>
-                <span className="font-semibold text-slate-200 font-mono">v{versionInfo?.currentVersion || '1.3.2'}</span>
+            <div className="sm-ver-specs">
+              <div className="sm-ver-spec-row">
+                <span className="sm-ver-spec-label">Canvas Workspace</span>
+                <span className="sm-ver-spec-value mono">v{versionInfo?.currentVersion || '1.3.2'}</span>
               </div>
-              <div className="flex items-center justify-between px-3.5 py-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
-                <span className="text-slate-400 font-medium">Harness Core</span>
-                <span className="font-semibold text-sky-400 font-mono">v{versionInfo?.harnessVersion || '1.3.1'}</span>
+              <div className="sm-ver-spec-row">
+                <span className="sm-ver-spec-label">Harness Core</span>
+                <span className="sm-ver-spec-value mono sky">v{versionInfo?.harnessVersion || '1.3.1'}</span>
               </div>
-              <div className="flex items-center justify-between px-3.5 py-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
-                <span className="text-slate-400 font-medium">Platform</span>
-                <span className="text-slate-300">macOS (Apple Silicon • arm64)</span>
+              <div className="sm-ver-spec-row">
+                <span className="sm-ver-spec-label">Platform</span>
+                <span className="sm-ver-spec-value">macOS (Apple Silicon • arm64)</span>
               </div>
-              <div className="flex items-center justify-between px-3.5 py-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
-                <span className="text-slate-400 font-medium">Release Channel</span>
-                <span className="text-slate-300 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <div className="sm-ver-spec-row">
+                <span className="sm-ver-spec-label">Release Channel</span>
+                <span className="sm-ver-spec-value sm-ver-channel">
+                  <span className="sm-ver-dot" />
                   Stable Channel
                 </span>
               </div>
             </div>
 
             {/* Footer Buttons */}
-            <div className="flex items-center justify-between pt-3 border-t border-white/10 text-xs">
-              <button
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 text-slate-300 hover:text-white transition-colors"
-                onClick={checkAppVersion}
-                disabled={isCheckingUpdate}
-              >
-                <RefreshCw size={12} className={isCheckingUpdate ? 'animate-spin' : ''} />
+            <div className="sm-ver-footer">
+              <button className="sm-ver-btn" onClick={checkAppVersion} disabled={isCheckingUpdate}>
+                <RefreshCw size={12} className={isCheckingUpdate ? 'sm-ver-spin' : ''} />
                 <span>{isCheckingUpdate ? 'Checking…' : 'Check for Updates'}</span>
               </button>
 
@@ -3943,7 +5392,7 @@ ${selectedDetail.item.tools.map((t) => `- \`${t}\`: Built-in safe workspace prim
                   e.preventDefault();
                   void openExternalLink(versionInfo?.releaseNotesUrl || 'https://github.com/RajdeepDevelopment/smoke-monkey-canvas/releases');
                 }}
-                className="flex items-center gap-1.5 text-sky-400 hover:text-sky-300 transition-colors"
+                className="sm-ver-link"
               >
                 <span>Release Notes</span>
                 <ExternalLink size={12} />
@@ -3952,6 +5401,165 @@ ${selectedDetail.item.tools.map((t) => `- \`${t}\`: Built-in safe workspace prim
           </div>
         </div>
       )}
+
+      {/* ── GitHub Skill Import Dialog ── */}
+      {showGhImportModal && (
+        <div className="lib-gh-modal-backdrop" onClick={() => setShowGhImportModal(false)}>
+          <div className="lib-gh-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="lib-gh-modal-header">
+              <div className="lib-gh-modal-title">
+                <BrandIcons.github size={18} />
+                <span>Import Skill from GitHub</span>
+              </div>
+              <button
+                className="lib-gh-modal-close"
+                onClick={() => {
+                  setShowGhImportModal(false);
+                  setGhImportError(null);
+                  setGhImportPreview(null);
+                }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="lib-gh-modal-body">
+              <div className="lib-form-field">
+                <label className="lib-field-label">GitHub Repository URL or "owner/repo"</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    className="lib-field-input"
+                    style={{ flex: 1 }}
+                    value={ghImportInput}
+                    onChange={(e) => {
+                      setGhImportInput(e.target.value);
+                      setGhImportError(null);
+                    }}
+                    onPaste={(e) => {
+                      const pasted = e.clipboardData.getData('text');
+                      if (pasted && (pasted.includes('github.com') || pasted.includes('/'))) {
+                        setTimeout(() => {
+                          handleFetchGithubRepo(pasted);
+                        }, 50);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleFetchGithubRepo(ghImportInput);
+                      }
+                    }}
+                    placeholder="e.g. kepano/obsidian-skills or https://github.com/..."
+                    autoFocus
+                  />
+                  <button
+                    className="lib-save-btn"
+                    style={{ padding: '0 14px', height: '34px', minWidth: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    onClick={() => handleFetchGithubRepo(ghImportInput)}
+                    disabled={ghImportLoading || !ghImportInput.trim()}
+                  >
+                    {ghImportLoading ? <Loader2 size={13} className="lib-spin" /> : <Search size={13} />}
+                    <span>{ghImportLoading ? 'Fetching...' : 'Fetch'}</span>
+                  </button>
+                </div>
+                {ghImportError && (
+                  <span style={{ fontSize: '11px', color: '#f87171', marginTop: '3px', display: 'block' }}>
+                    {ghImportError}
+                  </span>
+                )}
+              </div>
+
+              {ghImportPreview && (
+                <div className="lib-gh-preview-card">
+                  <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--muted-foreground))' }}>
+                    Repository Preview
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    <GhAvatar
+                      repo={ghImportPreview.repo}
+                      avatarUrl={ghImportPreview.avatarUrl}
+                      fallbackIcon={pluginCategoryIcon(ghImportPreview.category)}
+                      color={pluginCategoryColor(ghImportPreview.category)}
+                      size={40}
+                    />
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'hsl(var(--foreground))' }}>
+                          {ghImportPreview.name}
+                        </span>
+                        <span className="lib-plugin-author-tag">
+                          by <strong>@{ghImportPreview.owner}</strong>
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '11px', color: 'hsl(var(--muted-foreground))', lineHeight: 1.4 }}>
+                        {ghImportPreview.description}
+                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                        <span className="lib-plugin-star-badge">
+                          <Star size={9.5} fill="currentColor" />
+                          <span>{formatStars(ghImportPreview.stars)} stars</span>
+                        </span>
+                        <span className="lib-plugin-lic-badge">{ghImportPreview.license}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lib-form-field" style={{ marginTop: '8px' }}>
+                    <label className="lib-field-label">Category</label>
+                    <select
+                      className="lib-field-input"
+                      value={ghImportPreview.category}
+                      onChange={(e) => setGhImportPreview({ ...ghImportPreview, category: e.target.value as PluginCategory })}
+                    >
+                      {PLUGIN_CATEGORY_ORDER.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="lib-gh-modal-footer">
+              <button
+                className="lib-modal-cancel-btn"
+                style={{ background: 'transparent', border: '1px solid hsl(var(--border))', color: 'hsl(var(--muted-foreground))', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+                onClick={() => {
+                  setShowGhImportModal(false);
+                  setGhImportError(null);
+                  setGhImportPreview(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="lib-save-btn"
+                disabled={!ghImportPreview}
+                onClick={handleSaveImportedGithubSkill}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Plus size={14} />
+                <span>Add to Skills Catalog</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ZoneBuilderModal
+        isOpen={isZoneBuilderOpen}
+        initial={editingZonePreset}
+        zones={roleZones}
+        title={editingZonePreset?.id ? 'Edit Zone' : 'Create Zone'}
+        saveLabel={editingZonePreset?.id ? 'Save Zone' : 'Add Zone Preset'}
+        onSave={saveZonePreset}
+        onClose={() => {
+          setIsZoneBuilderOpen(false);
+          setEditingZonePreset(null);
+        }}
+      />
 
       {/* ── Mobile Library Sheet with full Level 2 & Inner Detail Navigation ── */}
       {isMobile && activeTab && (
@@ -3968,7 +5576,11 @@ ${selectedDetail.item.tools.map((t) => `- \`${t}\`: Built-in safe workspace prim
           personalityPresets={personalityPresets}
           outputStylePresets={outputStylePresets}
           onConnectKey={onConnectKey}
+          onDisconnectKey={onDisconnectKey}
+          mcpReadiness={mcpReadiness}
           onSpawnTemplate={onSpawnTemplate}
+          connectingMcpName={connectingMcpName}
+          roleZones={roleZones}
           onClose={() => {
             setActiveTab(null);
             setSelectedDetail(null);

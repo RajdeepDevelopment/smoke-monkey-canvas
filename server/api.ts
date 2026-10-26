@@ -34,7 +34,7 @@ export function createApiRouter(db: CanvasDatabase, runner: AgentRunner): Router
     const body = req.body || {};
     const id = body.id || `agent_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const name = body.name || 'Autonomous Agent';
-    const model = body.model || 'meta/llama-3.3-70b-instruct';
+    const model = body.model || 'nvidia/nemotron-3-super-120b-a12b';
     const provider = body.provider || 'nvidia';
     const systemPrompt =
       body.system_prompt ||

@@ -19,7 +19,7 @@ async function runTest() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: 'Concurrency Tester',
-        model: 'meta/llama-3.3-70b-instruct',
+        model: 'nvidia/nemotron-3-super-120b-a12b',
         provider: 'nvidia',
         system_prompt: 'Test agent for multi-turn persistence and concurrency.',
         cron_enabled: 1,
