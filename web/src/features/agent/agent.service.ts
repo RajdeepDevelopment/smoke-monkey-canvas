@@ -50,8 +50,9 @@ export class AgentService {
     return res.json();
   }
 
-  static async deleteAgent(id: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/agents/${id}`, { method: 'DELETE' });
+  static async deleteAgent(id: string, options?: { deleteFiles?: boolean }): Promise<void> {
+    const query = options?.deleteFiles ? '?deleteFiles=true' : '';
+    const res = await fetch(`${API_BASE}/agents/${id}${query}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete agent');
   }
 
@@ -101,6 +102,12 @@ export class AgentService {
   static async fetchActiveRuns(agentId: string): Promise<import('./agent.types.js').ActiveRunRecord[]> {
     const res = await fetch(`${API_BASE}/agents/${agentId}/active-runs`);
     if (!res.ok) throw new Error('Failed to fetch active runs');
+    return res.json();
+  }
+
+  static async fetchActiveDelegations(): Promise<import('./agent.types.js').ActiveDelegationRecord[]> {
+    const res = await fetch(`${API_BASE}/agents/active-delegations`);
+    if (!res.ok) return [];
     return res.json();
   }
 

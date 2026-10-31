@@ -151,6 +151,8 @@ export interface AgentCronJobRecord {
   enabled: number;
   last_run_at: string | null;
   next_run_at: string | null;
+  last_status?: 'completed' | 'failed' | 'running' | null;
+  last_error?: string | null;
   created_by: CronJobSource;
   created_at: string;
   updated_at: string;
@@ -162,5 +164,47 @@ export interface AgentCronJobInput {
   cron_schedule: string;
   enabled?: boolean | number;
   created_by?: CronJobSource;
+}
+
+export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type TodoPriority = 'high' | 'medium' | 'low';
+
+export interface AgentTodoItem {
+  content: string;
+  status: TodoStatus;
+  priority?: TodoPriority;
+  section?: string;
+}
+
+export interface AgentTodoRecord {
+  id: string;
+  agent_id: string;
+  task_date: string; // YYYY-MM-DD
+  run_id?: string | null;
+  session_id?: string | null;
+  content: string;
+  status: TodoStatus;
+  priority: TodoPriority;
+  section?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  metadata_json?: string | null;
+}
+
+export interface AgentTodoDaySummary {
+  date: string;
+  agentId: string;
+  total: number;
+  completed: number;
+  inProgress: number;
+  pending: number;
+  cancelled: number;
+  completionRate: number; // 0 - 100
+  sections: string[];
+  specializations: string[];
+  crossedMidnight?: boolean;
+  todos: AgentTodoRecord[];
 }
 

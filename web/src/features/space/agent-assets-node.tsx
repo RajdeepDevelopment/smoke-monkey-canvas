@@ -218,9 +218,13 @@ export const AgentAssetsNode: React.FC<{ data: AgentAssetsNodeData }> = React.me
 
   useEffect(() => {
     fetchFiles();
-    const interval = setInterval(fetchFiles, 8000);
-    return () => clearInterval(interval);
-  }, [fetchFiles]);
+    const unsubscribe = useSpaceStore.getState().addWsListener((msg: any) => {
+      if (msg?.type === 'agent_files_updated' && msg.agentId === agentId) {
+        void fetchFiles();
+      }
+    });
+    return unsubscribe;
+  }, [fetchFiles, agentId]);
 
   // Filter deliverables/assets: only real outputs created for the user
   const allDeliverables = useMemo(() => {

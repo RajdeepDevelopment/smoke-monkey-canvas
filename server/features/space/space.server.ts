@@ -309,6 +309,26 @@ export function createSpaceRouter(): Router {
     }
   });
 
+  router.patch('/nodes/positions', (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as { positions?: Array<{ id: string; posX: number; posY: number; spaceId?: string | null }> };
+      const rawPositions = Array.isArray(body.positions) ? body.positions : [];
+      if (rawPositions.length === 0) {
+        res.json({ success: true, count: 0 });
+        return;
+      }
+      spaceDb.updateNodePositions(rawPositions);
+      wsServer.broadcast({
+        type: 'nodes_moved',
+        data: { positions: rawPositions },
+      });
+      res.json({ success: true, count: rawPositions.length });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
   router.patch('/nodes/:id/position', (req: Request, res: Response) => {
     const id = requestParam(req.params.id);
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -334,6 +354,105 @@ export function createSpaceRouter(): Router {
         data: { id, posX, posY, ...(hasSpaceId ? { spaceId } : {}) },
       });
       res.json({ success: true, id, posX, posY, ...(hasSpaceId ? { spaceId } : {}) });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // ── Workspace Spaces (Office Rooms / Pods) CRUD ──
+  router.get('/spaces', (_req: Request, res: Response) => {
+    try {
+      res.json(spaceDb.getWorkspaceSpaces());
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  router.post('/spaces', (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const space = spaceDb.createWorkspaceSpace(body);
+      wsServer.broadcast({ type: 'workspace_space_created', data: space });
+      res.status(201).json(space);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  router.post('/spaces/batch', (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as { spaces?: Record<string, unknown>[] };
+      const rawSpaces = Array.isArray(body.spaces) ? body.spaces : [];
+      const saved = spaceDb.createWorkspaceSpacesBatch(rawSpaces);
+      wsServer.broadcast({ type: 'workspace_spaces_batch', data: saved });
+      res.status(201).json(saved);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  router.patch('/spaces/:id', (req: Request, res: Response) => {
+    try {
+      const id = requestParam(req.params.id);
+      const updates = (req.body ?? {}) as Record<string, unknown>;
+      const updated = spaceDb.updateWorkspaceSpace(id, updates);
+      if (!updated) {
+        res.status(404).json({ error: 'Workspace space not found' });
+        return;
+      }
+      wsServer.broadcast({ type: 'workspace_space_updated', data: updated });
+      res.json(updated);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  router.delete('/spaces/:id', (req: Request, res: Response) => {
+    try {
+      const id = requestParam(req.params.id);
+      const deleted = spaceDb.deleteWorkspaceSpace(id);
+      if (!deleted) {
+        res.status(404).json({ error: 'Workspace space not found' });
+        return;
+      }
+      wsServer.broadcast({ type: 'workspace_space_deleted', data: { id } });
+      res.json({ success: true, id });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // ── Canvas Viewport Persistence across browsers ──
+  router.get('/viewport', (_req: Request, res: Response) => {
+    try {
+      res.json({ viewport: spaceDb.getCanvasViewport() });
+    } catch {
+      res.json({ viewport: null });
+    }
+  });
+
+  router.patch('/viewport', (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as { x?: number; y?: number; zoom?: number };
+      if (typeof body.x === 'number' && typeof body.y === 'number' && typeof body.zoom === 'number') {
+        const viewport = {
+          x: Math.round(body.x * 100) / 100,
+          y: Math.round(body.y * 100) / 100,
+          zoom: Math.round(body.zoom * 1000) / 1000,
+          updatedAt: Date.now(),
+        };
+        spaceDb.setCanvasViewport(viewport);
+        wsServer.broadcast({ type: 'canvas_viewport_updated', data: viewport });
+        res.json({ success: true, viewport });
+      } else {
+        res.status(400).json({ error: 'x, y, and zoom numbers are required' });
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: msg });

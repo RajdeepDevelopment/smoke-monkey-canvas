@@ -5,6 +5,7 @@ import {
   EdgeLabelRenderer,
   BaseEdge,
 } from '@xyflow/react';
+import { edgePropsEqual } from './edge-memo.js';
 import { X } from 'lucide-react';
 
 export interface PeerEdgeData {
@@ -18,12 +19,13 @@ export interface PeerEdgeData {
   targetSpecialty?: string;
   isInPod?: boolean;
   isActivelyCalling?: boolean;
+  activeTaskTitle?: string;
   podName?: string;
   podColor?: string;
   onDisconnect?: (connectionId?: string, sourceId?: string, targetId?: string) => void;
 }
 
-export const AgentPeerEdge: React.FC<EdgeProps> = ({
+const AgentPeerEdgeBase: React.FC<EdgeProps> = ({
   id,
   sourceX,
   sourceY,
@@ -51,23 +53,22 @@ export const AgentPeerEdge: React.FC<EdgeProps> = ({
     curvature: 0.4,
   });
 
-  // Active calling glow (emerald/cyan) vs standard pod/purple
+  // Active calling glow (emerald green #10b981) vs standard resting pod/purple
   const strokeColor = isActivelyCalling
     ? '#10b981'
     : (edgeData.podColor || '#8b5cf6');
 
-  // Inside pod: only show if actively calling each other or hovered/selected
-  const isVisible = !isInPod ? true : (isActivelyCalling || hovered || selected);
+  // Peer connections are visible with resting styling; badge displays during active delegation or hover
+  const isBadgeVisible = isActivelyCalling || hovered || selected;
 
   return (
     <>
-      {/* Invisible wider hit-testing path so hovering near line triggers reveal (Miro pattern) */}
+      {/* Hit-testing path for hover disclosure */}
       <path
         d={edgePath}
         fill="none"
         stroke="transparent"
-        strokeWidth={36}
-        className="nodrag nopan"
+        strokeWidth={16}
         style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -78,10 +79,10 @@ export const AgentPeerEdge: React.FC<EdgeProps> = ({
         d={edgePath}
         fill="none"
         stroke={strokeColor}
-        strokeWidth={isActivelyCalling ? 6 : (hovered ? 8 : 4)}
-        strokeOpacity={isVisible ? (isActivelyCalling ? 0.45 : (hovered ? 0.38 : 0.15)) : 0}
+        strokeWidth={isActivelyCalling ? 7 : (hovered ? 6 : 3)}
+        strokeOpacity={isActivelyCalling ? 0.65 : (hovered ? 0.35 : 0.15)}
         style={{
-          filter: `drop-shadow(0 0 ${isActivelyCalling ? '12px' : '8px'} ${strokeColor})`,
+          filter: `drop-shadow(0 0 ${isActivelyCalling ? '14px' : '6px'} ${strokeColor})`,
           transition: 'stroke-opacity 0.25s ease, stroke-width 0.25s ease',
           pointerEvents: 'none',
         }}
@@ -95,12 +96,12 @@ export const AgentPeerEdge: React.FC<EdgeProps> = ({
         style={{
           ...style,
           stroke: strokeColor,
-          strokeWidth: isActivelyCalling ? 2.5 : (hovered ? 2.5 : 2),
-          strokeDasharray: isActivelyCalling ? '4, 4' : '5, 5',
-          opacity: isVisible ? 1 : 0,
+          strokeWidth: isActivelyCalling ? 3 : (hovered ? 2.5 : 1.75),
+          strokeDasharray: isActivelyCalling ? '6, 4' : '4, 4',
+          opacity: isActivelyCalling ? 1 : (hovered ? 0.9 : (isInPod ? 0.45 : 0.6)),
           animation: isActivelyCalling
-            ? 'peerDashFlow 0.75s linear infinite'
-            : 'peerDashFlow 1.8s linear infinite',
+            ? 'peerDashFlow 0.65s linear infinite'
+            : (hovered ? 'peerDashFlow 2s linear infinite' : undefined),
           transition: 'opacity 0.25s ease, stroke-width 0.25s ease',
           pointerEvents: 'none',
         }}
@@ -112,8 +113,9 @@ export const AgentPeerEdge: React.FC<EdgeProps> = ({
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-            pointerEvents: isVisible ? 'all' : 'none',
-            opacity: isVisible ? 1 : 0,
+            pointerEvents: isBadgeVisible ? 'all' : 'none',
+            zIndex: isActivelyCalling ? 30 : 10,
+            opacity: isBadgeVisible ? 1 : 0,
             transition: 'opacity 0.2s ease, transform 0.2s ease',
           }}
           className="nodrag nopan"
@@ -128,28 +130,31 @@ export const AgentPeerEdge: React.FC<EdgeProps> = ({
             <div className="peer-pill-text">
               <span className="peer-pill-title">
                 {isActivelyCalling
-                  ? 'Calling Peer'
+                  ? (edgeData.activeTaskTitle ? `Delegating: ${edgeData.activeTaskTitle}` : 'Calling Peer')
                   : (edgeData.targetRole ? edgeData.targetRole : 'Peer Delegate')}
               </span>
             </div>
-            <button
-              type="button"
-              className="peer-pill-disconnect-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                edgeData.onDisconnect?.(
-                  edgeData.connectionId,
-                  edgeData.sourceAgentId,
-                  edgeData.targetAgentId,
-                );
-              }}
-              title="Disconnect peer delegation link"
-            >
-              <X size={11} />
-            </button>
+            {edgeData.onDisconnect && (
+              <button
+                type="button"
+                className="peer-pill-disconnect-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  edgeData.onDisconnect?.(
+                    edgeData.connectionId,
+                    edgeData.sourceAgentId,
+                    edgeData.targetAgentId,
+                  );
+                }}
+                title="Disconnect peer delegation link"
+              >
+                <X size={11} />
+              </button>
+            )}
           </div>
         </div>
       </EdgeLabelRenderer>
     </>
   );
 };
+export const AgentPeerEdge = React.memo(AgentPeerEdgeBase, edgePropsEqual);

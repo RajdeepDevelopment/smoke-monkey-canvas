@@ -392,30 +392,57 @@ export function renderAgentWorkflowBlock(
     lines.push('- You are not currently inside a role zone. Treat other unassigned agents as peers and ask the user which zone you should join before delegating cross-functional work.');
   }
 
+  const agentLevel = zone ? zone.level : (manager ? 2 : 0);
+
+  const levelSpecificRules: string[] = [];
+  if (route?.zoneId) {
+    if (agentLevel === 0) {
+      levelSpecificRules.push(
+        `- **Your Tier — Level 0 (Executive / Strategic Leadership)**:`,
+        `  - **Core Mandate**: You are at the top of this organizational hierarchy. Focus exclusively on executive strategy, high-level architecture decisions, and authorizing major releases/initiatives.`,
+        `  - **Downward Delegation**: Delegate goals and feature milestones DOWNWARD to your Level 1 department managers via \`delegate_task(communication_type: 'delegate')\`.`,
+        `  - **Rollup Review**: Review aggregated department status reports and deliverables submitted by your managers in threaded conversations via \`chat_id\`.`,
+        `  - **Approval Authority**: Review and sign off on sensitive operation requests submitted by managers via \`communication_type: 'request_approval'\`.`,
+        `  - You do not execute junior implementation tasks; hold your department managers accountable for squad execution.`,
+      );
+    } else if (agentLevel === 1) {
+      levelSpecificRules.push(
+        `- **Your Tier — Level 1 (Management & Squad Coordination)**:`,
+        `  - **Core Mandate**: You lead this department/squad. Translate executive direction into concrete technical requirements, acceptance criteria, and subtasks.`,
+        `  - **Downward Delegation**: Delegate tasks to your Level 2 execution specialists using \`delegate_task(communication_type: 'delegate')\` with clear acceptance criteria.`,
+        `  - **Review & Verification**: Review submitted pull requests, code diffs, deliverables, and test metrics from your squad before signing off.`,
+        `  - **Upward Status Rollup**: Synthesize squad deliverables and report progress rollups UPWARD to your executive manager (${manager ? `**${manager.name}**` : 'Executive Leadership'}) using \`delegate_task(communication_type: 'report_status', chat_id: ...)\`.`,
+        `  - **Approval Escalation**: For sensitive or high-risk operations, request authorization from executive leadership via \`delegate_task(communication_type: 'request_approval')\`.`,
+      );
+    } else {
+      levelSpecificRules.push(
+        `- **Your Tier — Level 2 (Execution / Specialist)**:`,
+        `  - **Core Mandate**: You are an execution specialist. Implement concrete deliverables, write clean code, and execute automated verification tests.`,
+        `  - **Upward Reporting**: Report completed deliverables, code diffs, and test evidence UPWARD to your manager (${manager ? `**${manager.name}**` : 'Department Lead'}) using \`delegate_task(communication_type: 'report_status', chat_id: ...)\`.`,
+        `  - **Approval Requests**: Request formal manager approval before executing sensitive, destructive, or schema-altering actions via \`delegate_task(communication_type: 'request_approval')\`.`,
+        `  - **Subordinate Boundaries**: Specialists execute tasks and report upward. Do NOT delegate tasks to superiors. Escalate blockers immediately to your manager.`,
+        `  - **Peer Coordination**: Use \`delegate_task(communication_type: 'inform')\` to sync horizontally with peer specialists across zones.`,
+      );
+    }
+
+    levelSpecificRules.push(
+      `- **Threaded Communication**: Always supply the returned \`chat_id\` when responding via \`delegate_task\` so reviews and status stay in a single threaded conversation.`,
+      `- Directly connected delegation targets: downward — ${fmtTargets(route.reportIds.filter((id) => connected.has(id)))}; peers — ${fmtTargets(route.peerIds.filter((id) => connected.has(id)))}; upward — ${fmtTargets(route.managerIds.filter((id) => connected.has(id)))}.`,
+      ...(pending.length > 0 ? [`- Unconnected contacts on canvas: ${fmtTargets(pending)}. Only delegate to connected agents.`] : []),
+      manager
+        ? `- Your direct manager is **${manager.name}**${manager.role ? ` (${manager.role})` : ''}. Keep them updated on milestones and escalate blockers or out-of-scope dependencies upward to them.`
+        : '- You are at the top of this reporting line (Executive / Lead). Set technical direction and escalate only strategic decisions that require the user.',
+      '- **Continuous Institutional Memory**: Record verified domain facts in \`facts.md\` and reusable operational recipes in \`procedural.md\` via \`manage_agent_memory\` so your experience compounds over time.',
+      '- **Edge-Case Smartness**: Consult your \`smartness.md\` playbook for standard reflexes on handling task failures, missing requirements, and production approval gates.',
+    );
+  } else {
+    levelSpecificRules.push('- No zone-based delegation route is active yet. Work within your current configuration and coordinate only with directly connected peers.');
+  }
+
   lines.push(
     '',
-    '### DELEGATION & COMMUNICATION RULES',
-    ...(route?.zoneId
-      ? [
-          `- **Hierarchy Authority & Tier Order**: Canvas vertical position dictates authority. Higher tiers on the top (L0/L1, e.g. CTO / Engineering Lead) are SENIORS (Managers); lower tiers below (L2+, e.g. Engineers / Specialists) are JUNIORS (Subordinates). Directives and assigned tasks flow DOWNWARD; status reports and escalations flow UPWARD.`,
-          `- **Work Acceptance Protocol**: When you receive delegated tasks or instructions from a senior manager above you in the reporting line, that work MUST BE ACCEPTED and given highest priority. Execute the directives faithfully, verify quality against requirements, and return structured deliverables back up to the delegating senior.`,
-          `- **Subordinate Delegation Boundaries**: Subordinates / Juniors do not assign tasks to superiors. Juniors report deliverables and escalate blocking decisions upward to their manager. Only seniors have the authority to assign work downward to direct reports.`,
-          `- Directly connected delegation targets (use \`delegate_task\`): downward — ${fmtTargets(route.reportIds.filter((id) => connected.has(id)))}; peers — ${fmtTargets(route.peerIds.filter((id) => connected.has(id)))}; upward — ${fmtTargets(route.managerIds.filter((id) => connected.has(id)))}.`,
-          `- Hierarchy contacts not yet wired on the canvas: ${fmtTargets(pending)}. Do not call \`delegate_task\` for a person who is not in the connected list; instead ask your manager or the user to connect them.`,
-          manager
-            ? `- Your direct manager is **${manager.name}**${manager.role ? ` (${manager.role})` : ''}. Escalate blockers, scope conflicts and anything requiring cross-team decisions upward to them.`
-            : '- You are at the top of this reporting line (Executive / Lead). Set technical direction, delegate downward to your leads and engineers, and escalate only high-level decisions that require the user.',
-          '- Delegate to the lowest-level qualified person who owns the work. Never bypass a direct report to micromanage their team unless the task is urgent or the intermediate lead is unavailable.',
-          '- Choose a target by current capabilities (skills, MCPs, specialty and readiness), not only by title. Never delegate to an agent marked NOT READY; reassign or do the work yourself when no ready target exists.',
-          route.reportIds.length > 0
-            ? '- For multi-part work, use the parallel `tasks` array on \`delegate_task\` to brief several direct reports at once, with non-overlapping scopes and explicit acceptance criteria.'
-            : '- If you have no direct reports and the work needs another specialty, coordinate with a peer or escalate to your manager.',
-          '- When you receive delegated work: confirm scope, execute, and return a concise result with evidence (files, commands, test output) to the delegating manager.',
-          '- Do not create circular delegation (A → B → A). If a subordinate delegates back to you, resolve it yourself or reassign it.',
-        ]
-      : [
-          '- No zone-based delegation route is active yet. Work within your current configuration and coordinate only with directly connected peers.',
-        ]),
+    `### ORGANIZATIONAL WORKFLOW (LEVEL ${agentLevel} — ${agentLevel === 0 ? 'EXECUTIVE' : agentLevel === 1 ? 'MANAGEMENT' : 'EXECUTION'})`,
+    ...levelSpecificRules,
     '- Report final accountability, risks and unresolved blockers explicitly in your run summary so the workspace panel and the user can follow the chain.',
   );
 

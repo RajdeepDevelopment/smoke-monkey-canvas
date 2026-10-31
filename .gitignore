@@ -90,3 +90,5 @@ coverage/
 # Mobile (WIP - not ready)
 /mobile/
 
+# Smoke Monkey agent runtime artifacts
+.smoke/

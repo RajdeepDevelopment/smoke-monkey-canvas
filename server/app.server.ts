@@ -8,6 +8,7 @@ import { CoreDatabase } from './features/core/database.db.js';
 import { CoreWsServer } from './features/core/ws.server.js';
 import { createSpaceRouter } from './features/space/space.server.js';
 import { createAgentRouter } from './features/agent/agent.server.js';
+import { AgentRunner } from './features/agent/agent.runner.js';
 import { createPersonalityRouter } from './features/agent/agent.presets.server.js';
 import { AgentCronScheduler } from './features/agent/agent.cron.js';
 import { createMcpRouter } from './features/mcp/mcp.server.js';
@@ -71,6 +72,12 @@ export function startAppServer(opts: AppServerOptions = {}) {
   app.use('/api/settings', createSettingsRouter());
   app.use('/api/skills', createSkillRouter());
   app.use('/api/personality', createPersonalityRouter());
+
+  const runner = AgentRunner.getInstance();
+  ws.setSnapshotProvider(() => [
+    { type: 'delegations_active', data: runner.getActiveDelegations() },
+    { type: 'active_runs_active', data: runner.getActiveRuns() },
+  ]);
 
   // Compatibility shortcut
   app.get('/api/stock-mcps', (_req, res) => {

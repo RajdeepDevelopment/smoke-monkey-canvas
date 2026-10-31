@@ -28,6 +28,7 @@ import {
 
 /** Section header marks for the collapsed icon rail. */
 export const LIB_TAB_ICONS: Record<string, LucideIcon> = {
+  companies: Briefcase,
   mcp: Package,
   spaces: Building2,
   zones: Network,
@@ -40,6 +41,7 @@ export const LIB_TAB_ICONS: Record<string, LucideIcon> = {
 
 /** Fallback accent per rail tab, used for the tile gradient. */
 export const LIB_TAB_COLORS: Record<string, string> = {
+  companies: '#6366f1',
   mcp: '#f97316',
   spaces: '#38bdf8',
   zones: '#a855f7',

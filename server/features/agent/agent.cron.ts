@@ -170,7 +170,15 @@ export class AgentCronScheduler {
     // Execute the agent autonomously using its full toolset with the job's prompt
     try {
       console.log(`[AgentCronScheduler] Triggering agent run for "${agent.name}" with task "${job.name}"`);
-      await this.runner.runAgent(agent.id, 'cron', job.prompt);
+      let executionPrompt = job.prompt;
+      if (!executionPrompt.includes('mark_cron_job_success')) {
+        executionPrompt +=
+          "\n\n[MANDATORY COMPLETION]: You MUST invoke the 'mark_cron_job_success' tool with your completion summary upon finishing. If this tool is not called, the operation will be considered incomplete/failed and retried.";
+      }
+      await this.runner.runAgent(agent.id, 'cron', executionPrompt, undefined, undefined, {
+        jobId: job.id,
+        jobName: job.name,
+      });
     } catch (err) {
       console.error(`[AgentCronScheduler] Error executing task "${job.name}" for "${agent.name}":`, err);
     }

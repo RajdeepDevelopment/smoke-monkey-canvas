@@ -413,8 +413,8 @@ export const GroupWorkspaceNode: React.FC<{ data: GroupWorkspaceNodeData; select
             position="bottom-right"
             minWidth={360}
             minHeight={280}
-            maxWidth={3200}
-            maxHeight={2400}
+            maxWidth={30000}
+            maxHeight={30000}
             onResizeEnd={(_e, params) => {
               data.onUpdateZone?.(data.id, {
                 width: Math.round(params.width),

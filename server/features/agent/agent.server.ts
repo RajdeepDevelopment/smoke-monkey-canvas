@@ -48,6 +48,13 @@ import {
   buildRepoMemoryPaths,
 } from './agent.repo-memory.js';
 import { CoreWsServer } from '../core/ws.server.js';
+import {
+  formatDateKey,
+  resolveEffectiveTodoDate,
+  inferSpecializationsFromTodos,
+  inferSectionForTodo,
+  redevelopAgentSpecializationsFromHistory,
+} from './agent.todos.js';
 
 const PROVIDER_KEY_MAP: Record<string, string> = {
   nvidia: 'NVIDIA_API_KEY',
@@ -259,6 +266,12 @@ export function createAgentRouter(): Router {
       } catch (err) {
         console.warn(`[agent.server] Setup default cron jobs failed for ${agent.id}:`, err);
       }
+
+      CoreWsServer.getInstance().broadcast({
+        type: 'agent_created',
+        agentId: agent.id,
+        data: agent,
+      });
 
       res.status(201).json({
         ...agent,
@@ -500,6 +513,11 @@ export function createAgentRouter(): Router {
       team_workflow: teamWorkflow,
       effective_system_prompt: effectiveSystemPrompt,
     });
+  });
+
+  /** List all active inter-agent delegations currently in flight */
+  router.get('/active-delegations', (_req: Request, res: Response) => {
+    res.json(runner.getActiveDelegations());
   });
 
   /** List all shared repositories known across Smoke Monkey Canvas */
@@ -929,13 +947,35 @@ export function createAgentRouter(): Router {
       res.status(404).json({ error: 'Agent not found' });
       return;
     }
+    CoreWsServer.getInstance().broadcast({
+      type: 'agent_updated',
+      agentId: id,
+      data: updated,
+    });
     res.json(updated);
   });
 
   router.delete('/:id', (req: Request, res: Response) => {
     const id = getParam(req.params.id);
+    const deleteFiles = req.query.deleteFiles === 'true' || req.query.delete_files === 'true';
+    const agent = db.getAgent(id);
+    if (agent && deleteFiles) {
+      try {
+        const ws = resolveAgentWorkspace(agent);
+        if (ws && fs.existsSync(ws)) {
+          fs.rmSync(ws, { recursive: true, force: true });
+        }
+      } catch (err) {
+        console.warn(`[AgentServer] Failed to delete workspace folder for agent ${id}:`, err);
+      }
+    }
     unwatchAgentWorkspace(id);
     db.deleteAgent(id);
+    CoreWsServer.getInstance().broadcast({
+      type: 'agent_deleted',
+      agentId: id,
+      data: { id },
+    });
     res.json({ success: true, id });
   });
 
@@ -1212,6 +1252,85 @@ export function createAgentRouter(): Router {
     res.json(runs);
   });
 
+  // ── Agent Date-wise Todo History ──────────────────────────────────────────
+  router.get('/:id/todos/dates', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const dates = db.getAgentTodoDates(id);
+    res.json({ dates });
+  });
+
+  router.get('/:id/todos', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const agent = db.getAgent(id);
+    if (!agent) {
+      return res.status(404).json({ error: `Agent ${id} not found` });
+    }
+
+    const availableDates = db.getAgentTodoDates(id);
+    let dateParam = req.query.date ? String(req.query.date).trim().toLowerCase() : 'today';
+    const now = new Date();
+    let targetDate = formatDateKey(now);
+
+    if (dateParam === 'today' || !dateParam) {
+      targetDate = formatDateKey(now);
+    } else if (dateParam === 'yesterday') {
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      targetDate = formatDateKey(yesterday);
+    } else if (dateParam === 'latest') {
+      targetDate = availableDates.length > 0 ? availableDates[0] : formatDateKey(now);
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      targetDate = dateParam;
+    }
+
+    const todos = db.getAgentTodosByDate(id, targetDate);
+    const total = todos.length;
+    const completed = todos.filter((t) => t.status === 'completed').length;
+    const inProgress = todos.filter((t) => t.status === 'in_progress').length;
+    const pending = todos.filter((t) => t.status === 'pending').length;
+    const cancelled = todos.filter((t) => t.status === 'cancelled').length;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    const { topSections, specializations } = inferSpecializationsFromTodos(todos);
+
+    res.json({
+      agent_id: id,
+      agent_name: agent.name,
+      role: agent.role,
+      specialty: agent.specialty,
+      date: targetDate,
+      available_dates: availableDates,
+      metrics: {
+        total,
+        completed,
+        in_progress: inProgress,
+        pending,
+        cancelled,
+        completion_rate_percent: completionRate,
+      },
+      sections: topSections,
+      specializations,
+      todos,
+    });
+  });
+
+  router.post('/:id/todos/redevelop-specializations', async (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
+    const agent = db.getAgent(id);
+    if (!agent) {
+      return res.status(404).json({ error: `Agent ${id} not found` });
+    }
+
+    const daysBack = req.body?.days_back ? Number(req.body.days_back) : 7;
+    const resolvedWs = resolveAgentWorkspace(agent);
+    const result = await redevelopAgentSpecializationsFromHistory(id, db, resolvedWs, daysBack);
+
+    if (!result) {
+      return res.status(500).json({ error: 'Failed to redevelop agent specializations' });
+    }
+
+    res.json(result);
+  });
+
   // ── Agent Scheduled Cron Jobs ──────────────────────────────────────────────
   router.get('/:id/cron-jobs', (req: Request, res: Response) => {
     const id = getParam(req.params.id);
@@ -1269,11 +1388,17 @@ export function createAgentRouter(): Router {
       return res.status(400).json({ error: 'Missing cron_schedule, delay_minutes, or scheduled_at' });
     }
 
+    let finalPrompt = String(prompt).trim();
+    if (!finalPrompt.includes('mark_cron_job_success')) {
+      finalPrompt +=
+        "\n\n[MANDATORY COMPLETION]: You MUST invoke the 'mark_cron_job_success' tool with your completion summary upon finishing. If this tool is not called, the operation will be considered incomplete/failed and retried.";
+    }
+
     const isEnabled = enabled !== false && enabled !== 0 ? 1 : 0;
     const job = db.createAgentCronJob({
       agent_id: id,
       name: String(name).trim(),
-      prompt: String(prompt).trim(),
+      prompt: finalPrompt,
       cron_schedule: schedule,
       enabled: isEnabled,
       created_by: source || 'USER',
@@ -1298,7 +1423,14 @@ export function createAgentRouter(): Router {
     const body = req.body || {};
     const updates: any = {};
     if (body.name !== undefined) updates.name = String(body.name).trim();
-    if (body.prompt !== undefined) updates.prompt = String(body.prompt).trim();
+    if (body.prompt !== undefined) {
+      let updatedPrompt = String(body.prompt).trim();
+      if (!updatedPrompt.includes('mark_cron_job_success')) {
+        updatedPrompt +=
+          "\n\n[MANDATORY COMPLETION]: You MUST invoke the 'mark_cron_job_success' tool with your completion summary upon finishing. If this tool is not called, the operation will be considered incomplete/failed and retried.";
+      }
+      updates.prompt = updatedPrompt;
+    }
 
     if (body.cron_schedule !== undefined || body.scheduled_at !== undefined) {
       const schedule = body.cron_schedule ? String(body.cron_schedule).trim() : existing.cron_schedule;

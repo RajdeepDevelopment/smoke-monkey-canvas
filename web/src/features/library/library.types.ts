@@ -1,7 +1,7 @@
 import type { StockMcp } from '../mcp/mcp.types.js';
 import type { AgentTemplate } from '../agent/agent.templates.js';
 
-export type LibraryTab = 'mcp' | 'spaces' | 'zones' | 'skills' | 'agents' | 'tools' | 'personality' | 'output';
+export type LibraryTab = 'companies' | 'mcp' | 'spaces' | 'zones' | 'skills' | 'agents' | 'tools' | 'personality' | 'output';
 
 export type PluginCategory =
   | 'Skills'
@@ -149,8 +149,45 @@ export interface HierarchicalChainPreset {
   nodes: HierarchicalChainNode[];
 }
 
+export type CompanyScale = 'small' | 'mid' | 'large';
+
+export interface CompanyAgentAssignment {
+  zoneRoleTitle: string;
+  agentTemplateId: string;
+  agentName?: string;
+  roleTitle?: string;
+  model?: string;
+  provider?: string;
+  systemPrompt?: string;
+  recommended_mcps?: string[];
+  recommended_skills?: string[];
+}
+
+export interface CompanyScaleConfig {
+  scale: CompanyScale;
+  label: string;
+  headcountLabel: string;
+  description: string;
+  space: WorkspaceZonePreset;
+  zones: HierarchicalChainNode[];
+  agents: CompanyAgentAssignment[];
+}
+
+export interface CompanyPreset {
+  id: string;
+  name: string;
+  category: string;
+  domain: string;
+  tagline: string;
+  description: string;
+  icon: string;
+  color: string;
+  scales: Record<CompanyScale, CompanyScaleConfig>;
+}
+
 /** Discriminant for what is being dragged out of the library. */
 export type LibItemKind =
+  | 'company'
   | 'mcp'
   | 'skill'
   | 'agent'
@@ -173,6 +210,8 @@ export interface PromptPreset {
 
 export interface LibDragPayload {
   kind: LibItemKind;
+  companyPreset?: CompanyPreset;
+  companyScale?: CompanyScale;
   mcp?: StockMcp;
   skill?: StockSkillItem;
   agent?: AgentTemplate;
@@ -269,7 +308,7 @@ export function readLibDragPayload(dt: DataTransfer | null): LibDragPayload | nu
   try {
     const parsed = JSON.parse(raw) as LibDragPayload;
     if (!parsed || typeof parsed !== 'object') return null;
-    if (!['mcp', 'skill', 'agent', 'toolkit', 'personality', 'outputStyle', 'workspace_zone', 'role_zone', 'hierarchical_chain'].includes(parsed.kind)) return null;
+    if (!['company', 'mcp', 'skill', 'agent', 'toolkit', 'personality', 'outputStyle', 'workspace_zone', 'role_zone', 'hierarchical_chain'].includes(parsed.kind)) return null;
     return parsed;
   } catch {
     return null;

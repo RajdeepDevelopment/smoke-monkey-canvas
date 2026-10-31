@@ -4,9 +4,10 @@ import {
   EdgeLabelRenderer,
   getSmoothStepPath,
 } from '@xyflow/react';
+import { edgePropsEqual } from './edge-memo.js';
 import type { HierarchyEdgeData } from './space.types.js';
 
-export const HierarchyConnectionEdge: React.FC<EdgeProps> = ({
+const HierarchyConnectionEdgeBase: React.FC<EdgeProps> = ({
   id,
   sourceX,
   sourceY,
@@ -48,15 +49,16 @@ export const HierarchyConnectionEdge: React.FC<EdgeProps> = ({
         stroke={color}
         strokeWidth={selected ? 2.6 : 2}
         strokeOpacity={selected ? 1 : 0.85}
-        style={{ pointerEvents: 'all', cursor: 'pointer' }}
+        style={{ pointerEvents: 'none' }}
       />
       {/* Superior branch junction dot */}
-      <circle cx={sourceX} cy={sourceY} r={3} fill={color} opacity={0.9} />
+      <circle cx={sourceX} cy={sourceY} r={3} fill={color} opacity={0.9} style={{ pointerEvents: 'none' }} />
       {/* Subordinate downward arrowhead */}
       <polygon
         points={`${targetX},${targetY} ${targetX - 4.5},${targetY - 7} ${targetX + 4.5},${targetY - 7}`}
         fill={color}
         opacity={0.95}
+        style={{ pointerEvents: 'none' }}
       />
       {/* Reporting badge (visible when selected or hovered) */}
       {selected && (
@@ -81,3 +83,4 @@ export const HierarchyConnectionEdge: React.FC<EdgeProps> = ({
     </>
   );
 };
+export const HierarchyConnectionEdge = React.memo(HierarchyConnectionEdgeBase, edgePropsEqual);

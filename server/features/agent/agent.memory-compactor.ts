@@ -224,11 +224,23 @@ export async function generateAgentEodReport(
     lines.push('');
   });
 
-  lines.push('## 2. Key Deliverables & Workspace Status');
+  const todayTodos = db.getAgentTodosByDate(agentId, todayIso);
+  if (todayTodos.length > 0) {
+    const todosCompleted = todayTodos.filter((t) => t.status === 'completed').length;
+    lines.push(`## 2. Daily To-Do Checklist Progress (${todosCompleted}/${todayTodos.length} completed)`);
+    todayTodos.forEach((t) => {
+      const marker = t.status === 'completed' ? '[x]' : t.status === 'in_progress' ? '[>]' : '[-]';
+      lines.push(`- ${marker} [${t.priority || 'medium'}] [${t.section || 'General'}] ${t.content}`);
+    });
+    lines.push('');
+  }
+
+  lines.push('## 3. Key Deliverables & Workspace Status');
   lines.push(`- Total active runs tracked today: ${todayRuns.length}`);
   lines.push(`- Output reports generated: Check \`${workspace}/reports/\` for detailed artifacts.`);
+  lines.push(`- To-do task history ledger: Check \`${workspace}/.smoke-agent/todos/${todayIso}.md\``);
   lines.push('');
-  lines.push('## 3. Manager Escalations & Blockers');
+  lines.push('## 4. Manager Escalations & Blockers');
   const errorRuns = todayRuns.filter((r) => r.error);
   if (errorRuns.length > 0) {
     lines.push(`- ⚠️ ${errorRuns.length} run(s) encountered errors requiring review.`);
@@ -337,15 +349,17 @@ export const WORKSPACE_COMPACTOR_PROMPT =
   '- Preserve all critical technical facts, file paths, repository keys, decision records, and active task items.\n' +
   '- Maintain clean markdown headings and bullet points. Never truncate or discard essential instructions or active invariants.\n' +
   '- If a file is already concise (≤ 60 lines) and contains only relevant facts, leave it unchanged.\n' +
-  '- Write updated content back using write_file. Do not delete files.';
+  '- Write updated content back using write_file. Do not delete files.\n' +
+  '- MANDATORY COMPLETION: Once all files are inspected and updated, you MUST invoke the `mark_cron_job_success` tool with a summary of the compacted files to confirm successful completion of this cron job.';
 
 export const DAILY_EOD_PROMPT =
   'You are executing the scheduled Daily End-of-Day (EOD) Task Summary routine.\n' +
-  'Review all tasks, tool invocations, and workspace file changes executed today to produce an executive-ready progress report.\n\n' +
+  'Review all tasks, tool invocations, date-wise to-dos, and workspace file changes executed today to produce an executive-ready progress report.\n\n' +
   'Instructions:\n' +
-  '1. Review today\'s chat sessions, execution runs, and completed operations.\n' +
+  '1. Review today\'s chat sessions, execution runs, and date-wise task history in `.smoke-agent/todos/` (or invoke `get_agent_todo_history`).\n' +
   '2. If tasks were executed today, compile a structured report with these sections:\n' +
   '   - ## 🎯 Accomplishments: High-level deliverables, solved problems, and completed milestones.\n' +
+  '   - ## 📋 Tasks & Checklist Summary: Total tasks completed, in-progress, and key to-do accomplishments.\n' +
   '   - ## 🛠️ Tools & MCP Integrations: External services or CLI tools leveraged and their outcomes.\n' +
   '   - ## 📁 Workspace Deliverables: Exact paths of files created or modified.\n' +
   '   - ## 🚧 Blockers & Pending Items: Incomplete work, unresolved dependencies, or human approval required.\n' +
@@ -357,14 +371,16 @@ export const DAILY_EOD_PROMPT =
   'status: [completed | in-progress | blocked]\n' +
   'tasks_count: [Number of tasks completed]\n' +
   '---\n' +
-  '4. If no tasks or operations were performed today, record a brief 2-line entry in `eod_reports/YYYY-MM-DD.md` noting the idle status so operational logs remain complete.';
+  '4. If no tasks or operations were performed today, record a brief 2-line entry in `eod_reports/YYYY-MM-DD.md` noting the idle status so operational logs remain complete.\n' +
+  '5. MANDATORY COMPLETION: Once `eod_reports/YYYY-MM-DD.md` is written, you MUST invoke the `mark_cron_job_success` tool with a summary of today\'s achievements to confirm successful completion of this cron job.';
 
 export const SELF_REFINEMENT_PROMPT =
   'You are executing the scheduled Self-Refinement, Specialization & Automation routine.\n' +
   'Your objective is to sharpen your domain expertise, eliminate recurring friction, and create reusable automation scripts for repetitive tasks you perform.\n\n' +
   'Instructions:\n' +
-  '1. REVIEW RECENT ACTIVITY:\n' +
-  '   - Examine your recent conversations, tool calls, and user requests. Identify any mistakes, slow multi-step workflows, or repeated manual tasks.\n\n' +
+  '1. REVIEW RECENT ACTIVITY & TO-DO HISTORY:\n' +
+  '   - Examine your recent conversations, tool calls, and date-wise to-do records in `.smoke-agent/todos/` (or call `get_agent_todo_history`).\n' +
+  '   - Identify what sections/domains you worked on, recurring task patterns, mistakes, and multi-step bottlenecks.\n\n' +
   '2. BUILD REUSABLE AUTOMATION SCRIPTS:\n' +
   '   - Notice repeated tasks: If the user or workflows frequently ask you to perform similar operations (e.g. log filtering, test analysis, data formatting, code linting, diff auditing, dependency checks, report generation, API syncing):\n' +
   '   - Generate a parameterized automation script (in Python, Bash, or Node.js) saved in `automation/` or `scripts/` (e.g. `scripts/task_runner.py`).\n' +
@@ -380,11 +396,13 @@ export const SELF_REFINEMENT_PROMPT =
   '     * `whenToUse`: Specific trigger condition explaining when you should run this script instead of manual tool calls\n' +
   '     * `created`: Timestamp\n' +
   '   - Document this automation in `memory/reflective.md` and `memory/procedural.md` so future runs immediately reach for this script to execute tasks 10x faster and without manual mistakes.\n\n' +
-  '3. REFINE DOMAIN KNOWLEDGE:\n' +
+  '3. REDEVELOP SPECIALIZATIONS & REFINE DOMAIN KNOWLEDGE:\n' +
+  '   - Review your executed work sections and invoke `redevelop_agent_specializations` to assess your proven strengths and update your specialty profile.\n' +
   '   - Update `memory/reflective.md` with:\n' +
-  '     * Specialized domain heuristics and best practices you\'ve acquired.\n' +
+  '     * Specialized domain heuristics and best practices you\'ve acquired from completed tasks.\n' +
   '     * Edge cases to avoid and self-corrections from past errors.\n' +
-  '     * New skills, tools, or MCP patterns that worked effectively.';
+  '     * New skills, tools, or MCP patterns that worked effectively.\n\n' +
+  '4. MANDATORY COMPLETION: Once your automation scripts and domain reflections are written, you MUST invoke the `mark_cron_job_success` tool with a summary of your refinements to confirm successful completion of this cron job.';
 
 /**
  * Ensures standard default cron jobs exist for every agent with staggered time slots:

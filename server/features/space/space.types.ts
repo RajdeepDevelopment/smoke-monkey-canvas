@@ -3,6 +3,15 @@ export interface SpaceCoordinates {
   y: number;
 }
 
+/** Shared canvas camera state, persisted so every browser opens the same view. */
+export interface CanvasViewport {
+  x: number;
+  y: number;
+  zoom: number;
+  /** Epoch ms of the last write. Clients use it to prefer a newer local copy. */
+  updatedAt?: number;
+}
+
 export type ZoneShape = 'rectangle' | 'circle';
 export type ZoneDelegationPolicy = 'auto' | 'down' | 'up' | 'both' | 'peers';
 

@@ -7,7 +7,8 @@ import { checkAgentConfigStatus } from './agent.config-check.js';
 import { startConnect } from '../mcp/mcp.connect.js';
 import { STOCK_MCPS } from '../mcp/mcp.stock.js';
 import { authStatus, canonicalRedirectUri } from '../mcp/mcp.oauth.js';
-import { ensureAgentWorkspace, syncAgentDiskManifestFromDb, readAgentMemorySummaries } from './agent.manifest.js';
+import { ensureAgentWorkspace, syncAgentDiskManifestFromDb, readAgentMemorySummaries, MANIFEST_DIR } from './agent.manifest.js';
+import type { AgentRecord } from './agent.types.js';
 import { resolveAgentWorkspace } from './agent.prompt.js';
 import { CoreWsServer } from '../core/ws.server.js';
 import { CoreDatabase } from '../core/database.db.js';
@@ -15,6 +16,14 @@ import { PERSONALITY_PRESETS, OUTPUT_STYLE_PRESETS, resolvePersonalities, resolv
 import { loadGitHubPluginSkills } from '../skill/skill.plugins.js';
 import { AgentCronScheduler, calculateNextCronRun } from './agent.cron.js';
 import { ensureDefaultAgentCronJobs } from './agent.memory-compactor.js';
+import {
+  formatDateKey,
+  resolveEffectiveTodoDate,
+  redevelopAgentSpecializationsFromHistory,
+  inferSpecializationsFromTodos,
+  inferSectionForTodo,
+  renderDailyTodoMarkdown,
+} from './agent.todos.js';
 
 function parseTargetList(inputVal?: string | string[]): string[] {
   if (Array.isArray(inputVal)) {
@@ -198,9 +207,15 @@ export function computeFuzzyScore(query: string, fields: FuzzyFields): number {
 
 interface SingleDelegationTaskInput {
   target_agent_id: string;
-  task_title: string;
-  requirements_file_path: string;
+  task_title?: string;
+  requirements_file_path?: string;
   instructions?: string;
+  prompt?: string;
+  task?: string;
+  message?: string;
+  chat_id?: string;
+  session_id?: string;
+  communication_type?: 'delegate' | 'report_status' | 'request_approval' | 'inform';
 }
 
 interface DelegationTaskResult {
@@ -209,6 +224,8 @@ interface DelegationTaskResult {
   target_agent_id: string;
   target_agent_name: string;
   task_title: string;
+  chat_id: string;
+  session_id: string;
   response_file_path?: string;
   summary?: string | null;
   error?: string | null;
@@ -220,57 +237,169 @@ async function executeSingleDelegatedTask(
     callerAgentId?: string;
     callerName: string;
     callerWorkspace: string;
+    callerRunId?: string;
   },
   runner: AgentRunner,
   db: ReturnType<AgentRunner['getDb']>,
 ): Promise<DelegationTaskResult> {
-  const targetAgentId = String(task.target_agent_id || '').trim();
-  const taskTitle = String(task.task_title || '').trim();
-  const requirementsFilePath = String(task.requirements_file_path || '').trim();
-  const instructions = typeof task.instructions === 'string' ? task.instructions.trim() : '';
+  const rawTarget = String(
+    task.target_agent_id ||
+    (task as any).targetAgentId ||
+    (task as any).agent_id ||
+    (task as any).agentId ||
+    (task as any).target ||
+    (task as any).target_agent ||
+    (task as any).to_agent_id ||
+    (task as any).recipient ||
+    '',
+  ).trim();
 
-  if (!targetAgentId || !taskTitle || !requirementsFilePath) {
+  // 1. Resolve target agent by ID or by Name
+  let targetAgent = rawTarget ? db.getAgent(rawTarget) : null;
+  if (!targetAgent && rawTarget) {
+    const allAgents = db.listAgents();
+    targetAgent =
+      allAgents.find((a) => a.id.toLowerCase() === rawTarget.toLowerCase()) ||
+      allAgents.find((a) => a.name.toLowerCase() === rawTarget.toLowerCase()) ||
+      allAgents.find((a) => a.name.toLowerCase().includes(rawTarget.toLowerCase())) ||
+      null;
+  }
+
+  const targetAgentId = targetAgent ? targetAgent.id : rawTarget;
+  const targetAgentName = targetAgent ? targetAgent.name : (rawTarget || 'Unknown');
+
+  // Extract instructions / prompt from any field the agent passed
+  const instructions =
+    (typeof task.instructions === 'string' && task.instructions.trim()) ||
+    (typeof (task as any).prompt === 'string' && (task as any).prompt.trim()) ||
+    (typeof (task as any).task === 'string' && (task as any).task.trim()) ||
+    (typeof (task as any).message === 'string' && (task as any).message.trim()) ||
+    (typeof (task as any).query === 'string' && (task as any).query.trim()) ||
+    (typeof (task as any).content === 'string' && (task as any).content.trim()) ||
+    (typeof (task as any).description === 'string' && (task as any).description.trim()) ||
+    '';
+
+  const requirementsFilePath = String(
+    task.requirements_file_path ||
+    (task as any).requirementsFilePath ||
+    (task as any).file_path ||
+    (task as any).file ||
+    '',
+  ).trim();
+
+  // Extract or derive task title
+  let taskTitle = String(
+    task.task_title ||
+    (task as any).title ||
+    (task as any).subject ||
+    (task as any).topic ||
+    '',
+  ).trim();
+
+  if (!taskTitle) {
+    if (instructions) {
+      taskTitle = instructions.split(/[\r\n]+/)[0].slice(0, 60).trim();
+    } else if (requirementsFilePath) {
+      taskTitle = `Review ${requirementsFilePath}`;
+    } else {
+      taskTitle = 'Delegated Task';
+    }
+  }
+
+  const explicitChatId = typeof task.chat_id === 'string' && task.chat_id.trim()
+    ? task.chat_id.trim()
+    : typeof task.session_id === 'string' && task.session_id.trim()
+      ? task.session_id.trim()
+      : undefined;
+
+  const isFollowUp = Boolean(explicitChatId);
+  const delegationSessionId =
+    explicitChatId ||
+    `delegation_${callerInfo.callerAgentId || 'caller'}_${targetAgentId}_${Date.now()}`;
+
+  // Only reject if no target agent was provided OR literally nothing was asked
+  if (!rawTarget) {
     return {
       success: false,
       status: 'failed',
-      target_agent_id: targetAgentId || 'unknown',
+      target_agent_id: 'unknown',
       target_agent_name: 'Unknown',
-      task_title: taskTitle || 'Untitled',
-      error: 'Missing required parameters: target_agent_id, task_title, and requirements_file_path are required.',
+      task_title: taskTitle,
+      chat_id: delegationSessionId,
+      session_id: delegationSessionId,
+      error: 'Missing target_agent_id: Please specify which agent to delegate to.',
+    };
+  }
+
+  if (!instructions && !requirementsFilePath && taskTitle === 'Delegated Task') {
+    return {
+      success: false,
+      status: 'failed',
+      target_agent_id: targetAgentId,
+      target_agent_name: targetAgentName,
+      task_title: taskTitle,
+      chat_id: delegationSessionId,
+      session_id: delegationSessionId,
+      error: 'Missing task content: Please provide instructions, a prompt, or requirements for the target agent.',
     };
   }
 
   // 1. Verify target agent exists
-  const targetAgent = db.getAgent(targetAgentId);
   if (!targetAgent) {
+    const available = db.listAgents().map((a) => `"${a.name}" (${a.id})`).join(', ') || 'none';
     return {
       success: false,
       status: 'failed',
       target_agent_id: targetAgentId,
       target_agent_name: 'Unknown',
       task_title: taskTitle,
-      error: `Target agent with ID "${targetAgentId}" does not exist in database.`,
+      chat_id: delegationSessionId,
+      session_id: delegationSessionId,
+      error: `Target agent "${rawTarget}" does not exist in database. Available agents: ${available}`,
     };
   }
 
-  // 2. Verify peer connection
-  if (callerInfo.callerAgentId) {
-    const peers = db.getConnectedPeers(callerInfo.callerAgentId);
-    const isConnected = peers.some((p) => p.id === targetAgentId);
-    if (!isConnected) {
-      const connectedList = peers.map((p) => `"${p.name}" (${p.id})`).join(', ') || 'none';
+  // 2. Validate chat_id if provided (Edge case: invalid chat ID returns error immediately)
+  if (explicitChatId) {
+    const existingSession = db.getSession(explicitChatId);
+    if (!existingSession) {
       return {
         success: false,
         status: 'failed',
         target_agent_id: targetAgentId,
         target_agent_name: targetAgent.name,
         task_title: taskTitle,
-        error: `Agent "${targetAgent.name}" (${targetAgentId}) is not connected as a peer. Connected peers: ${connectedList}. Please connect on canvas first.`,
+        chat_id: explicitChatId,
+        session_id: explicitChatId,
+        error: `Invalid chat_id "${explicitChatId}": Chat session does not exist.`,
+      };
+    }
+    if (existingSession.agent_id !== targetAgentId) {
+      return {
+        success: false,
+        status: 'failed',
+        target_agent_id: targetAgentId,
+        target_agent_name: targetAgent.name,
+        task_title: taskTitle,
+        chat_id: explicitChatId,
+        session_id: explicitChatId,
+        error: `Invalid chat_id "${explicitChatId}": Chat session belongs to agent "${existingSession.agent_id}", not target agent "${targetAgentId}".`,
       };
     }
   }
 
-  // 3. Verify target agent configuration / eligibility
+  // 3. Verify / establish peer connection
+  if (callerInfo.callerAgentId && callerInfo.callerAgentId !== targetAgentId) {
+    const peers = db.getConnectedPeers(callerInfo.callerAgentId);
+    const isConnected = peers.some((p) => p.id === targetAgentId);
+    if (!isConnected) {
+      try {
+        db.createAgentConnection(callerInfo.callerAgentId, targetAgentId);
+      } catch {}
+    }
+  }
+
+  // 4. Verify target agent configuration / eligibility
   const configStatus = checkAgentConfigStatus(targetAgentId, db);
   if (!configStatus.isConfigured) {
     return {
@@ -279,63 +408,101 @@ async function executeSingleDelegatedTask(
       target_agent_id: targetAgentId,
       target_agent_name: targetAgent.name,
       task_title: taskTitle,
+      chat_id: delegationSessionId,
+      session_id: delegationSessionId,
       error: `Agent "${targetAgent.name}" (${targetAgentId}) is NOT fully configured and is not eligible to execute tasks. Missing configuration:\n- ${configStatus.reasons.join('\n- ')}`,
     };
   }
 
-  // 4. Verify requirements file
-  const reqFullPath = isAbsolute(requirementsFilePath)
-    ? requirementsFilePath
-    : join(callerInfo.callerWorkspace, requirementsFilePath);
-
-  if (!existsSync(reqFullPath)) {
-    return {
-      success: false,
-      status: 'failed',
-      target_agent_id: targetAgentId,
-      target_agent_name: targetAgent.name,
-      task_title: taskTitle,
-      error: `Requirements file not found at "${reqFullPath}". You must create the requirements markdown file before delegating.`,
-    };
-  }
-
+  // 5. Verify requirements content / file
   let requirementsContent = '';
-  try {
-    requirementsContent = readFileSync(reqFullPath, 'utf-8');
-  } catch (err: any) {
-    return {
-      success: false,
-      status: 'failed',
-      target_agent_id: targetAgentId,
-      target_agent_name: targetAgent.name,
-      task_title: taskTitle,
-      error: `Failed to read requirements file: ${err.message}`,
-    };
+  if (requirementsFilePath) {
+    const reqFullPath = isAbsolute(requirementsFilePath)
+      ? requirementsFilePath
+      : join(callerInfo.callerWorkspace, requirementsFilePath);
+
+    if (existsSync(reqFullPath)) {
+      try {
+        requirementsContent = readFileSync(reqFullPath, 'utf-8');
+      } catch (err: any) {
+        requirementsContent = instructions || taskTitle;
+      }
+    } else {
+      requirementsContent = instructions || taskTitle;
+    }
+  } else {
+    requirementsContent = instructions || taskTitle;
   }
 
-  // 5. Build delegated prompt
+  const commType = task.communication_type || 'delegate';
+  const commBadge =
+    commType === 'report_status'
+      ? '📋 [STATUS REPORT]'
+      : commType === 'request_approval'
+        ? '🛡️ [APPROVAL REQUEST]'
+        : commType === 'inform'
+          ? '📢 [PEER SYNC]'
+          : '🤝 [DELEGATED TASK]';
+
+  // Ensure session exists in database with a clear, readable title
+  const sessionTitle = isFollowUp
+    ? `${commBadge} ${taskTitle} (Follow-up from ${callerInfo.callerName})`
+    : `${commBadge} ${taskTitle} (${callerInfo.callerName})`;
+  db.getOrCreateSession(targetAgentId, delegationSessionId, sessionTitle);
+
+  // 6. Build delegated prompt
+  const senderTag = `${callerInfo.callerName}${callerInfo.callerAgentId ? ` (${callerInfo.callerAgentId})` : ''}`;
+  const header =
+    commType === 'report_status'
+      ? `## 📋 STATUS REPORT FROM: ${senderTag}`
+      : commType === 'request_approval'
+        ? `## 🛡️ APPROVAL REQUEST FROM: ${senderTag}`
+        : commType === 'inform'
+          ? `## 📢 SYNC FROM: ${senderTag}`
+          : isFollowUp
+            ? `## 🤝 FOLLOW-UP FROM: ${senderTag}`
+            : `## 🤝 TASK FROM: ${senderTag}`;
+
+  const guidance =
+    commType === 'request_approval'
+      ? '1. Review proposal and risk.\n2. Respond APPROVED, CONDITIONALLY APPROVED, or REJECTED with rationale.'
+      : commType === 'report_status'
+        ? '1. Review deliverables and metrics.\n2. Confirm acceptance or request revisions.'
+        : isFollowUp
+          ? '1. Refine work per the new requirements.'
+          : '1. Complete task per requirements.';
+
   const delegationPrompt = [
-    `## 🤝 DELEGATED TASK FROM PEER AGENT: ${callerInfo.callerName} (${callerInfo.callerAgentId || 'unknown'})`,
-    `Task Title: ${taskTitle}`,
-    instructions ? `Handoff Instructions: ${instructions}\n` : '',
-    `### REQUIREMENTS SPECIFICATION (from ${requirementsFilePath}):`,
+    `${header} | Task: ${taskTitle} | Intent: ${commType.toUpperCase()} | chat_id: ${delegationSessionId}`,
+    isFollowUp ? `*(Continuing in session \`${delegationSessionId}\` with shared context)*` : '',
+    instructions ? `Note: ${instructions}` : '',
+    `### REQUIREMENTS (${requirementsFilePath}):`,
     requirementsContent,
     '',
     '---',
-    '### DELEGATION EXECUTION REQUIREMENTS:',
-    '1. Review and fulfill the requested task completely according to the requirements above.',
-    '2. Generate all required deliverables and verify their correctness.',
-    '3. Provide a structured completion report detailing:',
-    '   - Executive Summary of actions completed',
-    '   - Deliverables produced with file paths',
-    '   - Any important findings, caveats, or recommendations for the delegating agent.',
+    '### INSTRUCTIONS:',
+    guidance,
+    '2. Return summary: actions taken, deliverables with paths, and recommendations.',
+    `3. Doubts: If requirements are unclear, do not guess. Add questions under "### ❓ QUESTIONS / DOUBTS FOR CALLER" for caller reply in this thread (chat_id: ${delegationSessionId}).`,
   ]
     .filter(Boolean)
     .join('\n');
 
-  const delegationSessionId = `delegation_${callerInfo.callerAgentId || 'caller'}_${targetAgentId}_${Date.now()}`;
+  const delegationTrackId = callerInfo.callerAgentId
+    ? runner.registerActiveDelegation(callerInfo.callerAgentId, targetAgentId, taskTitle, delegationSessionId)
+    : null;
 
   try {
+    // Edge case: if that session is currently running/looping, wait until it completes before pushing next prompt
+    let activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
+    while (activeSessionRun && activeSessionRun.status === 'running') {
+      if (callerInfo.callerRunId && activeSessionRun.runId === callerInfo.callerRunId) {
+        break;
+      }
+      await runner.waitForRun(activeSessionRun.runId);
+      activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
+    }
+
     const targetRun = await runner.runAgentAndWait(
       targetAgentId,
       'manual',
@@ -357,15 +524,18 @@ async function executeSingleDelegatedTask(
     const responseRelativePath = join('reports', responseFileName);
 
     const responseMarkdown = [
-      `# Delegated Task Response: ${taskTitle}`,
-      `- **Target Agent**: ${targetAgent.name} (\`${targetAgentId}\`)`,
-      `- **Target Agent Role**: ${targetAgent.role || 'General Assistant'}`,
+      `# Response: ${taskTitle}`,
+      `- **Agent**: ${targetAgent.name} (\`${targetAgentId}\`)`,
+      `- **Thread**: \`${delegationSessionId}\` (${isFollowUp ? 'Follow-up' : 'Initial'})`,
       `- **Status**: ${targetRun.status}`,
-      `- **Completed At**: ${targetRun.completed_at || new Date().toISOString()}`,
-      `- **Original Requirements**: \`${requirementsFilePath}\``,
+      `- **Requirements**: \`${requirementsFilePath}\``,
       '',
-      `## Target Agent Output & Summary:`,
+      `## Output:`,
       targetRun.summary || targetRun.error || '(No output recorded)',
+      '',
+      '---',
+      `### 💬 Follow-Up:`,
+      `To reply or discuss in this thread, call \`delegate_task\` with \`"chat_id": "${delegationSessionId}"\`.`,
     ].join('\n');
 
     writeFileSync(responseFullPath, responseMarkdown, 'utf-8');
@@ -376,6 +546,8 @@ async function executeSingleDelegatedTask(
       target_agent_id: targetAgentId,
       target_agent_name: targetAgent.name,
       task_title: taskTitle,
+      chat_id: delegationSessionId,
+      session_id: delegationSessionId,
       response_file_path: responseRelativePath,
       summary: targetRun.summary,
       error: targetRun.error,
@@ -387,8 +559,14 @@ async function executeSingleDelegatedTask(
       target_agent_id: targetAgentId,
       target_agent_name: targetAgent.name,
       task_title: taskTitle,
+      chat_id: delegationSessionId,
+      session_id: delegationSessionId,
       error: `Execution error on agent "${targetAgent.name}": ${err.message}`,
     };
+  } finally {
+    if (delegationTrackId) {
+      runner.unregisterActiveDelegation(delegationTrackId);
+    }
   }
 }
 
@@ -568,47 +746,87 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
   {
     name: 'delegate_task',
     description:
-      'Delegates a specialized task to a connected peer agent on the canvas. Supports both a single task or PARALLEL multi-agent tasks via the `tasks` array. Per protocol, you MUST write requirements markdown file(s) first. This tool executes peer agent(s), awaits completion, writes response report(s) into your reports/ folder, and returns the response.',
+      'Delegate tasks, report status, request approvals, or sync with peers. Provide target_agent_id (or agent name) and either instructions, prompt, task_title, or requirements_file_path. Pass chat_id to continue an existing thread. Writes reports to reports/ and returns results.',
     inputSchema: {
       type: 'object',
       properties: {
         target_agent_id: {
           type: 'string',
-          description: 'The unique ID of the target peer agent to delegate the task to (single task mode).',
+          description: 'Target peer agent ID or agent name.',
         },
         task_title: {
           type: 'string',
-          description: 'A concise descriptive title for the delegated task (single task mode).',
-        },
-        requirements_file_path: {
-          type: 'string',
-          description:
-            'Relative or absolute path to the requirements markdown file created by the calling agent (single task mode).',
+          description: 'Optional concise subtask title (auto-generated from instructions if omitted).',
         },
         instructions: {
           type: 'string',
-          description: 'Optional additional instructions or handoff notes for the target peer agent.',
+          description: 'Task instructions, prompt, or details for the target agent.',
+        },
+        prompt: {
+          type: 'string',
+          description: 'Alias for instructions.',
+        },
+        task: {
+          type: 'string',
+          description: 'Alias for instructions or prompt.',
+        },
+        message: {
+          type: 'string',
+          description: 'Message or instructions to send to the target agent.',
+        },
+        requirements_file_path: {
+          type: 'string',
+          description: 'Optional path to requirements markdown file.',
+        },
+        communication_type: {
+          type: 'string',
+          enum: ['delegate', 'report_status', 'request_approval', 'inform'],
+          description: 'Intent: "delegate" (work), "report_status" (deliverables), "request_approval" (risky actions), or "inform" (peer sync).',
+        },
+        chat_id: {
+          type: 'string',
+          description: 'Optional chat/session ID to continue thread with target agent.',
+        },
+        session_id: {
+          type: 'string',
+          description: 'Alias for chat_id.',
         },
         tasks: {
           type: 'array',
-          description:
-            'Optional array of tasks to execute concurrently in PARALLEL across multiple peer agents. When provided, all delegated agents execute simultaneously and are awaited together.',
+          description: 'Batch of subtasks to execute concurrently in parallel.',
           items: {
             type: 'object',
             properties: {
-              target_agent_id: { type: 'string', description: 'Target peer agent ID.' },
-              task_title: { type: 'string', description: 'Concise descriptive title of subtask.' },
+              target_agent_id: { type: 'string', description: 'Target peer agent ID or name.' },
+              task_title: { type: 'string', description: 'Optional subtask title.' },
+              instructions: { type: 'string', description: 'Task instructions or prompt.' },
+              prompt: { type: 'string', description: 'Alias for instructions.' },
+              task: { type: 'string', description: 'Alias for instructions.' },
+              message: { type: 'string', description: 'Alias for instructions.' },
               requirements_file_path: {
                 type: 'string',
-                description: 'Path to the requirements markdown file for this subtask.',
+                description: 'Optional path to requirements markdown file.',
               },
-              instructions: { type: 'string', description: 'Optional handoff instructions.' },
+              communication_type: {
+                type: 'string',
+                enum: ['delegate', 'report_status', 'request_approval', 'inform'],
+                description: 'Communication intent.',
+              },
+              chat_id: {
+                type: 'string',
+                description: 'Optional chat/session ID to continue thread.',
+              },
+              session_id: {
+                type: 'string',
+                description: 'Alias for chat_id.',
+              },
             },
-            required: ['target_agent_id', 'task_title', 'requirements_file_path'],
+            required: ['target_agent_id'],
           },
         },
       },
-      additionalProperties: false,
+      required: ['target_agent_id'],
+      additionalProperties: true,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     presentation: { icon: '🤝', label: 'Delegate Task', family: 'run', tone: 'primary' },
@@ -617,20 +835,44 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       const db = runner.getDb();
 
       // Find calling agent from context runId or active runs
-      const callerRun = runner.getActiveRun(ctx.runId) || (ctx.runId ? db.getRun(ctx.runId) : null);
-      const callerAgentId = callerRun
-        ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
-        : undefined;
+      const callerAgentId =
+        (ctx as any)?.callerAgentId ||
+        (ctx as any)?.agentId ||
+        (ctx.runId ? runner.getActiveRun(ctx.runId)?.agentId : undefined) ||
+        (ctx.sessionId ? runner.getActiveRunForSession(ctx.sessionId)?.agentId : undefined) ||
+        (ctx.runId ? (db.getRun(ctx.runId) as any)?.agent_id : undefined);
+
+      const callerRun =
+        (ctx.runId ? runner.getActiveRun(ctx.runId) : undefined) ||
+        (ctx.sessionId ? runner.getActiveRunForSession(ctx.sessionId) : undefined) ||
+        (ctx.runId ? db.getRun(ctx.runId) : null);
+
       const callerAgent = callerAgentId ? db.getAgent(callerAgentId) : null;
       const callerName = callerAgent ? callerAgent.name : 'Peer Agent';
       const callerWorkspace =
         ctx.workspacePath || (callerAgent?.working_dir?.trim()) || process.cwd();
 
-      const callerInfo = { callerAgentId, callerName, callerWorkspace };
+      const callerInfo = {
+        callerAgentId,
+        callerName,
+        callerWorkspace,
+        callerRunId: callerRun ? ('id' in callerRun ? callerRun.id : (callerRun as any).runId) : undefined,
+      };
 
       // ── Parallel Multi-Task Delegation Flow ──
       if (Array.isArray(input.tasks) && input.tasks.length > 0) {
-        const tasksList = input.tasks as SingleDelegationTaskInput[];
+        const tasksList: SingleDelegationTaskInput[] = (input.tasks as any[]).map((t) => ({
+          target_agent_id: String(t.target_agent_id || t.targetAgentId || t.agent_id || t.target || '').trim(),
+          task_title: typeof t.task_title === 'string' ? t.task_title.trim() : typeof t.title === 'string' ? t.title.trim() : undefined,
+          requirements_file_path: typeof t.requirements_file_path === 'string' ? t.requirements_file_path.trim() : undefined,
+          instructions: typeof t.instructions === 'string' ? t.instructions.trim() : typeof t.prompt === 'string' ? t.prompt.trim() : typeof t.task === 'string' ? t.task.trim() : typeof t.message === 'string' ? t.message.trim() : undefined,
+          communication_type: t.communication_type,
+          chat_id: typeof t.chat_id === 'string' && t.chat_id.trim()
+            ? t.chat_id.trim()
+            : typeof t.session_id === 'string' && t.session_id.trim()
+              ? t.session_id.trim()
+              : undefined,
+        }));
 
         // Execute all tasks concurrently in parallel with Promise.all
         const results = await Promise.all(
@@ -660,21 +902,70 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       }
 
       // ── Single Task Delegation Flow ──
+      const rawTarget = String(
+        input.target_agent_id ||
+        (input as any).targetAgentId ||
+        (input as any).agent_id ||
+        (input as any).agentId ||
+        (input as any).target ||
+        (input as any).target_agent ||
+        '',
+      ).trim();
+
+      const rawInstructions =
+        typeof input.instructions === 'string' && input.instructions.trim()
+          ? input.instructions.trim()
+          : typeof (input as any).prompt === 'string' && (input as any).prompt.trim()
+            ? (input as any).prompt.trim()
+            : typeof (input as any).task === 'string' && (input as any).task.trim()
+              ? (input as any).task.trim()
+              : typeof (input as any).message === 'string' && (input as any).message.trim()
+                ? (input as any).message.trim()
+                : undefined;
+
       const singleTask: SingleDelegationTaskInput = {
-        target_agent_id: String(input.target_agent_id || '').trim(),
-        task_title: String(input.task_title || '').trim(),
-        requirements_file_path: String(input.requirements_file_path || '').trim(),
-        instructions: typeof input.instructions === 'string' ? input.instructions.trim() : undefined,
+        target_agent_id: rawTarget,
+        task_title: typeof input.task_title === 'string' && input.task_title.trim()
+          ? input.task_title.trim()
+          : typeof (input as any).title === 'string' && (input as any).title.trim()
+            ? (input as any).title.trim()
+            : undefined,
+        requirements_file_path: typeof input.requirements_file_path === 'string' && input.requirements_file_path.trim()
+          ? input.requirements_file_path.trim()
+          : typeof (input as any).requirementsFilePath === 'string' && (input as any).requirementsFilePath.trim()
+            ? (input as any).requirementsFilePath.trim()
+            : undefined,
+        instructions: rawInstructions,
+        communication_type: typeof input.communication_type === 'string' && ['delegate', 'report_status', 'request_approval', 'inform'].includes(input.communication_type) ? (input.communication_type as any) : undefined,
+        chat_id: typeof input.chat_id === 'string' && input.chat_id.trim()
+          ? input.chat_id.trim()
+          : typeof input.session_id === 'string' && input.session_id.trim()
+            ? input.session_id.trim()
+            : undefined,
       };
 
-      if (!singleTask.target_agent_id || !singleTask.task_title || !singleTask.requirements_file_path) {
+      if (!singleTask.target_agent_id) {
         return {
           success: false,
-          summary: 'Missing required parameters for delegate_task',
+          summary: 'Missing target_agent_id for delegate_task',
           content: [
             {
               type: 'text',
-              text: 'Error: target_agent_id, task_title, and requirements_file_path (or tasks array) are required.',
+              text: 'Error: target_agent_id is required to delegate a task.',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      if (!singleTask.task_title && !singleTask.instructions && !singleTask.requirements_file_path) {
+        return {
+          success: false,
+          summary: 'Missing task details for delegate_task',
+          content: [
+            {
+              type: 'text',
+              text: 'Error: Please provide instructions, prompt, task_title, or requirements_file_path for the target agent.',
             },
           ],
           isError: true,
@@ -684,8 +975,8 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       const result = await executeSingleDelegatedTask(singleTask, callerInfo, runner, db);
 
       const summaryText = result.success
-        ? `delegate_task → ${result.target_agent_name} completed "${result.task_title}" (${result.status})`
-        : `delegate_task → Failed: ${result.error || result.status}`;
+        ? `delegate_task → ${result.target_agent_name} completed "${result.task_title}" (${result.status}) [chat_id: ${result.chat_id}]`
+        : `delegate_task → Failed: ${result.error || result.status} [chat_id: ${result.chat_id}]`;
 
       return {
         success: result.success,
@@ -2151,6 +2442,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         .filter((m) => m.enabled !== 0)
         .map((m) => ({ id: m.id, name: m.mcp_name, label: m.label }));
 
+      const recentDates = db.getAgentTodoDates(agent.id).slice(0, 5);
+      const recentTodos = db.getAllAgentTodoRecords(agent.id, 50);
+      const recentCompleted = recentTodos.filter((t) => t.status === 'completed');
+      const { topSections, specializations } = inferSpecializationsFromTodos(
+        recentCompleted.length > 0 ? recentCompleted : recentTodos,
+      );
+
       const payload = {
         id: agent.id,
         name: agent.name,
@@ -2163,11 +2461,18 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         output_styles: outputStyles,
         skills,
         mcps,
+        recent_activity: {
+          available_dates: recentDates,
+          total_tasks_recorded: recentTodos.length,
+          completed_tasks: recentCompleted.length,
+          top_sections_worked: topSections,
+          demonstrated_specialties: specializations,
+        },
       };
 
       return {
         success: true,
-        summary: `Profile for ${agent.name}`,
+        summary: `Profile for ${agent.name} (${agent.specialty || 'General'}) — ${recentCompleted.length} recent tasks completed`,
         content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
         data: payload,
       };
@@ -2599,10 +2904,15 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
           };
         }
 
+        let finalPrompt = String(input.prompt).trim();
+        if (!finalPrompt.includes('mark_cron_job_success')) {
+          finalPrompt += '\n\nNote: Once all tasks are complete, you MUST invoke the `mark_cron_job_success` tool with a summary to confirm completion.';
+        }
+
         const job = db.createAgentCronJob({
           agent_id: targetAgent.id,
           name: String(input.name).trim(),
-          prompt: String(input.prompt).trim(),
+          prompt: finalPrompt,
           cron_schedule: schedule,
           enabled: input.enabled !== false ? 1 : 0,
           created_by: 'agent',
@@ -2701,6 +3011,379 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         summary: `Unknown action "${input.action}"`,
         content: [{ type: 'text', text: `Error: Unknown action "${input.action}". Allowed: create, list, toggle, delete.` }],
         isError: true,
+      };
+    },
+  },
+  {
+    name: 'mark_cron_job_success',
+    description:
+      'Mark the current scheduled cron job or autonomous operation as successfully completed. ' +
+      'Whenever executing a scheduled cron job (such as workspace memory compaction, daily EOD task summaries, ' +
+      'self-refinement routines, or custom scheduled tasks), you MUST call this tool when all your tasks, file updates, ' +
+      'and verifications are finished. Calling this tool signals that the execution succeeded and prevents automated retries.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        summary: {
+          type: 'string',
+          description: 'A concise summary of all tasks and deliverables completed during this scheduled execution.',
+        },
+        job_id: {
+          type: 'string',
+          description: 'Optional ID of the scheduled cron job being completed.',
+        },
+        deliverables: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional list of files created, modified, or artifacts produced.',
+        },
+      },
+      required: ['summary'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    presentation: { icon: '✅', label: 'Mark Cron Job Success', family: 'run', tone: 'primary' },
+    async execute(input, ctx) {
+      const runner = AgentRunner.getInstance();
+      const activeRun =
+        (ctx.runId ? runner.getActiveRun(ctx.runId) : undefined) ||
+        (ctx.sessionId ? runner.getActiveRunForSession(ctx.sessionId) : undefined);
+
+      if (activeRun) {
+        activeRun.cronSuccessReported = true;
+        activeRun.cronSuccessSummary = String(input.summary || '').trim();
+      }
+
+      const summaryText = String(input.summary || 'Scheduled task completed successfully.').trim();
+
+      try {
+        if (ctx.runId) {
+          const db = runner.getDb();
+          const callerRun = activeRun || db.getRun(ctx.runId);
+          const agentId = callerRun ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId) : undefined;
+          if (agentId) {
+            db.addRunEvent({
+              run_id: ctx.runId,
+              agent_id: agentId,
+              event_type: 'cron.success_marked',
+              payload_json: JSON.stringify({
+                summary: summaryText,
+                deliverables: input.deliverables ?? [],
+                jobId: input.job_id ?? activeRun?.cronJobId,
+                markedAt: new Date().toISOString(),
+              }),
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[mark_cron_job_success] Error logging run event:', err);
+      }
+
+      return {
+        success: true,
+        summary: `Cron job successfully marked as completed: ${summaryText}`,
+        content: [
+          {
+            type: 'text',
+            text: `✅ Scheduled cron job marked as successfully completed.\n\n**Summary**: ${summaryText}${
+              Array.isArray(input.deliverables) && input.deliverables.length > 0
+                ? `\n\n**Deliverables**:\n${input.deliverables.map((d: any) => `- \`${d}\``).join('\n')}`
+                : ''
+            }`,
+          },
+        ],
+        data: {
+          runId: ctx.runId,
+          summary: summaryText,
+          deliverables: input.deliverables ?? [],
+          markedAt: new Date().toISOString(),
+        },
+      };
+    },
+  },
+  {
+    name: 'get_agent_todo_history',
+    description:
+      'Inspects the date-wise to-do history of this agent (or a target peer agent). Returns the full task checklist, completion metrics, work domains/sections (e.g. QA, Database, Backend, Frontend, DevOps), and demonstrated specializations for any date or across recent activity. Handles midnight crossover edge cases where late-night runs are attributed to the start day.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          description:
+            'Target date in YYYY-MM-DD format, or "today", "yesterday", or "latest". Defaults to today.',
+        },
+        target_agent_id: {
+          type: 'string',
+          description: 'Optional ID of the target agent to inspect. Defaults to calling agent.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent to inspect.',
+        },
+        include_markdown: {
+          type: 'boolean',
+          description: 'Whether to include the full rendered markdown daily task ledger in the response.',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    presentation: { icon: '📅', label: 'Todo History', family: 'inspect', tone: 'default' },
+    async execute(input, ctx) {
+      const runner = AgentRunner.getInstance();
+      const db = runner.getDb();
+
+      const callerRun = runner.getActiveRun(ctx.runId) || (ctx.runId ? db.getRun(ctx.runId) : null);
+      const callerAgentId = callerRun
+        ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
+        : undefined;
+
+      let targetAgent: AgentRecord | null = null;
+      if (input.target_agent_id) {
+        targetAgent = db.getAgent(String(input.target_agent_id).trim());
+      } else if (input.target_agent_name) {
+        const query = String(input.target_agent_name).toLowerCase().trim();
+        const all = db.getAllAgents();
+        targetAgent = all.find((a) => a.name.toLowerCase() === query) ?? null;
+      }
+      if (!targetAgent && callerAgentId) {
+        targetAgent = db.getAgent(callerAgentId);
+      }
+
+      if (!targetAgent) {
+        return {
+          success: false,
+          summary: 'Agent not found',
+          content: [{ type: 'text', text: 'Error: Could not identify target agent.' }],
+          isError: true,
+        };
+      }
+
+      const availableDates = db.getAgentTodoDates(targetAgent.id);
+
+      // Resolve query date
+      let queryDate = String(input.date || 'today').trim().toLowerCase();
+      const now = new Date();
+      let targetDateStr = formatDateKey(now);
+
+      if (queryDate === 'today' || !queryDate) {
+        targetDateStr = formatDateKey(now);
+      } else if (queryDate === 'yesterday') {
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        targetDateStr = formatDateKey(yesterday);
+      } else if (queryDate === 'latest') {
+        targetDateStr = availableDates.length > 0 ? availableDates[0] : formatDateKey(now);
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+        targetDateStr = queryDate;
+      }
+
+      const todos = db.getAgentTodosByDate(targetAgent.id, targetDateStr);
+      const total = todos.length;
+      const completed = todos.filter((t) => t.status === 'completed').length;
+      const inProgress = todos.filter((t) => t.status === 'in_progress').length;
+      const pending = todos.filter((t) => t.status === 'pending').length;
+      const cancelled = todos.filter((t) => t.status === 'cancelled').length;
+      const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      const { topSections, specializations } = inferSpecializationsFromTodos(todos);
+
+      let markdownContent: string | undefined;
+      if (input.include_markdown) {
+        const candidatePaths = [
+          join(resolveAgentWorkspace(targetAgent), MANIFEST_DIR, 'todos', `${targetDateStr}.md`),
+          ctx?.workspacePath ? join(ctx.workspacePath, MANIFEST_DIR, 'todos', `${targetDateStr}.md`) : null,
+          ctx?.workspaceDir ? join(ctx.workspaceDir, MANIFEST_DIR, 'todos', `${targetDateStr}.md`) : null,
+        ].filter(Boolean) as string[];
+
+        for (const p of candidatePaths) {
+          if (existsSync(p)) {
+            try {
+              markdownContent = readFileSync(p, 'utf8');
+              break;
+            } catch {}
+          }
+        }
+
+        if (!markdownContent) {
+          markdownContent = renderDailyTodoMarkdown(targetAgent, {
+            agentId: targetAgent.id,
+            date: targetDateStr,
+            total,
+            completed,
+            inProgress,
+            pending,
+            cancelled,
+            completionRate,
+            sections: topSections,
+            specializations,
+            todos,
+          });
+        }
+      }
+
+      const payload = {
+        agent_id: targetAgent.id,
+        agent_name: targetAgent.name,
+        role: targetAgent.role,
+        specialty: targetAgent.specialty,
+        date: targetDateStr,
+        available_dates: availableDates,
+        metrics: {
+          total,
+          completed,
+          in_progress: inProgress,
+          pending,
+          cancelled,
+          completion_rate_percent: completionRate,
+        },
+        sections_worked: topSections,
+        demonstrated_specialties: specializations,
+        todos: todos.map((t) => ({
+          content: t.content,
+          status: t.status,
+          priority: t.priority,
+          section: t.section || inferSectionForTodo(t.content),
+          started_at: t.started_at,
+          completed_at: t.completed_at,
+        })),
+        ...(markdownContent ? { markdown_ledger: markdownContent } : {}),
+      };
+
+      const summaryText = `${targetAgent.name} on ${targetDateStr}: ${completed}/${total} tasks completed (${completionRate}%), sections: ${topSections.join(', ') || 'none'}`;
+
+      return {
+        success: true,
+        summary: summaryText,
+        content: [
+          {
+            type: 'text',
+            text:
+              `### Daily Todo Ledger — ${targetAgent.name} (${targetDateStr})\n` +
+              `- **Completed**: ${completed} / ${total} tasks (${completionRate}%)\n` +
+              `- **In Progress**: ${inProgress} | **Pending**: ${pending}\n` +
+              `- **Sections**: ${topSections.join(', ') || 'General'}\n` +
+              `- **Specializations**: ${specializations.join(', ') || 'General'}\n\n` +
+              `**Tasks**:\n` +
+              (todos.length > 0
+                ? todos
+                    .map(
+                      (t) =>
+                        `- [${t.status === 'completed' ? 'x' : t.status === 'in_progress' ? '>' : ' '}] [${t.priority || 'medium'}] [${t.section || inferSectionForTodo(t.content)}] ${t.content}`,
+                    )
+                    .join('\n')
+                : '_No tasks recorded on this date._') +
+              (availableDates.length > 0
+                ? `\n\n*Other dates with activity: ${availableDates.slice(0, 5).join(', ')}*`
+                : ''),
+          },
+        ],
+        data: payload,
+      };
+    },
+  },
+  {
+    name: 'redevelop_agent_specializations',
+    description:
+      'Analyzes this agent\'s (or a peer agent\'s) recent to-do history to judge what work was accomplished and redevelop/sharpen domain specializations. Updates the agent\'s specialty field in the database, appends self-evaluation notes to memory/reflective.md and memory/identity.md, and broadcasts the updated profile to the canvas so other agents can see its latest capabilities and assign appropriate tasks.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target_agent_id: {
+          type: 'string',
+          description: 'Optional ID of the target agent. Defaults to calling agent.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent.',
+        },
+        days_back: {
+          type: 'number',
+          description: 'Number of recent days of todo history to analyze (default: 7).',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    presentation: { icon: '🎯', label: 'Redevelop Specialty', family: 'edit', tone: 'success' },
+    async execute(input, ctx) {
+      const runner = AgentRunner.getInstance();
+      const db = runner.getDb();
+
+      const callerRun = runner.getActiveRun(ctx.runId) || (ctx.runId ? db.getRun(ctx.runId) : null);
+      const callerAgentId = callerRun
+        ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
+        : undefined;
+
+      let targetAgent: AgentRecord | null = null;
+      if (input.target_agent_id) {
+        targetAgent = db.getAgent(String(input.target_agent_id).trim());
+      } else if (input.target_agent_name) {
+        const query = String(input.target_agent_name).toLowerCase().trim();
+        const all = db.getAllAgents();
+        targetAgent = all.find((a) => a.name.toLowerCase() === query) ?? null;
+      }
+      if (!targetAgent && callerAgentId) {
+        targetAgent = db.getAgent(callerAgentId);
+      }
+
+      if (!targetAgent) {
+        return {
+          success: false,
+          summary: 'Agent not found',
+          content: [{ type: 'text', text: 'Error: Could not identify target agent.' }],
+          isError: true,
+        };
+      }
+
+      const daysBack = typeof input.days_back === 'number' && input.days_back > 0 ? input.days_back : 7;
+      const resolvedWs = resolveAgentWorkspace(targetAgent);
+
+      const result = await redevelopAgentSpecializationsFromHistory(
+        targetAgent.id,
+        db,
+        resolvedWs,
+        daysBack,
+      );
+
+      if (!result) {
+        return {
+          success: false,
+          summary: `Failed to redevelop specializations for ${targetAgent.name}`,
+          content: [{ type: 'text', text: 'Error: Failed to process todo history.' }],
+          isError: true,
+        };
+      }
+
+      // Broadcast profile update over WebSocket
+      const wsServer = CoreWsServer.getInstance();
+      wsServer.broadcast({
+        type: 'agent:specialty_redeveloped',
+        agentId: targetAgent.id,
+        previousSpecialty: result.previousSpecialty,
+        newSpecialty: result.newSpecialty,
+        topSections: result.topSections,
+        completedTasksCount: result.completedTasksCount,
+      });
+
+      return {
+        success: true,
+        summary: `Redeveloped specialization for ${result.agentName}: "${result.newSpecialty}" based on ${result.completedTasksCount} completed tasks`,
+        content: [
+          {
+            type: 'text',
+            text:
+              `### 🎯 Specialization Redeveloped for ${result.agentName}\n` +
+              `- **Previous Specialty**: ${result.previousSpecialty}\n` +
+              `- **Updated Specialty**: **${result.newSpecialty}**\n` +
+              `- **Top Work Domains**: ${result.topSections.join(', ') || 'General'}\n` +
+              `- **Completed Tasks Analyzed**: ${result.completedTasksCount}\n\n` +
+              `**Supporting Evidence from Recent Tasks**:\n` +
+              result.evidence.map((e) => `- ${e}`).join('\n') +
+              `\n\n*Updated database profile and appended reflection to \`memory/reflective.md\`.*`,
+          },
+        ],
+        data: result,
       };
     },
   },

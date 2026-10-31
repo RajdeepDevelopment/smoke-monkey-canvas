@@ -14,6 +14,7 @@ export class CoreWsServer {
   private static instance: CoreWsServer | null = null;
   private wss: WebSocketServer | null = null;
   private clients = new Set<WebSocket>();
+  private snapshotProviders: Array<() => WebSocketMessage | WebSocketMessage[] | null> = [];
 
   static getInstance(): CoreWsServer {
     if (!CoreWsServer.instance) {
@@ -38,9 +39,26 @@ export class CoreWsServer {
       });
 
       ws.send(JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() }));
+
+      for (const provider of this.snapshotProviders) {
+        try {
+          const snapshot = provider();
+          if (!snapshot) continue;
+          const messages = Array.isArray(snapshot) ? snapshot : [snapshot];
+          for (const message of messages) {
+            ws.send(JSON.stringify(message));
+          }
+        } catch (err) {
+          console.error('[WsServer] Snapshot provider failure:', err);
+        }
+      }
     });
 
     console.log('[WsServer] WebSocket service attached to /ws');
+  }
+
+  setSnapshotProvider(provider: () => WebSocketMessage | WebSocketMessage[] | null): void {
+    this.snapshotProviders.push(provider);
   }
 
   broadcast(message: WebSocketMessage): void {

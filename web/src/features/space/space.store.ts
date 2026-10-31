@@ -4,6 +4,7 @@ import type { SpaceAgentEntity, AgentRecord, LiveLogEvent } from '../agent/agent
 import type { CanvasNode, CanvasEdge, GroupWorkspaceZone, RoleZone } from './space.types.js';
 import type { ThemeMode } from './space.toolbar.js';
 import { SpaceService } from './space.service.js';
+import { CanvasPositionSync } from './canvas.sync.js';
 
 export type { GroupWorkspaceZone, RoleZone } from './space.types.js';
 
@@ -151,6 +152,25 @@ function loadCanvasViewport(): { x: number; y: number; zoom: number } | null {
   } catch {
     return null;
   }
+}
+
+const CANVAS_VIEWPORT_TS_KEY = 'sm_canvas_viewport_ts';
+
+/** Timestamp of the last viewport this tab persisted to the backend. */
+export function getCanvasViewportPersistedAt(): number {
+  try {
+    const raw = localStorage.getItem(CANVAS_VIEWPORT_TS_KEY);
+    const parsed = raw ? Number(raw) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function markCanvasViewportPersisted(): void {
+  try {
+    localStorage.setItem(CANVAS_VIEWPORT_TS_KEY, String(Date.now()));
+  } catch {}
 }
 
 export type AgentMood = 'idle' | 'thinking' | 'working' | 'completed' | 'error';
@@ -311,9 +331,28 @@ export function isAgentInZone(
 const wsListeners = new Set<(msg: any) => void>();
 const moodTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** Role zones belong to a room by explicit association, or geometrically when
+ * the association never made it into client state (e.g. older persisted rows). */
+export function roleZoneBelongsToSpace(
+  zone: RoleZone,
+  space: { id: string; x: number; y: number; width: number; height: number },
+): boolean {
+  if (zone.spaceId) return zone.spaceId === space.id;
+  const centerX = zone.x + zone.width / 2;
+  const centerY = zone.y + zone.height / 2;
+  return (
+    centerX >= space.x &&
+    centerX <= space.x + space.width &&
+    centerY >= space.y &&
+    centerY <= space.y + space.height
+  );
+}
+
 // State tracking for active workspace zone dragging
 let activeDraggedZoneId: string | null = null;
 let activeDraggedMemberIds = new Set<string>();
+let activeDraggedRoleZoneIds = new Set<string>();
+let activeDraggedRoleZonesMoved = false;
 
 export const useSpaceStore = create<SpaceStoreState>((set) => ({
   // Agent dynamic moods & expressions (Per-agent live state with debounce/auto-revert)
@@ -497,14 +536,28 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
             const zoneW = zone?.width ?? 720;
             const zoneH = zone?.height ?? 520;
 
-            if (prevZoneNode) {
+            if (prevZoneNode && change.dragging === true) {
               const dx = change.position.x - prevZoneNode.position.x;
               const dy = change.position.y - prevZoneNode.position.y;
 
-              // If starting a drag, discover and lock the member agents in this pod
+              // If starting a drag, discover and lock the member agents and role zones in this pod
               if (activeDraggedZoneId !== change.id) {
                 activeDraggedZoneId = change.id;
                 activeDraggedMemberIds = new Set<string>();
+                activeDraggedRoleZoneIds = new Set<string>();
+                activeDraggedRoleZonesMoved = false;
+                const dragSpace = {
+                  id: change.id,
+                  x: prevZoneNode.position.x,
+                  y: prevZoneNode.position.y,
+                  width: zoneW,
+                  height: zoneH,
+                };
+                for (const rz of state.roleZones) {
+                  if (roleZoneBelongsToSpace(rz, dragSpace)) {
+                    activeDraggedRoleZoneIds.add(rz.id);
+                  }
+                }
                 for (const n of state.nodes) {
                   if (
                     !n.id.startsWith('zone-') &&
@@ -522,20 +575,18 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
                 }
               }
 
-              if (dx !== 0 || dy !== 0) {
-                const roleZoneNodes = new Set(
-                  nextRoleZones.filter((z) => z.spaceId === change.id).map((z) => z.id),
-                );
-                if (roleZoneNodes.size > 0) {
+              if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
+                if (activeDraggedRoleZoneIds.size > 0) {
                   nextRoleZones = nextRoleZones.map((z) =>
-                    roleZoneNodes.has(z.id) ? { ...z, x: z.x + dx, y: z.y + dy } : z,
+                    activeDraggedRoleZoneIds.has(z.id) ? { ...z, x: z.x + dx, y: z.y + dy } : z,
                   );
                   nextNodes = nextNodes.map((n) =>
-                    roleZoneNodes.has(n.id)
+                    activeDraggedRoleZoneIds.has(n.id)
                       ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } }
                       : n,
                   );
                   roleZonesChanged = true;
+                  activeDraggedRoleZonesMoved = true;
                 }
 
                 if (activeDraggedMemberIds.size > 0) {
@@ -598,6 +649,11 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
               );
               workspaceZonesChanged = true;
 
+              // Persist the room itself before its members so other browsers never
+              // receive agent moves that reference a room still sitting at its old
+              // position.
+              CanvasPositionSync.queueSpaceUpdate(change.id, { x, y }, true);
+
               // Collect all member agents: tracked drag members + any agents inside new zone bounds
               const finalMemberIds = new Set<string>(activeDraggedMemberIds);
               for (const n of nextNodes) {
@@ -617,41 +673,55 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
               }
 
               if (finalMemberIds.size > 0) {
+                const memberDeltas: Array<{ id: string; posX: number; posY: number; spaceId?: string | null }> = [];
                 nextAgents = nextAgents.map((a) => {
                   if (finalMemberIds.has(a.id)) {
                     const agentNode = nextNodes.find((n) => n.id === a.id);
                     const finalX = agentNode?.position.x ?? a.pos_x;
                     const finalY = agentNode?.position.y ?? a.pos_y;
-                    SpaceService.updateNodePosition(a.id, finalX, finalY, change.id);
+                    memberDeltas.push({ id: a.id, posX: finalX, posY: finalY, spaceId: change.id });
                     return { ...a, pos_x: finalX, pos_y: finalY };
                   }
                   return a;
                 });
                 agentsChanged = true;
+                CanvasPositionSync.queueNodePositionsBatch(memberDeltas, true);
               }
 
-              if (roleZonesChanged) {
+              // `roleZonesChanged` only describes this single change batch, so it is
+              // always false in the drag-stop event. Use the drag-scoped flag instead.
+              if (activeDraggedRoleZonesMoved) {
+                const finalSpace = { id: change.id, x, y, width: zoneW, height: zoneH };
                 for (const z of nextRoleZones) {
-                  if (z.spaceId === change.id) void SpaceService.updateZone(z.id, { x: z.x, y: z.y });
+                  if (roleZoneBelongsToSpace(z, finalSpace)) {
+                    CanvasPositionSync.queueRoleZoneUpdate(z.id, { x: z.x, y: z.y }, true);
+                  }
                 }
               }
 
               // Reset active zone drag tracking
               activeDraggedZoneId = null;
               activeDraggedMemberIds.clear();
+              activeDraggedRoleZoneIds.clear();
+              activeDraggedRoleZonesMoved = false;
+            } else if (change.dragging === undefined && activeDraggedZoneId === change.id) {
+              activeDraggedZoneId = null;
+              activeDraggedMemberIds.clear();
+              activeDraggedRoleZoneIds.clear();
+              activeDraggedRoleZonesMoved = false;
             }
           } else if (
             !change.id.startsWith('thread-') &&
             !change.id.startsWith('assets-') &&
             !change.id.startsWith('workspace-panel-')
           ) {
-            // Agent position changed! Move connected thread & assets nodes by the same delta
+            // Agent position changed! Move connected thread & assets nodes only during active user drag
             const prevAgentNode = state.nodes.find((n) => n.id === change.id);
-            if (prevAgentNode) {
+            if (prevAgentNode && change.dragging === true) {
               const dx = change.position.x - prevAgentNode.position.x;
               const dy = change.position.y - prevAgentNode.position.y;
 
-              if (dx !== 0 || dy !== 0) {
+              if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
                 nextNodes = nextNodes.map((n) => {
                   if (n.id.startsWith('thread-') && (n.data as any)?.agentId === change.id) {
                     const threadKey = n.id.replace('thread-', '');
@@ -685,9 +755,9 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
 
             if (change.dragging === false) {
               const { x, y } = change.position;
-              nextAgents = nextAgents.map((a) => (a.id === change.id ? { ...a, pos_x: x, pos_y: y } : a));
+              nextAgents = nextAgents.map((a) => (a.id === change.id ? { ...a, pos_x: Math.round(x), pos_y: Math.round(y) } : a));
               agentsChanged = true;
-              SpaceService.updateNodePosition(change.id, x, y);
+              CanvasPositionSync.queueNodePosition(change.id, x, y, undefined, true);
             }
           } else if (change.id.startsWith('thread-')) {
             // Individual thread node moved
@@ -884,14 +954,14 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
       ),
       nodes: state.nodes.map((n) =>
         n.id === agentId && n.type === 'crabAgent'
-          ? {
+          ? ({
               ...n,
               data: {
                 ...n.data,
                 status,
-                last_run_at: lastRunAt ?? n.data.last_run_at,
+                last_run_at: lastRunAt ?? (n.data as any).last_run_at,
               },
-            }
+            } as CanvasNode)
           : n,
       ),
     }));
@@ -904,13 +974,13 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
       ),
       nodes: state.nodes.map((n) =>
         n.id === agentId && n.type === 'crabAgent'
-          ? {
+          ? ({
               ...n,
               data: {
                 ...n.data,
-                next_run_at: nextRunAt ?? n.data.next_run_at,
+                next_run_at: nextRunAt ?? (n.data as any).next_run_at,
               },
-            }
+            } as CanvasNode)
           : n,
       ),
     }));
@@ -1002,6 +1072,7 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
       saveWorkspaceZones(next);
       return { workspaceZones: next };
     });
+    void SpaceService.createWorkspaceSpace(newZone).catch(() => {});
     if (newZone.workflowPrompt) {
       void SpaceService.saveWorkspacePrompt(newZone.id, newZone.name, newZone.workflowPrompt).catch(() => {});
     }
@@ -1013,6 +1084,14 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
       saveWorkspaceZones(nextZones);
       return { workspaceZones: nextZones };
     });
+    // Geometry changes are the result of a finished drag/resize — flush them
+    // immediately so a quick tab close cannot lose the room position.
+    const isGeometryUpdate =
+      updates.x !== undefined ||
+      updates.y !== undefined ||
+      updates.width !== undefined ||
+      updates.height !== undefined;
+    CanvasPositionSync.queueSpaceUpdate(id, updates, isGeometryUpdate);
     if (updates.workflowPrompt !== undefined || updates.name !== undefined) {
       const current = useSpaceStore.getState().workspaceZones.find((z) => z.id === id);
       if (current) {
@@ -1026,6 +1105,7 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
       saveWorkspaceZones(next);
       return { workspaceZones: next };
     });
+    void SpaceService.deleteWorkspaceSpace(id).catch(() => {});
   },
 }));
 

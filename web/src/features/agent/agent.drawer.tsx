@@ -57,8 +57,8 @@ import type { ChatMessage, MessagePart, ToolCall, AgentTodo, ContextState } from
 import { useSpaceStore } from '../space/space.store.js';
 import { ChatVoiceButton } from '../voice/chat-voice-button.js';
 import { useIsMobile } from '../common/use-mobile.js';
-import { AgentDrawerMobile } from './mobile/agent-drawer.mobile.js';
-import { AgentFileExplorer } from './agent.file-explorer.js';
+const AgentDrawerMobile = React.lazy(() => import('./mobile/agent-drawer.mobile.js').then((m) => ({ default: m.AgentDrawerMobile })));
+const AgentFileExplorer = React.lazy(() => import('./agent.file-explorer.js').then((m) => ({ default: m.AgentFileExplorer })));
 import { AgentAvatar, AvatarPickerModal } from './agent-avatar.js';
 import ReactMarkdown from 'react-markdown';
 
@@ -260,8 +260,12 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
         if (!cancelled && status) setMcpStatus(status);
       })
       .catch(() => {});
+    const prefetchTimer = window.setTimeout(() => {
+      void import('./agent.file-explorer.js');
+    }, 1500);
     return () => {
       cancelled = true;
+      window.clearTimeout(prefetchTimer);
     };
   }, []);
 
@@ -466,17 +470,23 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
 
     try {
       setCronActionError(null);
+      let finalPrompt = newJobPrompt.trim();
+      if (!finalPrompt.includes('mark_cron_job_success')) {
+        finalPrompt +=
+          "\n\n[MANDATORY COMPLETION]: You MUST invoke the 'mark_cron_job_success' tool with your completion summary upon finishing. If this tool is not called, the operation will be considered incomplete/failed and retried.";
+      }
+
       if (editingJobId) {
         await AgentService.updateCronJob(agent.id, editingJobId, {
           name: newJobName.trim(),
-          prompt: newJobPrompt.trim(),
+          prompt: finalPrompt,
           cron_schedule: cronSchedule,
           scheduled_at: scheduledAt,
         });
       } else {
         await AgentService.createCronJob(agent.id, {
           name: newJobName.trim(),
-          prompt: newJobPrompt.trim(),
+          prompt: finalPrompt,
           cron_schedule: cronSchedule,
           scheduled_at: scheduledAt,
           enabled: true,
@@ -704,7 +714,7 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
   }, [displayMcps]);
   const hasUnconfiguredMcps = unconfiguredMcps.length > 0;
 
-  // ── Polling: Keep active runs & agent status updated ──
+  // ── Initial sync: active runs & agent status (live updates arrive over WS) ──
   useEffect(() => {
     let mounted = true;
     const checkActive = async () => {
@@ -725,10 +735,8 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
     };
 
     checkActive();
-    const interval = setInterval(checkActive, 3000);
     return () => {
       mounted = false;
-      clearInterval(interval);
     };
   }, [agent.id, viewingHistoryRunId, viewingCronRunId]);
 
@@ -952,6 +960,19 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
               parts.push({ type: 'markdown', content: delta });
             }
           }
+        } else if (evt.eventType === 'cron.retry') {
+          const attempt = p.attempt ?? 1;
+          const maxRetries = p.maxRetries ?? 2;
+          const reason = p.reason || 'mark_cron_job_success was not called. Retrying task...';
+          parts.push({
+            type: 'markdown',
+            content: `\n\n🔄 **Autonomous Retry ${attempt}/${maxRetries}**\n> ${reason}\n\n`,
+          });
+        } else if (evt.eventType === 'cron.success_marked') {
+          parts.push({
+            type: 'markdown',
+            content: `\n\n✅ **Cron Job Marked Successful**\n> ${p.summary || 'Operation verified via mark_cron_job_success.'}\n\n`,
+          });
         }
       }
 
@@ -964,7 +985,9 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
         streamedText.trim() ||
         details.summary ||
         (details.error
-          ? `**Execution Failed**: ${details.error}`
+          ? `❌ **Execution Failed**: ${details.error}`
+          : details.status === 'failed'
+          ? '❌ **Execution Stopped**: Task ended without calling mark_cron_job_success.'
           : details.status === 'completed'
           ? 'Task completed successfully.'
           : '');
@@ -1005,6 +1028,20 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
   // ── Reactive WebSocket Listener: Live Streaming Reconnection & Reduction ──
   useEffect(() => {
     const unsubscribe = useSpaceStore.getState().addWsListener((data: any) => {
+      if (data?.type === 'active_runs_active' && Array.isArray(data.data)) {
+        const runsList = (data.data as ActiveRunRecord[]).filter((r) => r.agentId === agent.id);
+        setActiveRuns(runsList);
+        if (runsList.length > 0) {
+          setRunning(true);
+        } else {
+          setRunning(false);
+          if (!viewingHistoryRunId && !viewingCronRunId) {
+            setIsStreaming(false);
+          }
+        }
+        return;
+      }
+
       if (!data || data.agentId !== agent.id) return;
 
       if (data.type === 'chat_stream_event') {
@@ -1513,27 +1550,29 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
 
   if (isMobile) {
     return (
-      <AgentDrawerMobile
-        agent={agent}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        messages={messages}
-        isStreaming={isStreaming}
-        running={running}
-        composerText={composerText}
-        setComposerText={setComposerText}
-        onSendMessage={(text) => void handleSendMessage(text)}
-        onRunNow={onRunNow}
-        onStopNow={onStopNow}
-        onClose={onClose}
-        liveEvents={liveEvents}
-        runs={runs}
-        chatSessions={chatSessions}
-        activeSessionId={activeSessionId}
-        onSelectSession={setActiveSessionId}
-        onSelectRun={loadRun}
-        filesCount={workspaceFilesCount}
-      />
+      <React.Suspense fallback={null}>
+        <AgentDrawerMobile
+          agent={agent}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          messages={messages}
+          isStreaming={isStreaming}
+          running={running}
+          composerText={composerText}
+          setComposerText={setComposerText}
+          onSendMessage={(text) => void handleSendMessage(text)}
+          onRunNow={onRunNow}
+          onStopNow={onStopNow}
+          onClose={onClose}
+          liveEvents={liveEvents}
+          runs={runs}
+          chatSessions={chatSessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={setActiveSessionId}
+          onSelectRun={loadRun}
+          filesCount={workspaceFilesCount}
+        />
+      </React.Suspense>
     );
   }
 
@@ -2209,6 +2248,48 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
                   </div>
                 }
               />
+              {viewingHistoryRunId && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 16px',
+                    background: 'rgba(139, 92, 246, 0.08)',
+                    borderTop: '1px solid rgba(139, 92, 246, 0.25)',
+                    fontSize: 12,
+                    color: '#c4b5fd',
+                    flexShrink: 0,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <History size={13} color="#a78bfa" />
+                    <span>
+                      Viewing Archived Run <strong>#{viewingHistoryRunId.slice(-6)}</strong> (Read-only historical snapshot)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingCronRunId(null);
+                      setViewingHistoryRunId(null);
+                      void loadSession(activeSessionId);
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#fff',
+                      padding: '5px 12px',
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ← Back to Live Chat
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -3390,7 +3471,9 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
         {/* TAB 4: WORKSPACE FILES EXPLORER & VIEWER */}
         {activeTab === 'files' && (
           <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
-            <AgentFileExplorer agent={agent} onFilesCountChange={setWorkspaceFilesCount} />
+            <React.Suspense fallback={null}>
+              <AgentFileExplorer agent={agent} onFilesCountChange={setWorkspaceFilesCount} />
+            </React.Suspense>
           </div>
         )}
 
@@ -3995,15 +4078,31 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
                 </div>
 
                 {/* Agent Prompt Instructions */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255, 255, 255, 0.6)' }}>
-                    Instructions / Prompt for Agent
-                  </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255, 255, 255, 0.6)' }}>
+                      Instructions / Prompt for Agent
+                    </label>
+                    <span
+                      style={{
+                        fontSize: 9.5,
+                        fontWeight: 700,
+                        color: '#a78bfa',
+                        background: 'rgba(167, 139, 250, 0.12)',
+                        border: '1px solid rgba(167, 139, 250, 0.25)',
+                        padding: '1px 6px',
+                        borderRadius: 4,
+                      }}
+                      title="All cron agents must invoke mark_cron_job_success to confirm completion"
+                    >
+                      Requires: mark_cron_job_success
+                    </span>
+                  </div>
                   <textarea
                     rows={4}
                     value={newJobPrompt}
                     onChange={(e) => setNewJobPrompt(e.target.value)}
-                    placeholder="Enter the prompt that will trigger this agent (e.g. Review memory files and compress to ~60 lines; compile EOD summary into eod_reports/YYYY-MM-DD.md; inspect git commit changes)..."
+                    placeholder="Enter the prompt that will trigger this agent (e.g. Inspect reports, sync memory files, and invoke mark_cron_job_success with summary)..."
                     style={{
                       padding: '8px 10px',
                       borderRadius: 6,
@@ -4016,6 +4115,24 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
                       outline: 'none',
                     }}
                   />
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontSize: 10.5,
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      padding: '4px 8px',
+                      borderRadius: 5,
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                    }}
+                  >
+                    <span style={{ color: '#fbbf24' }}>💡</span>
+                    <span>
+                      The agent must call <code style={{ color: '#a78bfa', background: 'rgba(167, 139, 250, 0.15)', padding: '1px 4px', borderRadius: 3 }}>mark_cron_job_success</code> upon completion. If not mentioned in your prompt, it is automatically appended.
+                    </span>
+                  </div>
                 </div>
 
                 {/* Form Buttons */}
@@ -4156,6 +4273,54 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
                                 ? '⏸ Paused (Unconfigured MCPs)'
                                 : '● Active'
                               : '⏸ Paused'}
+                          </span>
+                          {job.last_status === 'failed' && (
+                            <span
+                              style={{
+                                fontSize: 9.5,
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                background: 'rgba(239, 68, 68, 0.18)',
+                                color: '#f87171',
+                                border: '1px solid rgba(239, 68, 68, 0.35)',
+                              }}
+                              title={job.last_error || 'Execution failed'}
+                            >
+                              ✕ Failed
+                            </span>
+                          )}
+                          {job.last_status === 'completed' && (
+                            <span
+                              style={{
+                                fontSize: 9.5,
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                background: 'rgba(34, 197, 94, 0.15)',
+                                color: '#4ade80',
+                                border: '1px solid rgba(34, 197, 94, 0.3)',
+                              }}
+                            >
+                              ✓ Succeeded
+                            </span>
+                          )}
+                          <span
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              padding: '2px 5px',
+                              borderRadius: 4,
+                              background: 'rgba(99, 102, 241, 0.12)',
+                              color: '#a5b4fc',
+                              border: '1px solid rgba(99, 102, 241, 0.25)',
+                            }}
+                            title="Required completion tool: mark_cron_job_success"
+                          >
+                            Tool: mark_cron_job_success
                           </span>
                           <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
                             {job.name}
@@ -4335,6 +4500,27 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
                           </div>
                         )}
                       </div>
+
+                      {job.last_error && (
+                        <div
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 6,
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            fontSize: 11,
+                            color: '#fca5a5',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 6,
+                          }}
+                        >
+                          <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 2, color: '#f87171' }} />
+                          <div style={{ wordBreak: 'break-word', flex: 1 }}>
+                            <strong>Failure Remark:</strong> {job.last_error}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Prompt Snippet Box */}
                       <div

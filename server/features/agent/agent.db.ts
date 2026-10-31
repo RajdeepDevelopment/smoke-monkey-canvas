@@ -12,6 +12,9 @@ import type {
   AgentCronJobRecord,
   AgentCronJobInput,
   CronJobSource,
+  AgentTodoRecord,
+  AgentTodoItem,
+  AgentTodoDaySummary,
 } from './agent.types.js';
 
 export class AgentDb {
@@ -24,6 +27,10 @@ export class AgentDb {
   getAllAgents(): AgentRecord[] {
     const stmt = this.coreDb.db.prepare(`SELECT * FROM agents ORDER BY created_at DESC`);
     return stmt.all() as unknown as AgentRecord[];
+  }
+
+  listAgents(): AgentRecord[] {
+    return this.getAllAgents();
   }
 
   getAgent(id: string): AgentRecord | null {
@@ -136,9 +143,26 @@ export class AgentDb {
   }
 
   deleteAgent(id: string): boolean {
-    const stmt = this.coreDb.db.prepare(`DELETE FROM agents WHERE id = ?`);
-    stmt.run(id);
-    return true;
+    this.coreDb.db.exec('BEGIN');
+    try {
+      this.coreDb.db.prepare(`DELETE FROM agent_connections WHERE source_agent_id = ? OR target_agent_id = ?`).run(id, id);
+      this.coreDb.db.prepare(`DELETE FROM space_agent_memberships WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM agent_cron_jobs WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM agent_todo_history WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM agent_file_compaction WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM agent_mcps WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM agent_skills WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM chat_messages WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM chat_sessions WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM run_events WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM runs WHERE agent_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM agents WHERE id = ?`).run(id);
+      this.coreDb.db.exec('COMMIT');
+      return true;
+    } catch (err) {
+      this.coreDb.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   // ── Peer Agent Connections ────────────────────────────────────────────────
@@ -738,6 +762,14 @@ export class AgentDb {
       sets.push('next_run_at = ?');
       values.push(updates.next_run_at);
     }
+    if (updates.last_status !== undefined) {
+      sets.push('last_status = ?');
+      values.push(updates.last_status);
+    }
+    if (updates.last_error !== undefined) {
+      sets.push('last_error = ?');
+      values.push(updates.last_error);
+    }
 
     if (sets.length === 0) return existing;
 
@@ -755,12 +787,23 @@ export class AgentDb {
     return Number(result.changes) > 0;
   }
 
-  recordCronJobRun(id: string, nextRunAt: string | null): void {
+  recordCronJobRun(id: string, nextRunAt: string | null, status?: string | null, error?: string | null): void {
     const now = new Date().toISOString();
+    const sets = ['last_run_at = ?', 'next_run_at = ?', 'updated_at = ?'];
+    const values: any[] = [now, nextRunAt, now];
+    if (status !== undefined) {
+      sets.push('last_status = ?');
+      values.push(status);
+    }
+    if (error !== undefined) {
+      sets.push('last_error = ?');
+      values.push(error);
+    }
+    values.push(id);
     const stmt = this.coreDb.db.prepare(
-      `UPDATE agent_cron_jobs SET last_run_at = ?, next_run_at = ?, updated_at = ? WHERE id = ?`,
+      `UPDATE agent_cron_jobs SET ${sets.join(', ')} WHERE id = ?`,
     );
-    stmt.run(now, nextRunAt, now, id);
+    stmt.run(...values);
   }
 
   // ── File Compaction Tracking ───────────────────────────────────────────────
@@ -791,5 +834,159 @@ export class AgentDb {
         ) VALUES (?, ?, ?, ?, ?)
       `)
       .run(agentId, filePath, now, mtime, lineCount);
+  }
+
+  // ── Agent Todo History ─────────────────────────────────────────────────────
+
+  getAgentTodosByDate(agentId: string, taskDate: string): AgentTodoRecord[] {
+    const stmt = this.coreDb.db.prepare(`
+      SELECT * FROM agent_todo_history
+      WHERE agent_id = ? AND task_date = ?
+      ORDER BY created_at ASC
+    `);
+    return stmt.all(agentId, taskDate) as unknown as AgentTodoRecord[];
+  }
+
+  getAgentTodoDates(agentId: string): string[] {
+    const stmt = this.coreDb.db.prepare(`
+      SELECT DISTINCT task_date FROM agent_todo_history
+      WHERE agent_id = ?
+      ORDER BY task_date DESC
+    `);
+    const rows = stmt.all(agentId) as unknown as { task_date: string }[];
+    return rows.map((r) => r.task_date);
+  }
+
+  findExistingTodo(agentId: string, taskDate: string, content: string): AgentTodoRecord | null {
+    const stmt = this.coreDb.db.prepare(`
+      SELECT * FROM agent_todo_history
+      WHERE agent_id = ? AND task_date = ? AND content = ?
+      LIMIT 1
+    `);
+    const row = stmt.get(agentId, taskDate, content) as unknown as AgentTodoRecord | undefined;
+    return row ?? null;
+  }
+
+  upsertAgentTodoItem(record: AgentTodoRecord): AgentTodoRecord {
+    const existing = this.findExistingTodo(record.agent_id, record.task_date, record.content);
+    const now = new Date().toISOString();
+
+    if (existing) {
+      // Preserve or transition timestamps
+      const startedAt = record.started_at ?? existing.started_at ?? (record.status === 'in_progress' ? now : null);
+      const completedAt = record.completed_at ?? (record.status === 'completed' ? (existing.completed_at ?? now) : null);
+      const priority = record.priority ?? existing.priority ?? 'medium';
+      const section = record.section ?? existing.section ?? null;
+      const metadataJson = record.metadata_json ?? existing.metadata_json ?? null;
+
+      const stmt = this.coreDb.db.prepare(`
+        UPDATE agent_todo_history SET
+          status = ?,
+          priority = ?,
+          section = ?,
+          started_at = ?,
+          completed_at = ?,
+          updated_at = ?,
+          run_id = COALESCE(?, run_id),
+          session_id = COALESCE(?, session_id),
+          metadata_json = ?
+        WHERE id = ?
+      `);
+      stmt.run(
+        record.status,
+        priority,
+        section,
+        startedAt,
+        completedAt,
+        now,
+        record.run_id ?? null,
+        record.session_id ?? null,
+        metadataJson,
+        existing.id,
+      );
+      return {
+        ...existing,
+        status: record.status,
+        priority,
+        section,
+        started_at: startedAt,
+        completed_at: completedAt,
+        updated_at: now,
+        run_id: record.run_id ?? existing.run_id,
+        session_id: record.session_id ?? existing.session_id,
+        metadata_json: metadataJson,
+      };
+    }
+
+    const id = record.id || randomUUID();
+    const createdAt = record.created_at || now;
+    const updatedAt = record.updated_at || now;
+    const startedAt = record.started_at ?? (record.status === 'in_progress' ? now : null);
+    const completedAt = record.completed_at ?? (record.status === 'completed' ? now : null);
+
+    const stmt = this.coreDb.db.prepare(`
+      INSERT INTO agent_todo_history (
+        id, agent_id, task_date, run_id, session_id,
+        content, status, priority, section,
+        started_at, completed_at, created_at, updated_at, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      id,
+      record.agent_id,
+      record.task_date,
+      record.run_id ?? null,
+      record.session_id ?? null,
+      record.content,
+      record.status,
+      record.priority || 'medium',
+      record.section ?? null,
+      startedAt,
+      completedAt,
+      createdAt,
+      updatedAt,
+      record.metadata_json ?? null,
+    );
+
+    return {
+      id,
+      agent_id: record.agent_id,
+      task_date: record.task_date,
+      run_id: record.run_id ?? null,
+      session_id: record.session_id ?? null,
+      content: record.content,
+      status: record.status,
+      priority: record.priority || 'medium',
+      section: record.section ?? null,
+      started_at: startedAt,
+      completed_at: completedAt,
+      created_at: createdAt,
+      updated_at: updatedAt,
+      metadata_json: record.metadata_json ?? null,
+    };
+  }
+
+  getAllAgentTodoRecords(agentId: string, limit: number = 300): AgentTodoRecord[] {
+    const stmt = this.coreDb.db.prepare(`
+      SELECT * FROM agent_todo_history
+      WHERE agent_id = ?
+      ORDER BY task_date DESC, created_at ASC
+      LIMIT ?
+    `);
+    return stmt.all(agentId, limit) as unknown as AgentTodoRecord[];
+  }
+
+  deleteAgentTodoHistory(agentId: string, taskDate?: string): void {
+    if (taskDate) {
+      const stmt = this.coreDb.db.prepare(`
+        DELETE FROM agent_todo_history WHERE agent_id = ? AND task_date = ?
+      `);
+      stmt.run(agentId, taskDate);
+    } else {
+      const stmt = this.coreDb.db.prepare(`
+        DELETE FROM agent_todo_history WHERE agent_id = ?
+      `);
+      stmt.run(agentId);
+    }
   }
 }

@@ -5,10 +5,11 @@ import {
   EdgeLabelRenderer,
   BaseEdge,
 } from '@xyflow/react';
+import { edgePropsEqual } from './edge-memo.js';
 import { Sparkles } from 'lucide-react';
 import { type AssetsEdgeData, CONNECTOR_EDGE_Z } from './space.types.js';
 
-export const AssetsConnectionEdge: React.FC<EdgeProps> = ({
+const AssetsConnectionEdgeBase: React.FC<EdgeProps> = ({
   id,
   sourceX,
   sourceY,
@@ -107,3 +108,4 @@ export const AssetsConnectionEdge: React.FC<EdgeProps> = ({
     </>
   );
 };
+export const AssetsConnectionEdge = React.memo(AssetsConnectionEdgeBase, edgePropsEqual);

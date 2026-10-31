@@ -169,11 +169,18 @@ export interface AssetsEdgeData {
 }
 
 /**
- * Z for dotted connector edges (agent -> thread / assets pill) so they paint
- * above the pod window and workspace panel node layers (z 0 / 20) instead of
- * being buried under them. Kept below xyflow's selected-node elevation (1000).
+ * Strict Z-index stacking hierarchy for the canvas.
+ * Agents MUST always sit above connection lines and hierarchy arrows so they
+ * can be freely dragged, hovered and clicked without edges stealing mouse events.
  */
-export const CONNECTOR_EDGE_Z = 45;
+export const WORKSPACE_ZONE_Z = 1;  // Office space room backdrops (lowest canvas layer)
+export const ROLE_ZONE_Z = 2;       // Role zone department backdrops
+export const HIERARCHY_EDGE_Z = 5;  // Zone-to-zone arrows sit ON TOP of zones, BEHIND agents
+export const CONNECTOR_EDGE_Z = 6;  // Thread/assets connection edges ON TOP of zones, BEHIND agents
+export const PEER_EDGE_Z = 6;       // Peer connection lines ON TOP of zones, BEHIND agents
+export const THREAD_NODE_Z = 15;    // Interactive thread & assets beacon nodes
+export const AGENT_NODE_Z = 20;     // Agent cards and avatars (ABOVE all edges and zones)
+export const AGENT_ACTIVE_Z = 50;   // Selected or actively dragged agent elevation
 
 export interface GroupWorkspaceNodeData {
   [key: string]: unknown;
@@ -275,7 +282,19 @@ export interface WorkspacePanelNodeData {
   onSaveWorkflowPrompt?: (spaceId: string, prompt: string) => void;
 }
 
+export interface AgentSkeletonNodeData {
+  [key: string]: unknown;
+  name: string;
+  role?: string | null;
+  provider?: string;
+  model?: string;
+  isAvatar?: boolean;
+  zoneColor?: string;
+  phase?: 'provisioning' | 'attaching_mcps' | 'attaching_skills' | 'ready';
+}
+
 export type AgentNode = Node<AgentNodeData, 'crabAgent'>;
+export type AgentSkeletonNode = Node<AgentSkeletonNodeData, 'agentSkeleton'>;
 export type ThreadProcessNode = Node<ThreadProcessNodeData, 'threadProcess'>;
 export type AgentAssetsNode = Node<AgentAssetsNodeData, 'agentAssets'>;
 export type GroupWorkspaceNode = Node<GroupWorkspaceNodeData, 'groupWorkspace'>;
@@ -283,6 +302,7 @@ export type RoleZoneNode = Node<RoleZoneNodeData, 'roleZone'>;
 export type WorkspacePanelNode = Node<WorkspacePanelNodeData, 'workspacePanel'>;
 export type CanvasNode =
   | AgentNode
+  | AgentSkeletonNode
   | ThreadProcessNode
   | AgentAssetsNode
   | GroupWorkspaceNode

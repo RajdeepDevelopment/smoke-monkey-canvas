@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { ensureAgentTodosDir } from './agent.todos.js';
 
 /**
  * Per-agent workspaces & the shared agent registry.
@@ -373,6 +374,7 @@ built-in \`read_file\`, \`write_file\`, and \`edit_file\` tools.
 | \`automation/\` | Self-built automation scripts + \`index.json\` (when to use each, cron link) |
 | \`logs/\` | Execution / debug logs |
 | \`artifacts/\` | Temporary generated outputs |
+| \`todos/*.md\` | Date-wise task ledgers (YYYY-MM-DD.md) recording what you worked on, status, timestamps, and specializations |
 | \`state/*.json\` | Runtime & checkpoint state |
 
 ## Adding an MCP server or skill
@@ -520,6 +522,15 @@ Rewritten at the start of every run with that run's task.
 
 // ── Shared registry README (written once) ──────────────────────────────────
 
+export const SMARTNESS_MD_TEMPLATE = `# Operational Playbook
+- **Ambiguity**: Do not guess. Work clear parts first; ask caller/manager via \`delegate_task(chat_id)\`.
+- **Failures**: Inspect \`reports/\`. Send fixes via \`delegate_task(chat_id)\` or escalate.
+- **Reporting**: Report status, deliverables (file paths), test results, and next steps.
+- **Approvals**: For destructive actions or prod changes, request sign-off via \`delegate_task(communication_type: 'request_approval')\`.
+- **Cross-Team**: Coordinate with peer leads via \`delegate_task(chat_id)\`.
+- **Memory**: Save reusable facts/procedures via \`manage_agent_memory\`.
+`;
+
 const COMMON_README_TEMPLATE = `# Shared Smoke Monkey registry
 
 Every agent can READ these files to discover MCP servers and environment
@@ -574,10 +585,12 @@ export interface AgentWorkspace {
   policiesInfoFile: string;
 
   systemPromptFile: string;
+  smartnessFile: string;
 
   stateDir: string;
   runtimeFile: string;
   checkpointsFile: string;
+  todosDir: string;
 }
 
 export interface WriteManifestInput {
@@ -605,12 +618,14 @@ export const buildAgentWorkspace = (workspace: string): AgentWorkspace => {
   const artifactsDir = path.join(dir, 'artifacts');
   const policiesDir = path.join(dir, 'policies');
   const stateDir = path.join(dir, 'state');
+  const todosDir = path.join(dir, 'todos');
 
   return {
     dir,
     readmeFile: path.join(dir, 'README.md'),
     manifestFile: path.join(dir, 'manifest.json'),
     systemPromptFile: path.join(dir, 'system_prompt.md'),
+    smartnessFile: path.join(dir, 'smartness.md'),
     memoryDir,
     memoryFiles: Object.fromEntries(MEMORY_FILES.map((m) => [m.file, path.join(memoryDir, m.file)])),
     skillsDir,
@@ -638,6 +653,7 @@ export const buildAgentWorkspace = (workspace: string): AgentWorkspace => {
     stateDir,
     runtimeFile: path.join(stateDir, 'runtime.json'),
     checkpointsFile: path.join(stateDir, 'checkpoints.json'),
+    todosDir,
   };
 };
 
@@ -670,6 +686,7 @@ export const ensureAgentWorkspace = (
     fs.mkdirSync(ws.assetsScriptsDir, { recursive: true });
     fs.mkdirSync(ws.policiesDir, { recursive: true });
     fs.mkdirSync(ws.stateDir, { recursive: true });
+    ensureAgentTodosDir(workspace);
 
     for (const m of MEMORY_FILES) {
       writeIfMissing(ws.memoryFiles[m.file], MEMORY_SEEDS[m.file](agentName));
@@ -680,6 +697,8 @@ export const ensureAgentWorkspace = (
     } else {
       writeIfMissing(ws.systemPromptFile, `# System Prompt — ${agentName}\n\nExecute assigned tasks.\n`);
     }
+
+    writeIfMissing(ws.smartnessFile, SMARTNESS_MD_TEMPLATE);
 
     writeIfMissing(ws.connectionsFile, CONNECTIONS_README);
     writeIfMissing(
@@ -1406,6 +1425,12 @@ Your automation library (with every entry's \`whenToUse\` and \`cron\` link) is 
 
 ### Workspace boundary
 This directory is your private persistent agent workspace: memory, configuration, skills, MCP metadata, temporary scripts, runtime state, and temporary artifacts. Do not confuse it with the user's project source code — the user's project files remain outside this folder and are modified only when the task requires it. When you need persistent knowledge about the user, project, environment, preferences, or previous work, use the appropriate memory file instead of relying only on the current conversation.
+
+### Date-wise task & todo history (Tracked Work & Specializations)
+Your daily task checklist and todo history is recorded date-wise under "${ws.todosDir}" (\`YYYY-MM-DD.md\`, \`YYYY-MM-DD.json\`, \`index.json\`).
+- If an execution begins late at night (e.g. 11:55 PM) and continues past midnight, all tasks remain attributed to the initial start date for cohesive daily tracking.
+- You and peer agents can inspect your daily task history using \`get_agent_todo_history\` or reading files in "${ws.todosDir}".
+- Use \`redevelop_agent_specializations\` to evaluate your completed work, extract reinforced work domains/sections, and update your specialization profile.
 
 ### Sensitive data
 Never intentionally store secrets or sensitive credentials in memory files. Do not store passwords, API keys, access tokens, private keys, session cookies, authentication credentials, database passwords, OAuth secrets, or other credentials in "${ws.memoryDir}", "${ws.contextDir}", "${ws.logsDir}", or any other persistent file. If you encounter sensitive information, use it only when necessary for the current operation and prefer the app's secure credential mechanism (settings/env injection) over copying secrets into files. Reference secret values as \`$VAR_NAME\` placeholders only.`;

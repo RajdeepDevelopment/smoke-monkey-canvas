@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { MermaidDiagram } from '../agent/mermaid-diagram.js';
+const MermaidDiagram = React.lazy(() => import('../agent/mermaid-diagram.js').then((m) => ({ default: m.MermaidDiagram })));
 
 export interface MarkdownProseProps {
   children: string;
@@ -58,7 +58,28 @@ export function MarkdownProse({ children, resolveImageUrl, className, style }: M
             const codeString = String(children).replace(/\n$/, '');
 
             if (lang === 'mermaid') {
-              return <MermaidDiagram code={codeString} />;
+              return (
+                <React.Suspense
+                  fallback={
+                    <div
+                      style={{
+                        margin: '12px 0',
+                        padding: 16,
+                        textAlign: 'center',
+                        color: '#64748b',
+                        fontSize: 12,
+                        background: 'rgba(15, 23, 42, 0.5)',
+                        borderRadius: 8,
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                      }}
+                    >
+                      Rendering Mermaid diagram...
+                    </div>
+                  }
+                >
+                  <MermaidDiagram code={codeString} />
+                </React.Suspense>
+              );
             }
 
             if (match) {

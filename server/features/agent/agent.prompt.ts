@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -7,6 +8,7 @@ import {
   COMMON_DIR,
   MANIFEST_DIR,
   SMOKE_AGENTS_ROOT,
+  SMARTNESS_MD_TEMPLATE,
   type AgentWorkspace,
   type CommonRegistryPaths,
 } from './agent.manifest.js';
@@ -92,39 +94,20 @@ export const buildPeerAgentsBlock = (peers: PeerAgentWithConfig[]): string => {
     })
     .join('\n');
 
-  return `## CONNECTED PEER AGENTS & DELEGATION PROTOCOL:
-You are connected to peer agents on the canvas. You can delegate tasks to these specialized agents using the \`delegate_task\` tool.
+  return `## CONNECTED PEERS & DELEGATION:
+Use \`delegate_task\` to coordinate with configured peers:
 
 ### Available Peers:
 ${peerLines}
 
-### DELEGATION PROTOCOL:
-When you need assistance from peer agents, you MUST follow these guidelines:
-1. **Prepare Requirements**: Write clear markdown specification file(s) in your workspace (e.g. \`requirements_<task>.md\`). Include objective, scope, and expected deliverables.
-2. **Check Peer Eligibility**: You may ONLY delegate to peers with status "READY & CONFIGURED". Do NOT attempt to delegate to unconfigured peers.
-3. **⚡ PROACTIVE PARALLEL EXECUTION (DEFAULT BEHAVIOR)**:
-   - **Whenever multiple subtasks exist or multiple peers can contribute simultaneously, ALWAYS execute in PARALLEL via the \`tasks\` array.** Do NOT perform them one-by-one sequentially.
-   - Example: If you need assistance with test analysis, code review, or cache checks, write the requirements files and invoke all peers concurrently in a single \`delegate_task\` call:
-     \`\`\`json
-     {
-       "tasks": [
-         {
-           "target_agent_id": "agent_id_1",
-           "task_title": "First Subtask Title",
-           "requirements_file_path": "./requirements_1.md"
-         },
-         {
-           "target_agent_id": "agent_id_2",
-           "task_title": "Second Subtask Title",
-           "requirements_file_path": "./requirements_2.md"
-         }
-       ]
-     }
-     \`\`\`
-   - All delegated tasks in the batch will execute simultaneously in parallel, saving time and keeping workflows fast.
-   - (For a single isolated task, you may also pass \`target_agent_id\`, \`task_title\`, and \`requirements_file_path\` directly).
-4. **Wait for Execution**: \`delegate_task\` executes the peer agent(s) and returns structured report(s) along with paths to the response markdown file(s).
-5. **Review & Proceed**: Read and review the peer agent response(s) before completing your run.`;
+### DELEGATION & TWO-WAY PROTOCOL:
+1. **Delegating Work**: Call \`delegate_task\` with \`target_agent_id\` (or peer name) and your \`instructions\` or \`prompt\`. (\`task_title\` and \`requirements_file_path\` are optional). Only delegate to "READY & CONFIGURED" peers.
+2. **Parallel Subtasks**: For multiple tasks/peers, execute concurrently via \`tasks: [{ target_agent_id, instructions }, ...]\`.
+3. **Two-Way Threads**: Every run returns \`chat_id\`. Reuse \`"chat_id": "<returned_chat_id>"\` to follow up, answer questions, or continue discussions with shared context.
+4. **Clarifying Doubts**: If requirements are unclear, do not guess. Put questions under \`### ❓ QUESTIONS / DOUBTS FOR CALLER\` in your report. The caller answers via \`delegate_task(chat_id)\`.
+5. **Intents**: Set \`communication_type\`: \`'delegate'\` (assign work), \`'report_status'\` (deliverables upward), \`'request_approval'\` (sign-off for risky actions), or \`'inform'\` (peer sync).
+6. **Review**: Check peer reports in \`reports/\` before completing your run.
+7. **Checking Peer Specializations & Recent Work**: Use \`get_agent_profile\` or \`get_agent_todo_history\` with \`target_agent_id\` to inspect peer agents' recent completed tasks and proven specialties before delegating.`;
 };
 
 export interface EffectivePromptInput {
@@ -230,6 +213,8 @@ export const buildTaskExecutionGuidanceBlock = (): string => {
 ### Keep the live todo list truthful during long work
 - BEFORE starting any task with more than two concrete steps, call \`todo_write\` once with one item per concrete step (not phases), and set the first item to in_progress in the same call.
 - Keep AT MOST ONE item in_progress; mark a step completed the moment it is done, and never finish silently. If new required work is discovered mid-run, add it as a new todo item. The user watches the live todo rail while you run — keep it accurate.
+- Every to-do you create or update is automatically saved into your persistent date-wise task history (\`.smoke-agent/todos/YYYY-MM-DD.md\`). If your execution begins late at night (e.g. 11:55 PM) and crosses midnight, tasks remain attributed to the initial start date.
+- You can inspect your historical to-do records with \`get_agent_todo_history\` and re-evaluate/update your specialty domains with \`redevelop_agent_specializations\`.
 - Skip \`todo_write\` only for trivial single-action replies.`;
 };
 
@@ -246,6 +231,16 @@ export const buildCoreRuntimePromptBlocks = (): string[] => [
   buildTaskExecutionGuidanceBlock(),
 ];
 
+export const buildSmartnessBlock = (ws: AgentWorkspace): string => {
+  try {
+    if (ws.smartnessFile && fs.existsSync(ws.smartnessFile)) {
+      const content = fs.readFileSync(ws.smartnessFile, 'utf8').trim();
+      if (content) return `## OPERATIONAL SMARTNESS & SCENARIO PLAYBOOK (smartness.md):\n${content}`;
+    }
+  } catch {}
+  return `## OPERATIONAL SMARTNESS & SCENARIO PLAYBOOK (smartness.md):\n${SMARTNESS_MD_TEMPLATE}`;
+};
+
 export const buildSubPrompts = (input: EffectivePromptInput): string[] => {
   const blocks: string[] = [];
   const policyGuidance = buildPolicyGuidance(input.policyEntries);
@@ -259,6 +254,7 @@ export const buildSubPrompts = (input: EffectivePromptInput): string[] => {
   if (format) blocks.push(format);
   blocks.push(...buildCoreRuntimePromptBlocks());
   blocks.push(workspacePrompt(input.manifest, input.common, input.agentId));
+  blocks.push(buildSmartnessBlock(input.manifest));
   blocks.push(buildMcpAuthGuidanceBlock());
 
   // Shared repository memory if working in a git repository

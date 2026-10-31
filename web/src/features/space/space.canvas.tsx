@@ -12,7 +12,8 @@ import '@xyflow/react/dist/style.css';
 
 import { SpaceService } from './space.service.js';
 import { AgentService } from '../agent/agent.service.js';
-import { CheckCircle2, AlertTriangle } from 'lucide-react';
+import { CanvasPositionSync } from './canvas.sync.js';
+import { CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import type { SpaceAgentEntity, AgentRecord, AgentConnectionRecord } from '../agent/agent.types.js';
 import type { SpaceContextMenuState } from './space.types.js';
 import { CrabAgentNode } from '../agent/agent.crab-node.js';
@@ -21,26 +22,21 @@ import { SpaceToolbarMobile } from './mobile/space-toolbar.mobile.js';
 import { useIsMobile } from '../common/use-mobile.js';
 import { SpaceContextMenu } from './space.context-menu.js';
 import { onMenuAction, isTauri, openExternalLink } from '../../config/desktop.bridge.js';
-import { AgentModal } from '../agent/agent.modal.js';
-import { McpModal } from '../mcp/mcp.modal.js';
-import { SkillModal } from '../skill/skill.modal.js';
-import { SettingsModal } from '../settings/settings.modal.js';
-import { AgentDrawer, type LiveLogEvent } from '../agent/agent.drawer.js';
-import { ToolsModal } from '../tools/tools.modal.js';
-import { PolicyModal } from '../policy/policy.modal.js';
-import { ConfirmDialog } from '../common/confirm-dialog.js';
+import type { LiveLogEvent } from '../agent/agent.drawer.js';
 import type { SkillInput } from '../skill/skill.types.js';
-import type { AgentTemplate } from '../agent/agent.templates.js';
+import { ENTERPRISE_AGENT_TEMPLATES, type AgentTemplate } from '../agent/agent.templates.js';
 import type { StockMcp } from '../mcp/mcp.types.js';
 import type { McpReadiness } from '../mcp/mcp.types.js';
 import { McpService } from '../mcp/mcp.service.js';
 import { resolveStockMcp } from '../mcp/mcp.catalog.js';
 import { LibrarySidebar } from '../library/library-sidebar.js';
 import { CUSTOM_PLUGINS, pluginToSkillItem } from '../library/library.plugins.js';
-import { readLibDragPayload, isLibDrag, setActiveDragPayload, type LibDragPayload, type PromptPreset, type RoleZonePreset, type StockSkillItem, type WorkspaceZonePreset, type HierarchicalChainPreset } from '../library/library.types.js';
-import { layoutHierarchicalChain } from '../library/library.data.js';
-import { useSpaceStore, isAgentInZone, type GroupWorkspaceZone, type RoleZone } from './space.store.js';
+import { readLibDragPayload, isLibDrag, setActiveDragPayload, type LibDragPayload, type PromptPreset, type RoleZonePreset, type StockSkillItem, type WorkspaceZonePreset, type HierarchicalChainPreset, type CompanyPreset, type CompanyScale } from '../library/library.types.js';
+import { layoutHierarchicalChain, layoutCompany, getZoneSizeForAgents, type PlacedCompanyAgent, type PlacedCompanyZone } from '../library/library.data.js';
+import { buildCompanyAgentPrompt } from '../library/data/company-workflows.engine.js';
+import { useSpaceStore, isAgentInZone, roleZoneBelongsToSpace, getCanvasViewportPersistedAt, markCanvasViewportPersisted, type GroupWorkspaceZone, type RoleZone } from './space.store.js';
 import { AppLoader } from '../common/app-loader.js';
+import { LazyMount } from '../common/lazy-mount.js';
 import { ThreadProcessNode } from './thread-process-node.js';
 import { ThreadConnectionEdge } from './thread-edge.js';
 import { AgentAssetsNode } from './agent-assets-node.js';
@@ -50,13 +46,16 @@ import { GroupWorkspaceNode } from './group-workspace-node.js';
 import { RoleZoneNode } from './role-zone-node.js';
 import { HierarchyConnectionEdge } from './hierarchy-edge.js';
 import { WorkspacePanelNode } from './workspace-panel-node.js';
-import { ZoneBuilderModal, type ZoneDraft } from './zone-builder.modal.js';
+import { AgentSkeletonNode } from '../agent/agent.skeleton-node.js';
+import type { ZoneDraft } from './zone-builder.modal.js';
+import type { SpaceDeleteMode } from './space-delete.modal.js';
 import { resolveZoneAt, zoneContainsPoint } from './space.zones.js';
-import { type CanvasNode, type CanvasEdge, CONNECTOR_EDGE_Z } from './space.types.js';
-import type { ActiveRunRecord } from '../agent/agent.types.js';
+import { type CanvasNode, type CanvasEdge, WORKSPACE_ZONE_Z, ROLE_ZONE_Z, CONNECTOR_EDGE_Z, PEER_EDGE_Z, HIERARCHY_EDGE_Z, AGENT_NODE_Z, AGENT_ACTIVE_Z, THREAD_NODE_Z } from './space.types.js';
+import type { ActiveRunRecord, ActiveDelegationRecord } from '../agent/agent.types.js';
 
 const NODE_TYPES: NodeTypes = {
   crabAgent: CrabAgentNode,
+  agentSkeleton: AgentSkeletonNode,
   threadProcess: ThreadProcessNode,
   agentAssets: AgentAssetsNode,
   groupWorkspace: GroupWorkspaceNode,
@@ -70,6 +69,104 @@ const EDGE_TYPES = {
   peerEdge: AgentPeerEdge,
   hierarchyEdge: HierarchyConnectionEdge,
 };
+
+const AgentModal = React.lazy(() => import('../agent/agent.modal.js').then((m) => ({ default: m.AgentModal })));
+const McpModal = React.lazy(() => import('../mcp/mcp.modal.js').then((m) => ({ default: m.McpModal })));
+const SkillModal = React.lazy(() => import('../skill/skill.modal.js').then((m) => ({ default: m.SkillModal })));
+const SettingsModal = React.lazy(() => import('../settings/settings.modal.js').then((m) => ({ default: m.SettingsModal })));
+const AgentDrawer = React.lazy(() => import('../agent/agent.drawer.js').then((m) => ({ default: m.AgentDrawer })));
+const ToolsModal = React.lazy(() => import('../tools/tools.modal.js').then((m) => ({ default: m.ToolsModal })));
+const PolicyModal = React.lazy(() => import('../policy/policy.modal.js').then((m) => ({ default: m.PolicyModal })));
+const ConfirmDialog = React.lazy(() => import('../common/confirm-dialog.js').then((m) => ({ default: m.ConfirmDialog })));
+const ZoneBuilderModal = React.lazy(() => import('./zone-builder.modal.js').then((m) => ({ default: m.ZoneBuilderModal })));
+const SpaceDeleteModal = React.lazy(() => import('./space-delete.modal.js').then((m) => ({ default: m.SpaceDeleteModal })));
+
+function activeRunsMapsEqual(
+  prev: Record<string, ActiveRunRecord[]>,
+  next: Record<string, ActiveRunRecord[]>,
+) {
+  const prevKeys = Object.keys(prev);
+  const nextKeys = Object.keys(next);
+  if (prevKeys.length !== nextKeys.length) return false;
+  for (const key of nextKeys) {
+    const prevRuns = prev[key];
+    const nextRuns = next[key];
+    if (!prevRuns || prevRuns.length !== nextRuns.length) return false;
+    for (let i = 0; i < nextRuns.length; i += 1) {
+      const a = prevRuns[i];
+      const b = nextRuns[i];
+      if (
+        a.runId !== b.runId ||
+        a.agentId !== b.agentId ||
+        a.triggerType !== b.triggerType ||
+        a.sessionId !== b.sessionId ||
+        a.status !== b.status ||
+        a.startedAt !== b.startedAt ||
+        a.taskPrompt !== b.taskPrompt ||
+        a.accumulatedText !== b.accumulatedText ||
+        a.partsCount !== b.partsCount
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function activeDelegationsEqual(prev: ActiveDelegationRecord[], next: ActiveDelegationRecord[]) {
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < next.length; i += 1) {
+    const a = prev[i];
+    const b = next[i];
+    if (
+      a.id !== b.id ||
+      a.sourceAgentId !== b.sourceAgentId ||
+      a.targetAgentId !== b.targetAgentId ||
+      a.taskTitle !== b.taskTitle ||
+      a.sessionId !== b.sessionId ||
+      a.startedAt !== b.startedAt
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Safely returns the true screen client pixel coordinates of the canvas center.
+ * Crucially queries the outer canvas container `.react-flow` (or window) rather
+ * than `.react-flow__viewport`, which is subject to CSS transform scale and translation.
+ */
+export function getCanvasCenterScreenPoint(): { x: number; y: number } {
+  const canvasEl = document.querySelector('.react-flow');
+  if (canvasEl) {
+    const rect = canvasEl.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+  }
+  return {
+    x: typeof window !== 'undefined' ? window.innerWidth / 2 : 500,
+    y: typeof window !== 'undefined' ? window.innerHeight / 2 : 400,
+  };
+}
+
+/**
+ * Compares two viewports with rounding tolerance. Used to detect echo events:
+ * a `canvas_viewport_updated` broadcast caused by this tab's own PATCH (or a
+ * programmatic `setViewport`) must not be re-persisted and re-broadcast.
+ */
+function viewportsEqual(
+  a: { x: number; y: number; zoom: number },
+  b: { x: number; y: number; zoom: number },
+): boolean {
+  return (
+    Math.abs(a.x - b.x) < 0.5 &&
+    Math.abs(a.y - b.y) < 0.5 &&
+    Math.abs(a.zoom - b.zoom) < 0.005
+  );
+}
 
 /**
  * Calculates dynamic grid metrics and sizing for agents placed inside a workspace room.
@@ -241,6 +338,9 @@ export const SpaceCanvas: React.FC = () => {
   const removeRoleZone = useSpaceStore((s) => s.removeRoleZone);
 
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance<CanvasNode, CanvasEdge> | null>(null);
+  // Keep a stable ref so callbacks declared before setRfInstance can still access the instance
+  const rfInstanceRef = useRef<ReactFlowInstance<CanvasNode, CanvasEdge> | null>(null);
+  useEffect(() => { rfInstanceRef.current = rfInstance; }, [rfInstance]);
   const isMobile = useIsMobile();
   const [activeWorkspaceSpaceId, setActiveWorkspaceSpaceId] = useState<string | null>(null);
 
@@ -248,6 +348,38 @@ export const SpaceCanvas: React.FC = () => {
     () => workspaceZones.find((space) => space.id === activeWorkspaceSpaceId) ?? null,
     [workspaceZones, activeWorkspaceSpaceId],
   );
+
+  const [companyDeployment, setCompanyDeployment] = useState<{
+    companyName: string;
+    total: number;
+    current: number;
+    currentAgentName: string;
+    currentRoleTitle: string;
+    phase: 'spawning' | 'completed';
+  } | null>(null);
+
+  /**
+   * Hard re-entrancy lock for company deployments. A single deploy can take
+   * tens of seconds while it creates every agent sequentially; without this a
+   * double-click (or a second click while the progress banner is running)
+   * spawns a second full company and silently duplicates dozens of agents.
+   */
+  const companyDeployLockRef = useRef(false);
+  const [isCompanyDeploying, setIsCompanyDeploying] = useState(false);
+
+  const [deployingAgents, setDeployingAgents] = useState<Array<{
+    tempId: string;
+    name: string;
+    role?: string | null;
+    provider?: string;
+    model?: string;
+    x: number;
+    y: number;
+    zoneId?: string | null;
+    isAvatar?: boolean;
+    zoneColor?: string;
+    phase: 'provisioning' | 'attaching_mcps' | 'attaching_skills' | 'ready';
+  }>>([]);
 
   const workspacePanelAgents = useMemo(() => {
     if (!activeWorkspaceSpace) return [];
@@ -300,6 +432,12 @@ export const SpaceCanvas: React.FC = () => {
   const [editingRoleZone, setEditingRoleZone] = useState<RoleZone | null>(null);
   const [isRoleZoneBuilderOpen, setIsRoleZoneBuilderOpen] = useState(false);
   const [pendingDeleteRoleZoneId, setPendingDeleteRoleZoneId] = useState<string | null>(null);
+  const [pendingDeleteSpaceTarget, setPendingDeleteSpaceTarget] = useState<{
+    space: GroupWorkspaceZone;
+    memberAgents: SpaceAgentEntity[];
+    memberZones: RoleZone[];
+  } | null>(null);
+  const [isDeletingSpace, setIsDeletingSpace] = useState(false);
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<SpaceAgentEntity | null>(null);
   const [agentModalSection, setAgentModalSection] = useState<'general' | 'directory' | 'schedule' | 'model'>('general');
@@ -475,7 +613,11 @@ export const SpaceCanvas: React.FC = () => {
   const [isAppReady, setIsAppReady] = useState(false);
   const [connections, setConnections] = useState<AgentConnectionRecord[]>([]);
 
-  // 1. Initial Load of Space Entities
+  // 1. Live refresh — agents + inter-agent connections only.
+  // Workspace rooms and designation zones are maintained incrementally through
+  // their own WS events; re-fetching and replacing them here would snap rooms
+  // back to their persisted position while another browser (or this user) is
+  // still dragging.
   const refreshSpace = useCallback(async () => {
     try {
       const [data, connList] = await Promise.all([
@@ -484,76 +626,172 @@ export const SpaceCanvas: React.FC = () => {
       ]);
       setAgents(data);
       setConnections(connList);
-      setIsAppReady(true);
     } catch (err) {
       console.error('[SpaceCanvas] Failed refreshing space:', err);
-      setIsAppReady(true);
     }
-  }, []);
+  }, [setAgents]);
 
+  // 1b. One-time full hydration of the canvas (agents, connections, rooms, zones).
+  const didHydrateCanvasRef = useRef(false);
   useEffect(() => {
-    refreshSpace();
-  }, [refreshSpace]);
-
-  // Hydrate hierarchical zones from the server once. Visual spaces remain the
-  // local canvas rooms; zones are designation overlays placed inside them.
-  const didHydrateRoleZonesRef = useRef(false);
-  useEffect(() => {
-    if (didHydrateRoleZonesRef.current) return;
+    if (didHydrateCanvasRef.current) return;
+    didHydrateCanvasRef.current = true;
     let cancelled = false;
     (async () => {
       try {
-        const zones = await SpaceService.fetchZones();
+        const [data, connList, backendSpaces, zones] = await Promise.all([
+          SpaceService.fetchSpaceAgents(),
+          AgentService.fetchConnections().catch(() => []),
+          SpaceService.fetchWorkspaceSpaces().catch(() => []),
+          SpaceService.fetchZones().catch(() => []),
+        ]);
         if (cancelled) return;
-        const spaces = useSpaceStore.getState().workspaceZones;
-        setRoleZones(
-          zones.map((zone) => {
-            const persistedSpace = zone.spaceId
-              ? spaces.find((space) => space.id === zone.spaceId)
-              : undefined;
-            const inferredSpace =
-              persistedSpace ??
-              spaces.find((space) =>
-                zoneContainsPoint(space, zone.x + zone.width / 2, zone.y + zone.height / 2),
-              );
-            return { ...zone, spaceId: inferredSpace?.id ?? null };
-          }),
-        );
-        didHydrateRoleZonesRef.current = true;
+        setAgents(data);
+        setConnections(connList);
+        if (Array.isArray(backendSpaces) && backendSpaces.length > 0) {
+          useSpaceStore.getState().setWorkspaceZones(backendSpaces);
+        } else if (data.length === 0) {
+          // Backend is empty: drop stale locally-cached company spaces so a fresh
+          // canvas does not resurrect deleted deployments.
+          useSpaceStore.getState().setWorkspaceZones([]);
+        } else {
+          const localSpaces = useSpaceStore.getState().workspaceZones;
+          if (localSpaces.length > 0) {
+            SpaceService.createWorkspaceSpacesBatch(localSpaces).catch(() => {});
+          }
+        }
+        if (Array.isArray(zones)) {
+          const currentSpaces = Array.isArray(backendSpaces) && backendSpaces.length > 0
+            ? backendSpaces
+            : useSpaceStore.getState().workspaceZones;
+          setRoleZones(
+            zones.map((zone) => {
+              const persistedSpace = zone.spaceId
+                ? currentSpaces.find((space) => space.id === zone.spaceId)
+                : undefined;
+              const inferredSpace =
+                persistedSpace ??
+                currentSpaces.find((space) =>
+                  zoneContainsPoint(space, zone.x + zone.width / 2, zone.y + zone.height / 2),
+                );
+              return { ...zone, spaceId: inferredSpace?.id ?? null };
+            }),
+          );
+        }
       } catch (err) {
-        console.warn('[SpaceCanvas] Failed to hydrate role zones:', err);
+        console.error('[SpaceCanvas] Failed hydrating space:', err);
+      } finally {
+        if (!cancelled) setIsAppReady(true);
       }
     })();
     return () => {
       cancelled = true;
+      // StrictMode mounts, cleans up, then mounts again in development. If we
+      // kept the guard set, the second (real) mount would skip hydration and
+      // `isAppReady` would never flip — leaving the boot loader on screen.
+      didHydrateCanvasRef.current = false;
     };
-  }, [setRoleZones]);
+  }, [setAgents, setRoleZones]);
+
+  // 1c. Canvas viewport hydration. The backend copy is shared by every browser,
+  // and the local copy wins only when it was persisted more recently (e.g. the
+  // tab was closed inside the debounce window).
+  const didHydrateViewportRef = useRef(false);
+  const viewportReadyRef = useRef(false);
+  const viewportInteractingRef = useRef(false);
+
+  const applyViewportFromRemote = useCallback(
+    (vp: { x: number; y: number; zoom: number }, animate = false) => {
+      const store = useSpaceStore.getState();
+      const next = { x: vp.x, y: vp.y, zoom: vp.zoom };
+      const current = store.canvasViewport;
+      if (current && viewportsEqual(current, next)) return;
+      // Store first: the onMoveEnd fired by setViewport then sees an identical
+      // viewport and skips persisting/broadcasting it back (echo loop guard).
+      store.setCanvasViewport(next);
+      const instance = rfInstanceRef.current;
+      if (instance) {
+        instance.setViewport(next, { duration: animate ? 300 : 0 });
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!rfInstance || didHydrateViewportRef.current) return;
+    didHydrateViewportRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const serverVp = await SpaceService.fetchCanvasViewport().catch(() => null);
+        if (cancelled) return;
+        const store = useSpaceStore.getState();
+        const localVp = store.canvasViewport;
+        const localAt = getCanvasViewportPersistedAt();
+        const serverAt = typeof serverVp?.updatedAt === 'number' ? serverVp.updatedAt : 0;
+
+        if (serverVp && !(localVp && localAt > serverAt)) {
+          applyViewportFromRemote(serverVp, false);
+          return;
+        }
+
+        // No backend viewport yet, or this tab's copy is newer than the server's.
+        const current = localVp ?? rfInstanceRef.current?.getViewport() ?? null;
+        if (current) {
+          CanvasPositionSync.queueViewportUpdate(current, true);
+          markCanvasViewportPersisted();
+        }
+      } finally {
+        if (!cancelled) viewportReadyRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      // Allow StrictMode's remount (and genuine remounts) to redo hydration.
+      didHydrateViewportRef.current = false;
+    };
+  }, [rfInstance, applyViewportFromRemote]);
 
   // Active Running Instances & Threads per Agent
   const [activeRunsMap, setActiveRunsMap] = useState<Record<string, ActiveRunRecord[]>>({});
+  const [activeDelegations, setActiveDelegations] = useState<ActiveDelegationRecord[]>([]);
 
-  const refreshActiveRuns = useCallback(async () => {
-    try {
-      const activeMap: Record<string, ActiveRunRecord[]> = {};
-      await Promise.all(
-        agents.map(async (ag) => {
-          try {
-            const runs = await AgentService.fetchActiveRuns(ag.id);
-            if (Array.isArray(runs) && runs.length > 0) {
-              activeMap[ag.id] = runs;
-            }
-          } catch {}
-        }),
-      );
-      setActiveRunsMap(activeMap);
-    } catch {}
-  }, [agents]);
+  const applyActiveRunsSnapshot = useCallback((runs: ActiveRunRecord[]) => {
+    const next: Record<string, ActiveRunRecord[]> = {};
+    for (const run of runs) {
+      if (!next[run.agentId]) next[run.agentId] = [];
+      next[run.agentId].push(run);
+    }
+    setActiveRunsMap((prev) => (activeRunsMapsEqual(prev, next) ? prev : next));
+  }, []);
+
+  const applyActiveDelegationsSnapshot = useCallback((delegations: ActiveDelegationRecord[]) => {
+    setActiveDelegations((prev) =>
+      activeDelegationsEqual(prev, delegations) ? prev : delegations,
+    );
+  }, []);
 
   useEffect(() => {
-    refreshActiveRuns();
-    const interval = setInterval(refreshActiveRuns, 3000);
-    return () => clearInterval(interval);
-  }, [refreshActiveRuns]);
+    const prefetch = () => {
+      void import('../agent/agent.drawer.js');
+      void import('../agent/agent.file-explorer.js');
+    };
+    const requestIdle = (
+      window as Window & {
+        requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      }
+    ).requestIdleCallback;
+    if (requestIdle) {
+      const id = requestIdle.call(window, prefetch, { timeout: 4000 });
+      return () => {
+        (
+          window as Window & { cancelIdleCallback?: (handle: number) => void }
+        ).cancelIdleCallback?.call(window, id);
+      };
+    }
+    const timer = window.setTimeout(prefetch, 4000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const handleToggleAgentThreads = useCallback(
     (agentId: string) => {
@@ -563,25 +801,7 @@ export const SpaceCanvas: React.FC = () => {
   );
 
   // 2. Action Handlers for Agent Crab Nodes (Stabilized references to avoid re-rendering nodes)
-  const handleRunAgent = useCallback(async (id: string, customPrompt?: string) => {
-    try {
-      await AgentService.triggerRun(id, customPrompt);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to trigger run');
-    }
-  }, []);
-
-  const handleStopAgent = useCallback(async (id: string) => {
-    try {
-      await AgentService.stopAgent(id);
-      setAgents((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, status: a.cron_enabled ? 'scheduled' : 'idle' } : a)),
-      );
-      refreshSpace();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to stop agent');
-    }
-  }, [refreshSpace]);
+  // NOTE: handleRunAgent / handleStopAgent are declared after showToast (line ~830) so they can call it.
 
   const handleEditAgent = useCallback((agent: SpaceAgentEntity, section: 'general' | 'directory' | 'schedule' | 'model' = 'general') => {
     setEditingAgent(agent);
@@ -696,6 +916,27 @@ export const SpaceCanvas: React.FC = () => {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
   }, []);
 
+  // 2b. Run/stop handlers — declared after showToast so they can call it directly
+  const handleRunAgent = useCallback(async (id: string, customPrompt?: string) => {
+    try {
+      await AgentService.triggerRun(id, customPrompt);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to trigger run', 'warn');
+    }
+  }, [showToast]);
+
+  const handleStopAgent = useCallback(async (id: string) => {
+    try {
+      await AgentService.stopAgent(id);
+      setAgents((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: a.cron_enabled ? 'scheduled' : 'idle' } : a)),
+      );
+      refreshSpace();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to stop agent', 'warn');
+    }
+  }, [refreshSpace, showToast]);
+
   // ── Agent deletion: in-app confirmation instead of window.confirm ─────────
   // The native dialog could not be themed and was being dismissed unpredictably,
   // which left the agent on the canvas looking like nothing had happened. State
@@ -749,11 +990,8 @@ export const SpaceCanvas: React.FC = () => {
       }
 
       const store = useSpaceStore.getState();
-      const el = document.querySelector('.react-flow__viewport');
-      const rect = el?.getBoundingClientRect();
-      const centerX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-      const centerY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-      const flow = rfInstance?.screenToFlowPosition({ x: centerX, y: centerY });
+      const center = getCanvasCenterScreenPoint();
+      const flow = rfInstance?.screenToFlowPosition(center);
       const flowX = flow?.x ?? 300;
       const flowY = flow?.y ?? 220;
       const activeSpace = activeWorkspaceSpaceId
@@ -818,13 +1056,112 @@ export const SpaceCanvas: React.FC = () => {
 
   const handleRemoveWorkspace = useCallback(
     (spaceId: string) => {
-      void SpaceService.setWorkspaceAgents(spaceId, []).catch(() => {
-        // Removing the local space is still safe if the server is unavailable.
+      const targetSpace = workspaceZones.find((z) => z.id === spaceId);
+      if (!targetSpace) {
+        removeWorkspaceZone(spaceId);
+        return;
+      }
+
+      // Find all role zones belonging to or contained within this space
+      const memberZones = roleZones.filter(
+        (z) =>
+          z.spaceId === spaceId ||
+          (z.x >= targetSpace.x &&
+            z.y >= targetSpace.y &&
+            z.x + z.width <= targetSpace.x + targetSpace.width + 80 &&
+            z.y + z.height <= targetSpace.y + targetSpace.height + 80),
+      );
+
+      // Find all agents located inside this space or its member zones
+      const memberAgents = agents.filter((a) => {
+        const inSpace = isAgentInZone(a.pos_x, a.pos_y, targetSpace.x, targetSpace.y, targetSpace.width, targetSpace.height);
+        if (inSpace) return true;
+        return memberZones.some((z) => isAgentInZone(a.pos_x, a.pos_y, z.x, z.y, z.width, z.height));
       });
-      setActiveWorkspaceSpaceId((current) => (current === spaceId ? null : current));
-      removeWorkspaceZone(spaceId);
+
+      setPendingDeleteSpaceTarget({
+        space: targetSpace,
+        memberAgents,
+        memberZones,
+      });
     },
-    [removeWorkspaceZone],
+    [workspaceZones, roleZones, agents, removeWorkspaceZone],
+  );
+
+  const handleConfirmSpaceDelete = useCallback(
+    async (mode: SpaceDeleteMode, deleteFiles: boolean) => {
+      if (!pendingDeleteSpaceTarget) return;
+      const { space, memberAgents, memberZones } = pendingDeleteSpaceTarget;
+      setIsDeletingSpace(true);
+
+      try {
+        if (mode === 'all') {
+          // 1. Delete all agents from backend (and files on disk if checked)
+          const agentIds = new Set(memberAgents.map((a) => a.id));
+          for (const a of memberAgents) {
+            await AgentService.deleteAgent(a.id, { deleteFiles }).catch((err) => {
+              console.warn(`[SpaceCanvas] Failed to delete agent ${a.id}:`, err);
+            });
+          }
+
+          // 2. Remove agents from local state
+          setAgents((prev) => prev.filter((a) => !agentIds.has(a.id)));
+          if (activeDrawerAgentId && agentIds.has(activeDrawerAgentId)) {
+            setActiveDrawerAgentId(null);
+          }
+
+          // 3. Remove all member role zones
+          for (const z of memberZones) {
+            removeRoleZone(z.id);
+          }
+
+          // 4. Remove workspace space
+          void SpaceService.setWorkspaceAgents(space.id, []).catch(() => {});
+          removeWorkspaceZone(space.id);
+          if (activeWorkspaceSpaceId === space.id) {
+            setActiveWorkspaceSpaceId(null);
+          }
+
+          showToast(
+            `Deleted "${space.name}", ${memberZones.length} role zone${memberZones.length === 1 ? '' : 's'}, and ${memberAgents.length} agent${memberAgents.length === 1 ? '' : 's'}.`,
+            'ok',
+          );
+        } else if (mode === 'space_and_zones') {
+          // 1. Remove all member role zones
+          for (const z of memberZones) {
+            removeRoleZone(z.id);
+          }
+
+          // 2. Remove workspace space
+          void SpaceService.setWorkspaceAgents(space.id, []).catch(() => {});
+          removeWorkspaceZone(space.id);
+          if (activeWorkspaceSpaceId === space.id) {
+            setActiveWorkspaceSpaceId(null);
+          }
+
+          showToast(
+            `Deleted "${space.name}" and ${memberZones.length} role zone${memberZones.length === 1 ? '' : 's'}. Kept ${memberAgents.length} agent${memberAgents.length === 1 ? '' : 's'} on canvas.`,
+            'ok',
+          );
+        } else {
+          // space_only
+          void SpaceService.setWorkspaceAgents(space.id, []).catch(() => {});
+          removeWorkspaceZone(space.id);
+          if (activeWorkspaceSpaceId === space.id) {
+            setActiveWorkspaceSpaceId(null);
+          }
+
+          showToast(`Removed space container "${space.name}".`, 'ok');
+        }
+
+        setPendingDeleteSpaceTarget(null);
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : 'Failed to delete space', 'warn');
+      } finally {
+        setIsDeletingSpace(false);
+      }
+    },
+    [pendingDeleteSpaceTarget, activeDrawerAgentId, activeWorkspaceSpaceId, removeRoleZone, removeWorkspaceZone, showToast],
   );
 
   // ── Library: connect a credential for a locked stock MCP ─────────────────
@@ -1359,7 +1696,7 @@ export const SpaceCanvas: React.FC = () => {
     }
   }, [showToast, updateNodePositionLocally]);
 
-  /** Fit agents neatly inside a designation zone without moving them out. */
+  /** Fit agents neatly inside a designation zone without moving them out, auto-resizing zone if needed. */
   const alignRoleZoneMembers = useCallback((zoneId: string, silent = false) => {
     const store = useSpaceStore.getState();
     const zone = store.roleZones.find((z) => z.id === zoneId);
@@ -1373,9 +1710,31 @@ export const SpaceCanvas: React.FC = () => {
       if (!silent) showToast(`No agents inside "${zone.roleTitle}".`, 'warn');
       return;
     }
+
+    // Dynamic auto-expansion: Ensure zone width and height accommodate all members
+    const requiredDim = getZoneSizeForAgents(members.length);
+    let zoneW = Math.max(zone.width, requiredDim.width);
+    let zoneH = Math.max(zone.height, requiredDim.height);
+
+    if (zoneW > zone.width || zoneH > zone.height) {
+      store.updateRoleZone(zone.id, { width: zoneW, height: zoneH });
+
+      // If zone belongs to an outer office space, expand the space as well
+      const parentSpace = store.workspaceZones.find(
+        (sp) => sp.id === zone.spaceId || isAgentInZone(zone.x, zone.y, sp.x, sp.y, sp.width, sp.height),
+      );
+      if (parentSpace) {
+        const spaceMinW = Math.max(parentSpace.width, zone.x + zoneW - parentSpace.x + 80);
+        const spaceMinH = Math.max(parentSpace.height, zone.y + zoneH - parentSpace.y + 80);
+        if (spaceMinW > parentSpace.width || spaceMinH > parentSpace.height) {
+          store.updateWorkspaceZone(parentSpace.id, { width: spaceMinW, height: spaceMinH });
+        }
+      }
+    }
+
     const { cols, slotW, slotH, cardWidth, cardHeight } = getZoneGridMetrics(
-      zone.width,
-      zone.height,
+      zoneW,
+      zoneH,
       members.length,
     );
     const leftPad = 12;
@@ -1407,6 +1766,13 @@ export const SpaceCanvas: React.FC = () => {
     }
 
     for (const z of workspaceZones) {
+      // In hierarchical company spaces with role zones, do NOT create an all-to-all
+      // mesh across all agents, as that creates an unreadable spiderweb over the org hierarchy.
+      const hasRoleZones = roleZones.some(
+        (rz) => rz.spaceId === z.id || isAgentInZone(rz.x + rz.width / 2, rz.y + rz.height / 2, z.x, z.y, z.width, z.height),
+      );
+      if (hasRoleZones) continue;
+
       const memberAgents = agents.filter((a) =>
         isAgentInZone(a.pos_x, a.pos_y, z.x, z.y, z.width, z.height),
       );
@@ -1506,6 +1872,22 @@ export const SpaceCanvas: React.FC = () => {
     const threadNodes: CanvasNode[] = [];
     const assetsNodes: CanvasNode[] = [];
     const agentAssignedZoneMap = new Map<string, string>();
+    const prevNodeMap = new Map(useSpaceStore.getState().nodes.map((node) => [node.id, node]));
+    const agentById = new Map(agents.map((agent) => [agent.id, agent]));
+    const workspaceZoneById = new Map(workspaceZones.map((zone) => [zone.id, zone]));
+    const roleZoneById = new Map(roleZones.map((zone) => [zone.id, zone]));
+    const roleZoneCountBySpace = new Map<string, number>();
+    for (const zone of roleZones) {
+      if (!zone.spaceId) continue;
+      roleZoneCountBySpace.set(zone.spaceId, (roleZoneCountBySpace.get(zone.spaceId) ?? 0) + 1);
+    }
+    const connectionByPair = new Map<string, AgentConnectionRecord>();
+    for (const connection of connections) {
+      const forward = `${connection.source_agent_id}|${connection.target_agent_id}`;
+      const reverse = `${connection.target_agent_id}|${connection.source_agent_id}`;
+      if (!connectionByPair.has(forward)) connectionByPair.set(forward, connection);
+      if (!connectionByPair.has(reverse)) connectionByPair.set(reverse, connection);
+    }
 
     // Pre-calculate zone memberships for responsive pod density & dynamic scaling
     const zoneAgentListMap = new Map<string, SpaceAgentEntity[]>();
@@ -1517,7 +1899,7 @@ export const SpaceCanvas: React.FC = () => {
     for (const z of roleZones) roleZoneAgentListMap.set(z.id, []);
     const agentToRoleZoneMap = new Map<string, RoleZone>();
     for (const a of agents) {
-      const existingNode = useSpaceStore.getState().nodes.find((n) => n.id === a.id);
+      const existingNode = prevNodeMap.get(a.id);
       const pos = existingNode?.position || { x: a.pos_x, y: a.pos_y };
       const matchedZone = workspaceZones.find((z) =>
         isAgentInZone(pos.x, pos.y, z.x, z.y, z.width, z.height),
@@ -1536,7 +1918,7 @@ export const SpaceCanvas: React.FC = () => {
 
     // Map Agents
     const agentNodes: CanvasNode[] = agents.map((agent) => {
-      const existingNode = useSpaceStore.getState().nodes.find((n) => n.id === agent.id);
+      const existingNode = prevNodeMap.get(agent.id);
       const position = existingNode?.position ? { ...existingNode.position } : { x: agent.pos_x, y: agent.pos_y };
       const activeRuns = activeRunsMap[agent.id] || [];
 
@@ -1717,6 +2099,7 @@ export const SpaceCanvas: React.FC = () => {
         id: agent.id,
         type: 'crabAgent' as const,
         position,
+        zIndex: AGENT_NODE_Z,
         data: {
           ...agent,
           inWorkspaceZone: isPodMember,
@@ -1763,12 +2146,12 @@ export const SpaceCanvas: React.FC = () => {
       };
     });
 
-    // Build peer delegation edges
-    for (const conn of connections) {
-      const sourceAgent = agents.find((a) => a.id === conn.source_agent_id);
-      const targetAgent = agents.find((a) => a.id === conn.target_agent_id);
+    // ONLY render peer edges when there is an active delegation / communication between the agents!
+    // No idle lines between agents when they are not running or sharing active delegated sessions.
+    for (const del of activeDelegations) {
+      const sourceAgent = agentById.get(del.sourceAgentId);
+      const targetAgent = agentById.get(del.targetAgentId);
       if (sourceAgent && targetAgent) {
-        // Dynamic Miro-style smart routing based on relative placement
         let targetHandle = 'peer-target';
         const dy = targetAgent.pos_y - sourceAgent.pos_y;
         const dx = targetAgent.pos_x - sourceAgent.pos_x;
@@ -1782,50 +2165,36 @@ export const SpaceCanvas: React.FC = () => {
           }
         }
 
-        // Check if both agents are inside the same workspace zone (pod)
-        const srcZoneId = agentAssignedZoneMap.get(conn.source_agent_id);
-        const tgtZoneId = agentAssignedZoneMap.get(conn.target_agent_id);
+        const srcZoneId = agentAssignedZoneMap.get(del.sourceAgentId);
+        const tgtZoneId = agentAssignedZoneMap.get(del.targetAgentId);
         const isInSamePod = Boolean(srcZoneId && srcZoneId === tgtZoneId);
-        const commonZone = isInSamePod ? workspaceZones.find((z) => z.id === srcZoneId) : undefined;
+        const commonZone = isInSamePod && srcZoneId ? workspaceZoneById.get(srcZoneId) : undefined;
 
-        // Active calling status: true when either connected peer is currently executing/calling
-        const isSourceRunning = sourceAgent.status === 'running' || (activeRunsMap[sourceAgent.id]?.length ?? 0) > 0;
-        const isTargetRunning = targetAgent.status === 'running' || (activeRunsMap[targetAgent.id]?.length ?? 0) > 0;
-        const isActivelyCalling = isSourceRunning || isTargetRunning;
+        const conn = connectionByPair.get(`${del.sourceAgentId}|${del.targetAgentId}`);
 
         nextEdges.push({
-          id: `peer-${conn.id}`,
-          source: conn.source_agent_id,
+          id: `active-del-${del.id}`,
+          source: del.sourceAgentId,
           sourceHandle: 'peer-source',
-          target: conn.target_agent_id,
+          target: del.targetAgentId,
           targetHandle,
           type: 'peerEdge',
-          zIndex: CONNECTOR_EDGE_Z,
-          animated: isActivelyCalling,
-          className: isInSamePod ? `pod-peer-edge ${isActivelyCalling ? 'is-calling' : ''}` : (isActivelyCalling ? 'is-calling' : ''),
+          zIndex: PEER_EDGE_Z + 25,
+          animated: true,
+          className: 'is-calling active-delegation-edge',
           data: {
-            connectionId: conn.id,
-            sourceAgentId: conn.source_agent_id,
-            targetAgentId: conn.target_agent_id,
+            connectionId: conn?.id,
+            sourceAgentId: del.sourceAgentId,
+            targetAgentId: del.targetAgentId,
             sourceAgentName: sourceAgent.name,
             targetAgentName: targetAgent.name,
             targetRole: targetAgent.role || undefined,
             targetSpecialty: targetAgent.specialty || undefined,
-            isInPod: isInSamePod,
-            isActivelyCalling,
+            isInPod: false,
+            isActivelyCalling: true,
+            activeTaskTitle: del.taskTitle,
             podName: commonZone?.name,
             podColor: commonZone?.color,
-            onDisconnect: async (connectionId?: string) => {
-              if (connectionId) {
-                try {
-                  await AgentService.deleteConnection(connectionId);
-                  setConnections((prev) => prev.filter((c) => c.id !== connectionId));
-                  showToast(`Disconnected ${sourceAgent.name} and ${targetAgent.name}.`, 'ok');
-                } catch (err: any) {
-                  showToast(err.message || 'Failed to disconnect agents', 'warn');
-                }
-              }
-            },
           },
         });
       }
@@ -1834,7 +2203,7 @@ export const SpaceCanvas: React.FC = () => {
     // Hierarchical designation edges between role zones
     for (const zone of roleZones) {
       if (!zone.parentZoneId) continue;
-      const parent = roleZones.find((candidate) => candidate.id === zone.parentZoneId);
+      const parent = roleZoneById.get(zone.parentZoneId);
       if (!parent) continue;
       nextEdges.push({
         id: `role-hierarchy-${zone.id}`,
@@ -1843,7 +2212,7 @@ export const SpaceCanvas: React.FC = () => {
         target: zone.id,
         targetHandle: 'role-zone-parent',
         type: 'hierarchyEdge',
-        zIndex: CONNECTOR_EDGE_Z,
+        zIndex: HIERARCHY_EDGE_Z,
         selectable: true,
         data: {
           label: `${zone.roleTitle} reports to ${parent.roleTitle}`,
@@ -1862,10 +2231,12 @@ export const SpaceCanvas: React.FC = () => {
       // Reconcile agent nodes to preserve current canvas position and React Flow internals
       const reconciledAgentNodes = agentNodes.map((an) => {
         const prev = prevMap.get(an.id);
+        const isSelected = Boolean((prev as any)?.selected);
         return {
           ...prev,
           ...an,
           position: prev?.position ? { ...prev.position } : an.position,
+          zIndex: isSelected ? AGENT_ACTIVE_Z : (an.zIndex ?? AGENT_NODE_Z),
         };
       });
 
@@ -1878,6 +2249,7 @@ export const SpaceCanvas: React.FC = () => {
           ...prev,
           ...tn,
           position: finalPosition,
+          zIndex: THREAD_NODE_Z,
         };
       });
 
@@ -1890,13 +2262,18 @@ export const SpaceCanvas: React.FC = () => {
           ...prev,
           ...an,
           position: finalPosition,
+          zIndex: THREAD_NODE_Z,
         };
       });
 
       // Generate and reconcile workspace zone room nodes (rendered with zIndex: -1 behind agents)
       const zoneNodes: CanvasNode[] = workspaceZones.map((z) => {
         const prev = prevMap.get(z.id);
-        const finalPosition = prev?.position ? { ...prev.position } : { x: z.x, y: z.y };
+        // Follow the authoritative room geometry unless this node is the one the
+        // user is currently dragging locally. Without this, a room moved in
+        // another browser keeps rendering at its stale node position.
+        const isDraggingThisNode = prev?.dragging === true;
+        const finalPosition = isDraggingThisNode && prev ? { ...prev.position } : { x: z.x, y: z.y };
         const curX = finalPosition.x;
         const curY = finalPosition.y;
 
@@ -1915,7 +2292,7 @@ export const SpaceCanvas: React.FC = () => {
             width: z.width,
             height: z.height,
           },
-          zIndex: -5,
+          zIndex: WORKSPACE_ZONE_Z,
           draggable: true,
           selectable: true,
           data: {
@@ -1927,7 +2304,7 @@ export const SpaceCanvas: React.FC = () => {
             color: z.color,
             shape: z.shape,
             memberAgents,
-            workspaceZoneCount: roleZones.filter((zone) => zone.spaceId === z.id).length,
+            workspaceZoneCount: roleZoneCountBySpace.get(z.id) ?? 0,
             isWorkspaceOpen: activeWorkspaceSpaceId === z.id,
             stockMcps,
             mcpReadiness,
@@ -1950,13 +2327,17 @@ export const SpaceCanvas: React.FC = () => {
       const roleZoneNodes: CanvasNode[] = roleZones.map((zone) => {
         const prev = prevMap.get(zone.id);
         const members = roleZoneAgentListMap.get(zone.id) ?? [];
+        const isDraggingThisNode = prev?.dragging === true;
         return {
           id: zone.id,
           type: 'roleZone',
           dragHandle: '.role-zone-drag-surface',
-          position: prev?.position ? { ...prev.position } : { x: zone.x, y: zone.y },
+          position:
+            isDraggingThisNode && prev
+              ? { ...prev.position }
+              : { x: zone.x, y: zone.y },
           style: { width: zone.width, height: zone.height },
-          zIndex: -2,
+          zIndex: ROLE_ZONE_Z,
           draggable: true,
           selectable: true,
           data: {
@@ -2007,29 +2388,22 @@ export const SpaceCanvas: React.FC = () => {
       if (activeSpace) {
         const panelId = `workspace-panel-${activeSpace.id}`;
         const prevPanel = prevMap.get(panelId);
-        const panelWidth = Math.max(300, Math.min(392, activeSpace.width - 32));
-        const panelHeight = Math.max(200, Math.min(620, activeSpace.height - 112));
-        const maxX = Math.max(8, activeSpace.width - panelWidth - 8);
-        const maxY = Math.max(8, activeSpace.height - panelHeight - 8);
-        const clamp = (value: number, min: number, max: number) =>
-          Math.min(Math.max(value, min), max);
+        const panelWidth = Math.max(340, Math.min(440, activeSpace.width - 32));
+        const panelHeight = Math.max(260, Math.min(680, activeSpace.height - 32));
+
+        // Position on the outer right side of the space with 24px gap so it doesn't cover agents
+        const defaultOuterX = activeSpace.x + activeSpace.width + 24;
+        const defaultOuterY = activeSpace.y;
         const prevPos = prevPanel?.position ?? panelPositions[activeSpace.id];
-        const panelPosition = prevPos
-          ? {
-              x: clamp(prevPos.x, 8, maxX),
-              y: clamp(prevPos.y, 8, maxY),
-            }
-          : { x: maxX, y: Math.min(56, maxY) };
+        const panelPosition = prevPos || { x: defaultOuterX, y: defaultOuterY };
 
         workspacePanelNodes.push({
           id: panelId,
           type: 'workspacePanel',
-          parentId: activeSpace.id,
-          extent: 'parent',
           position: panelPosition,
           style: { width: panelWidth, height: panelHeight },
           dragHandle: '.workspace-panel-header',
-          zIndex: 20,
+          zIndex: 35,
           draggable: true,
           selectable: true,
           deletable: false,
@@ -2050,10 +2424,32 @@ export const SpaceCanvas: React.FC = () => {
         });
       }
 
+      // Animated shimmer skeleton cards for agents currently being deployed/provisioned
+      const skeletonNodes: CanvasNode[] = deployingAgents.map((da) => ({
+        id: da.tempId,
+        type: 'agentSkeleton' as const,
+        position: { x: da.x, y: da.y },
+        draggable: false,
+        selectable: false,
+        deletable: false,
+        connectable: false,
+        zIndex: AGENT_NODE_Z,
+        data: {
+          name: da.name,
+          role: da.role,
+          provider: da.provider,
+          model: da.model,
+          isAvatar: da.isAvatar,
+          zoneColor: da.zoneColor,
+          phase: da.phase,
+        },
+      }));
+
       return [
         ...zoneNodes,
         ...workspacePanelNodes,
         ...roleZoneNodes,
+        ...skeletonNodes,
         ...reconciledAgentNodes,
         ...reconciledThreadNodes,
         ...reconciledAssetsNodes,
@@ -2064,6 +2460,7 @@ export const SpaceCanvas: React.FC = () => {
     agents,
     connections,
     activeRunsMap,
+    activeDelegations,
     expandedThreads,
     visibleAgentThreads,
     expandedAssetsThreads,
@@ -2117,6 +2514,7 @@ export const SpaceCanvas: React.FC = () => {
     configuredKeys,
     handleConnectMcpFromSpace,
     handleRemoveMcpFromSpace,
+    deployingAgents,
     setNodes,
     setEdges,
   ]);
@@ -2134,7 +2532,6 @@ export const SpaceCanvas: React.FC = () => {
             useSpaceStore.getState().setAgentMood(msg.agentId, 'idle');
           }
         }
-        refreshActiveRuns();
       } else if (msg.type === 'node_moved' && msg.agentId) {
         const { posX, posY } = (msg.data as { posX: number; posY: number }) || {};
         if (typeof posX === 'number' && typeof posY === 'number') {
@@ -2143,7 +2540,6 @@ export const SpaceCanvas: React.FC = () => {
       } else if (msg.type === 'cron_tick' && msg.agentId) {
         const { nextRunAt } = (msg.data as { nextRunAt?: string }) || {};
         updateAgentCron(msg.agentId, nextRunAt);
-        refreshActiveRuns();
       } else if (msg.type === 'run_event' && msg.agentId) {
         const evt = msg.data as LiveLogEvent;
         if (activeDrawerAgentIdRef.current === msg.agentId) {
@@ -2164,19 +2560,19 @@ export const SpaceCanvas: React.FC = () => {
       } else if (msg.type === 'run_started' && msg.agentId) {
         useSpaceStore.getState().setAgentMood(msg.agentId, 'working', 'Task in progress');
         refreshSpace();
-        refreshActiveRuns();
       } else if (msg.type === 'run_completed' && msg.agentId) {
         // Keep celebratory smile face for 7.5s, then gracefully return to idle
         useSpaceStore.getState().setAgentMood(msg.agentId, 'completed', (msg.data as any)?.summary || 'Task completed!', 7500);
         refreshSpace();
-        refreshActiveRuns();
       } else if (msg.type === 'run_failed' && msg.agentId) {
         useSpaceStore.getState().setAgentMood(msg.agentId, 'error', (msg.data as any)?.error || 'Task failed', 6000);
         refreshSpace();
-        refreshActiveRuns();
       } else if (msg.type === 'run_completed' || msg.type === 'run_failed') {
         refreshSpace();
-        refreshActiveRuns();
+      } else if (msg.type === 'delegations_active' && Array.isArray(msg.data)) {
+        applyActiveDelegationsSnapshot(msg.data as ActiveDelegationRecord[]);
+      } else if (msg.type === 'active_runs_active' && Array.isArray(msg.data)) {
+        applyActiveRunsSnapshot(msg.data as ActiveRunRecord[]);
       } else if (
         msg.type === 'agent_updated' ||
         msg.type === 'agent_manifest_updated' ||
@@ -2186,11 +2582,116 @@ export const SpaceCanvas: React.FC = () => {
         msg.type === 'agent_cron_jobs_updated'
       ) {
         refreshSpace();
+      } else if (msg.type === 'agent_created' || msg.type === 'agent_deleted') {
+        // Another browser created or deleted an agent — resync the full list
+        refreshSpace();
+      } else if (msg.type === 'nodes_moved' && Array.isArray((msg.data as any)?.positions)) {
+        // Batch node move broadcast from another browser window
+        const positions = (msg.data as any).positions as Array<{ id: string; posX: number; posY: number }>;
+        for (const p of positions) {
+          if (typeof p.posX === 'number' && typeof p.posY === 'number') {
+            updateNodePositionLocally(p.id, p.posX, p.posY);
+          }
+        }
+      } else if (msg.type === 'workspace_space_created') {
+        // Local-only upsert: calling addWorkspaceZone here would POST again and
+        // create an infinite create/broadcast loop between every open browser.
+        const zone = msg.data as GroupWorkspaceZone;
+        if (zone?.id) {
+          const store = useSpaceStore.getState();
+          store.setWorkspaceZones([
+            ...store.workspaceZones.filter((z) => z.id !== zone.id),
+            zone,
+          ]);
+        }
+      } else if (msg.type === 'workspace_spaces_batch' && Array.isArray(msg.data)) {
+        useSpaceStore.getState().setWorkspaceZones(msg.data as GroupWorkspaceZone[]);
+      } else if (msg.type === 'workspace_space_updated') {
+        // Local-only merge: updateWorkspaceZone would PATCH the server again and
+        // bounce the update back forever.
+        const updated = msg.data as GroupWorkspaceZone;
+        if (updated?.id) {
+          const store = useSpaceStore.getState();
+          store.setWorkspaceZones(
+            store.workspaceZones.map((z) =>
+              z.id === updated.id ? { ...z, ...updated } : z,
+            ),
+          );
+        }
+      } else if (msg.type === 'workspace_space_deleted') {
+        // Local-only removal for the same reason.
+        const id = (msg.data as any)?.id;
+        if (id) {
+          const store = useSpaceStore.getState();
+          store.setWorkspaceZones(store.workspaceZones.filter((z) => z.id !== id));
+        }
+      } else if (msg.type === 'zone_created') {
+        const zone = msg.data as RoleZone;
+        if (zone?.id) {
+          const cur = useSpaceStore.getState().roleZones;
+          setRoleZones([...cur.filter((z) => z.id !== zone.id), zone]);
+        }
+      } else if (msg.type === 'zone_updated') {
+        const { id, ...updates } = (msg.data as any) || {};
+        if (id) {
+          const cur = useSpaceStore.getState().roleZones;
+          setRoleZones(cur.map((z) => z.id === id ? { ...z, ...updates } as RoleZone : z));
+        }
+      } else if (msg.type === 'zone_deleted') {
+        const id = (msg.data as any)?.id;
+        if (id) {
+          const cur = useSpaceStore.getState().roleZones;
+          setRoleZones(cur.filter((z) => z.id !== id));
+        }
+      } else if (msg.type === 'agent_connection_created') {
+        const conn = msg.data as AgentConnectionRecord;
+        if (conn?.id) setConnections((prev) => [...prev.filter((c) => c.id !== conn.id), conn]);
+      } else if (msg.type === 'agent_connection_deleted') {
+        const data = (msg.data as {
+          id?: string;
+          sourceAgentId?: string;
+          targetAgentId?: string;
+        }) || {};
+        if (data.id) {
+          setConnections((prev) => prev.filter((c) => c.id !== data.id));
+        } else if (data.sourceAgentId && data.targetAgentId) {
+          const { sourceAgentId, targetAgentId } = data;
+          setConnections((prev) =>
+            prev.filter(
+              (c) =>
+                !(
+                  (c.source_agent_id === sourceAgentId && c.target_agent_id === targetAgentId) ||
+                  (c.source_agent_id === targetAgentId && c.target_agent_id === sourceAgentId)
+                ),
+            ),
+          );
+        }
+      } else if (msg.type === 'canvas_viewport_updated') {
+        // Another browser moved the viewport. Ignore it while this user is
+        // actively panning/zooming, and ignore our own broadcast echo.
+        const vp = msg.data as { x: number; y: number; zoom: number } | null;
+        if (!vp || viewportInteractingRef.current) return;
+        const current = useSpaceStore.getState().canvasViewport;
+        if (current && viewportsEqual(current, vp)) return;
+        applyViewportFromRemote(vp, true);
       }
     });
 
     return cleanupWs;
-  }, [refreshSpace, refreshActiveRuns, updateAgentStatus, updateNodePositionLocally, updateAgentCron]);
+  }, [refreshSpace, applyActiveRunsSnapshot, applyActiveDelegationsSnapshot, updateAgentStatus, updateNodePositionLocally, updateAgentCron, setRoleZones, applyViewportFromRemote]);
+
+  // 5. Deployment guard — warn before tab close/refresh when a company is deploying
+  useEffect(() => {
+    if (!isCompanyDeploying) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Chrome requires returnValue to be set (legacy)
+      e.returnValue = 'A company deployment is in progress. Leaving now will abort it and may cause incomplete data. Are you sure?';
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isCompanyDeploying]);
 
   const handlePaneContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent) => {
@@ -2296,7 +2797,7 @@ export const SpaceCanvas: React.FC = () => {
    * - Positions are persisted cleanly to backend SQLite and localStorage.
    */
   const handleAutoArrange = useCallback(async () => {
-    if (!rfInstance) return;
+    if (!rfInstance || companyDeployLockRef.current) return;
 
     const currentZones = useSpaceStore.getState().workspaceZones;
     const currentAgents = useSpaceStore.getState().agents;
@@ -2440,6 +2941,30 @@ export const SpaceCanvas: React.FC = () => {
 
   const handleSpawnTemplate = useCallback(
     async (template: AgentTemplate, flowX: number, flowY: number) => {
+      const currentSpaces = useSpaceStore.getState().workspaceZones;
+      const containingSpace = currentSpaces.find((space) =>
+        zoneContainsPoint(space, flowX, flowY),
+      );
+      const isAvatar = Boolean(containingSpace);
+      const zoneColor = containingSpace?.color;
+
+      const tempId = `deploying-single-${template.id}-${Date.now()}`;
+      setDeployingAgents((prev) => [
+        ...prev,
+        {
+          tempId,
+          name: template.name,
+          role: template.role || null,
+          provider: template.provider,
+          model: template.default_model,
+          x: Math.round(flowX),
+          y: Math.round(flowY),
+          isAvatar,
+          zoneColor,
+          phase: 'provisioning',
+        },
+      ]);
+
       try {
         const createdAgent = await AgentService.createAgent({
           name: template.name,
@@ -2470,6 +2995,10 @@ export const SpaceCanvas: React.FC = () => {
           ).catch(() => {});
         }
 
+        setDeployingAgents((prev) =>
+          prev.map((d) => (d.tempId === tempId ? { ...d, phase: 'attaching_mcps' } : d)),
+        );
+
         // Auto-attach recommended MCPs
         if (template.recommended_mcps && template.recommended_mcps.length > 0) {
           for (const mcpName of template.recommended_mcps) {
@@ -2483,6 +3012,10 @@ export const SpaceCanvas: React.FC = () => {
             }).catch(() => {});
           }
         }
+
+        setDeployingAgents((prev) =>
+          prev.map((d) => (d.tempId === tempId ? { ...d, phase: 'attaching_skills' } : d)),
+        );
 
         // Auto-attach recommended Skills
         if (template.recommended_skills && template.recommended_skills.length > 0) {
@@ -2499,7 +3032,9 @@ export const SpaceCanvas: React.FC = () => {
 
         refreshSpace();
       } catch (err) {
-        alert(err instanceof Error ? err.message : 'Failed to spawn enterprise agent');
+        showToast(err instanceof Error ? err.message : 'Failed to spawn enterprise agent', 'warn');
+      } finally {
+        setDeployingAgents((prev) => prev.filter((d) => d.tempId !== tempId));
       }
     },
     [refreshSpace, stockMcps, stockSkills],
@@ -2642,6 +3177,357 @@ export const SpaceCanvas: React.FC = () => {
     [addRoleZonesBatch, showToast],
   );
 
+  /** Create an entire Company (Space + Hierarchical Zones + Placed Real Agents) */
+  const spawnCompanyInSpace = useCallback(
+    (company: CompanyPreset, scaleKey: CompanyScale = 'mid', flowX?: number, flowY?: number): boolean => {
+      if (companyDeployLockRef.current) {
+        showToast(
+          'A company deployment is already running. Wait for it to finish before deploying another.',
+          'warn',
+        );
+        return false;
+      }
+      const store = useSpaceStore.getState();
+      const scaleConfig = company.scales[scaleKey] || company.scales.mid;
+
+      // Pre-compute company layout with origin {0,0} to determine exact dynamic space dimensions
+      const initialLayout = layoutCompany(company, scaleKey, { x: 0, y: 0 });
+      const spaceWidth = Math.round(initialLayout.requiredWidth);
+      const spaceHeight = Math.round(initialLayout.requiredHeight);
+
+      let targetOriginX: number;
+      let targetOriginY: number;
+
+      if (typeof flowX === 'number' && typeof flowY === 'number') {
+        targetOriginX = Math.round(flowX - spaceWidth / 2);
+        targetOriginY = Math.round(flowY - spaceHeight / 2);
+      } else {
+        const center = getCanvasCenterScreenPoint();
+        const flow = rfInstance?.screenToFlowPosition(center);
+        targetOriginX = Math.round((flow?.x ?? 200) - spaceWidth / 2);
+        targetOriginY = Math.round((flow?.y ?? 150) - spaceHeight / 2);
+      }
+
+      // 1. Create the unified Office Space on canvas with dynamic width and height
+      const createdSpace = store.addWorkspaceZone({
+        name: scaleConfig.space.name,
+        description: scaleConfig.space.description,
+        workflowPrompt: scaleConfig.space.workflowPrompt,
+        workflowInstructions: scaleConfig.space.workflowInstructions,
+        responsibilities: scaleConfig.space.responsibilities,
+        delegationPolicy: scaleConfig.space.delegationPolicy,
+        x: targetOriginX,
+        y: targetOriginY,
+        width: spaceWidth,
+        height: spaceHeight,
+        color: scaleConfig.space.color,
+        shape: 'rectangle',
+      });
+
+      const completeCompanyWorkflow = [
+        scaleConfig.space.workflowPrompt || '',
+        scaleConfig.space.workflowInstructions ? `\n### STEP-BY-STEP OPERATIONAL PIPELINE:\n${scaleConfig.space.workflowInstructions}` : '',
+        scaleConfig.space.responsibilities ? `\n### ORGANIZATIONAL RESPONSIBILITIES:\n${scaleConfig.space.responsibilities}` : '',
+      ].filter(Boolean).join('\n');
+
+      if (completeCompanyWorkflow) {
+        void SpaceService.saveWorkspacePrompt(
+          createdSpace.id,
+          createdSpace.name,
+          completeCompanyWorkflow,
+        ).catch(() => {});
+      }
+
+      // 2. Compute placed zones and placed agent positions
+      const layout = layoutCompany(company, scaleKey, { x: createdSpace.x, y: createdSpace.y });
+
+      // 3. Batch add all role zones belonging to this space
+      const zonesToCreate = layout.zones.map((zone) => ({
+        ...zone,
+        spaceId: createdSpace.id,
+        delegationPolicy: zone.delegationPolicy || 'auto',
+        x: Math.round(zone.x),
+        y: Math.round(zone.y),
+        width: Math.round(zone.width),
+        height: Math.round(zone.height),
+      }));
+      addRoleZonesBatch(zonesToCreate);
+
+      // 4. Create template mapping and immediately populate shimmer skeleton cards for all agents
+      const templateMap = new Map<string, AgentTemplate>();
+      for (const t of ENTERPRISE_AGENT_TEMPLATES) {
+        templateMap.set(t.id, t);
+      }
+
+      const companySkeletonList = layout.agents.map((pa, idx) => {
+        const tmpl =
+          templateMap.get(pa.agentTemplateId) ||
+          ENTERPRISE_AGENT_TEMPLATES.find(
+            (t) => (pa.agentName && t.name.toLowerCase() === pa.agentName.toLowerCase()) || t.role === pa.roleTitle,
+          ) ||
+          ENTERPRISE_AGENT_TEMPLATES[0];
+
+        const targetZone = layout.zones.find((z) => z.id === pa.zoneId);
+
+        return {
+          tempId: `deploying-comp-${createdSpace.id}-${idx}`,
+          name: pa.agentName || pa.roleTitle || 'Specialist',
+          role: pa.roleTitle || 'Team Member',
+          provider: tmpl?.provider || 'openai',
+          model: tmpl?.default_model || 'gpt-4o',
+          x: Math.round(pa.x),
+          y: Math.round(pa.y),
+          zoneId: pa.zoneId,
+          isAvatar: true,
+          zoneColor: targetZone?.color || scaleConfig.space.color || '#38bdf8',
+          phase: 'provisioning' as const,
+        };
+      });
+
+      setDeployingAgents((prev) => [...prev, ...companySkeletonList]);
+
+      // Hold the lock for the whole async deployment. Set before the first
+      // await so a double-click cannot slip a second company past the guard.
+      companyDeployLockRef.current = true;
+      setIsCompanyDeploying(true);
+
+      // Smoothly frame the company in the viewport so the user watches it assemble
+      if (rfInstance) {
+        rfInstance.fitBounds(
+          {
+            x: createdSpace.x - 40,
+            y: createdSpace.y - 40,
+            width: spaceWidth + 80,
+            height: spaceHeight + 80,
+          },
+          { duration: 450 },
+        );
+      }
+
+      void (async () => {
+        // Device capability adaptive throttle: adjust paced interval based on hardware cores
+        const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
+        const pacingDelayMs = cores >= 8 ? 200 : cores >= 4 ? 350 : 550;
+
+        const totalAgents = layout.agents.length;
+        setCompanyDeployment({
+          companyName: company.name,
+          total: totalAgents,
+          current: 0,
+          currentAgentName: 'Initializing deployment...',
+          currentRoleTitle: 'Configuring space & zones',
+          phase: 'spawning',
+        });
+
+        const spawnedAgentsList: Array<{
+          createdAgent: { id: string; name: string };
+          placedAgent: PlacedCompanyAgent;
+          targetZone?: PlacedCompanyZone;
+        }> = [];
+
+        try {
+          let agentIndex = 0;
+          for (const placedAgent of layout.agents) {
+            const currentTempId = `deploying-comp-${createdSpace.id}-${agentIndex}`;
+            agentIndex++;
+            const agentName = placedAgent.agentName || placedAgent.roleTitle || 'Specialist';
+            const roleTitle = placedAgent.roleTitle || 'Team Member';
+
+            setCompanyDeployment({
+              companyName: company.name,
+              total: totalAgents,
+              current: agentIndex,
+              currentAgentName: agentName,
+              currentRoleTitle: roleTitle,
+              phase: 'spawning',
+            });
+
+            setDeployingAgents((prev) =>
+              prev.map((d) => (d.tempId === currentTempId ? { ...d, phase: 'provisioning' } : d)),
+            );
+
+            const template =
+              templateMap.get(placedAgent.agentTemplateId) ||
+              ENTERPRISE_AGENT_TEMPLATES.find(
+                (t) => (placedAgent.agentName && t.name.toLowerCase() === placedAgent.agentName.toLowerCase()) || t.role === placedAgent.roleTitle,
+              ) ||
+              ENTERPRISE_AGENT_TEMPLATES[0];
+
+            const targetZone = layout.zones.find((z) => z.id === placedAgent.zoneId);
+            const parentZone = targetZone?.parentZoneId ? layout.zones.find((z) => z.id === targetZone.parentZoneId) : null;
+            const level = targetZone ? targetZone.level : 2;
+
+            const tailoredSystemPrompt = buildCompanyAgentPrompt({
+              company,
+              scale: scaleKey,
+              agentName,
+              roleTitle,
+              level,
+              zoneName: targetZone ? targetZone.name : 'Unassigned Zone',
+              zoneResponsibilities: targetZone?.responsibilities,
+              zoneInstructions: targetZone?.workflowInstructions,
+              parentZoneName: parentZone?.name,
+              parentZoneRoleTitle: parentZone?.roleTitle,
+              baseSystemPrompt: template.system_prompt,
+            });
+
+            const createdAgent = await AgentService.createAgent({
+              name: agentName,
+              model: template.default_model,
+              provider: template.provider,
+              system_prompt: tailoredSystemPrompt,
+              cron_schedule: template.suggested_cron,
+              cron_enabled: template.suggested_cron ? 1 : 0,
+              pos_x: Math.round(placedAgent.x),
+              pos_y: Math.round(placedAgent.y),
+              policies: template.policies ? JSON.stringify(template.policies) : '[]',
+              role: placedAgent.roleTitle || template.role || null,
+              specialty: template.specialty || null,
+              description: template.description || null,
+            });
+
+            spawnedAgentsList.push({ createdAgent, placedAgent, targetZone });
+
+            // Associate with created space
+            void SpaceService.updateNodePosition(
+              createdAgent.id,
+              Math.round(placedAgent.x),
+              Math.round(placedAgent.y),
+              createdSpace.id,
+            ).catch(() => {});
+
+            setDeployingAgents((prev) =>
+              prev.map((d) => (d.tempId === currentTempId ? { ...d, phase: 'attaching_mcps' } : d)),
+            );
+
+            // Auto-attach recommended MCPs
+            if (template.recommended_mcps && template.recommended_mcps.length > 0) {
+              for (const mcpName of template.recommended_mcps) {
+                const stockMcp = resolveStockMcp(stockMcps, mcpName);
+                if (!stockMcp) continue;
+                await AgentService.addMcp(createdAgent.id, {
+                  mcp_name: stockMcp.name,
+                  label: stockMcp.label,
+                  config: { command: stockMcp.command, args: stockMcp.args },
+                  allowUnconfigured: true,
+                }).catch(() => {});
+              }
+            }
+
+            setDeployingAgents((prev) =>
+              prev.map((d) => (d.tempId === currentTempId ? { ...d, phase: 'attaching_skills' } : d)),
+            );
+
+            // Auto-attach recommended Skills
+            if (template.recommended_skills && template.recommended_skills.length > 0) {
+              for (const skillKey of template.recommended_skills) {
+                const attachment = resolveRecommendedSkillAttachment(
+                  skillKey,
+                  stockSkills,
+                  template.name,
+                  template.role,
+                );
+                await AgentService.addSkill(createdAgent.id, attachment).catch(() => {});
+              }
+            }
+
+            // Real agent now exists in database, remove skeleton card
+            setDeployingAgents((prev) => prev.filter((d) => d.tempId !== currentTempId));
+
+            // Staggered pacing pause to protect lower-spec devices and keep UI responsive
+            await new Promise((resolve) => setTimeout(resolve, pacingDelayMs));
+            refreshSpace();
+          }
+
+          // Wire automatic hierarchical connections
+          setCompanyDeployment({
+            companyName: company.name,
+            total: totalAgents,
+            current: totalAgents,
+            currentAgentName: 'Wiring organizational hierarchy & connections...',
+            currentRoleTitle: 'Connecting reporting lines',
+            phase: 'spawning',
+          });
+
+          const connectedPairs = new Set<string>();
+          const addConn = async (idA: string, idB: string) => {
+            if (!idA || !idB || idA === idB) return;
+            const key = idA < idB ? `${idA}:${idB}` : `${idB}:${idA}`;
+            if (connectedPairs.has(key)) return;
+            connectedPairs.add(key);
+            await AgentService.createConnection(idA, idB).catch(() => {});
+          };
+
+          for (const item of spawnedAgentsList) {
+            // 1. Connect child zone agents to parent zone manager agents
+            if (item.targetZone?.parentZoneId) {
+              const managers = spawnedAgentsList.filter(
+                (s) => s.targetZone?.id === item.targetZone?.parentZoneId,
+              );
+              for (const mgr of managers) {
+                await addConn(mgr.createdAgent.id, item.createdAgent.id);
+              }
+            }
+
+            // 2. Connect peers in the same zone (if small squad)
+            const zonePeers = spawnedAgentsList.filter(
+              (s) => s.targetZone?.id === item.targetZone?.id && s.createdAgent.id !== item.createdAgent.id,
+            );
+            if (zonePeers.length <= 4) {
+              for (const peer of zonePeers) {
+                await addConn(item.createdAgent.id, peer.createdAgent.id);
+              }
+            }
+
+            // 3. Connect Executive (Level 0) agents to each other
+            if (item.targetZone?.level === 0) {
+              const execPeers = spawnedAgentsList.filter(
+                (s) => s.targetZone?.level === 0 && s.createdAgent.id !== item.createdAgent.id,
+              );
+              for (const exec of execPeers) {
+                await addConn(item.createdAgent.id, exec.createdAgent.id);
+              }
+            }
+          }
+
+          const freshConns = await AgentService.fetchConnections().catch(() => []);
+          setConnections(freshConns);
+
+          setCompanyDeployment({
+            companyName: company.name,
+            total: totalAgents,
+            current: totalAgents,
+            currentAgentName: 'All agents ready',
+            currentRoleTitle: 'Deployment completed',
+            phase: 'completed',
+          });
+
+          setTimeout(() => {
+            setCompanyDeployment(null);
+          }, 3200);
+
+          refreshSpace();
+        } catch (err) {
+          console.error('[Company] Error spawning agents:', err);
+          setCompanyDeployment(null);
+        } finally {
+          companyDeployLockRef.current = false;
+          setIsCompanyDeploying(false);
+          setDeployingAgents((prev) =>
+            prev.filter((d) => !d.tempId.startsWith(`deploying-comp-${createdSpace.id}`)),
+          );
+        }
+      })();
+
+      showToast(
+        `Deploying "${company.name}" (${scaleKey.toUpperCase()} Scale: ${layout.zones.length} Zones, ${layout.agents.length} Real Agents)...`,
+        'ok',
+      );
+      return true;
+    },
+    [rfInstance, addRoleZonesBatch, showToast, refreshSpace, stockMcps, stockSkills],
+  );
+
   // ── Library: drop an agent template onto empty canvas ────────────────────
   // Declared after handleSpawnTemplate so the dependency array resolves it.
   const handlePaneDrop = useCallback(
@@ -2776,6 +3662,16 @@ export const SpaceCanvas: React.FC = () => {
         spawnHierarchicalChainInSpace(payload.hierarchicalChainPreset, flow?.x, flow?.y);
         return;
       }
+
+      if (payload.kind === 'company' && payload.companyPreset) {
+        event.preventDefault();
+        event.stopPropagation();
+        const clientX = 'clientX' in event ? event.clientX : 0;
+        const clientY = 'clientY' in event ? event.clientY : 0;
+        const flow = rfInstance?.screenToFlowPosition({ x: clientX, y: clientY });
+        spawnCompanyInSpace(payload.companyPreset, payload.companyScale || 'mid', flow?.x, flow?.y);
+        return;
+      }
     },
     [
       rfInstance,
@@ -2787,6 +3683,7 @@ export const SpaceCanvas: React.FC = () => {
       alignRoleZoneMembers,
       spawnRoleZoneInSpace,
       spawnHierarchicalChainInSpace,
+      spawnCompanyInSpace,
     ],
   );
 
@@ -2795,11 +3692,8 @@ export const SpaceCanvas: React.FC = () => {
     const handleSpawnZoneEvent = (e: Event) => {
       const preset = (e as CustomEvent<WorkspaceZonePreset>).detail;
       if (!preset) return;
-      const el = document.querySelector('.react-flow__viewport');
-      const rect = el?.getBoundingClientRect();
-      const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-      const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-      const flow = rfInstance?.screenToFlowPosition({ x: cx, y: cy });
+      const center = getCanvasCenterScreenPoint();
+      const flow = rfInstance?.screenToFlowPosition(center);
       const createdZone = addWorkspaceZone({
         name: preset.name,
         description: preset.description,
@@ -2847,11 +3741,8 @@ export const SpaceCanvas: React.FC = () => {
     const handleSpawnRoleZoneEvent = (e: Event) => {
       const preset = (e as CustomEvent<RoleZonePreset>).detail;
       if (!preset) return;
-      const el = document.querySelector('.react-flow__viewport');
-      const rect = el?.getBoundingClientRect();
-      const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-      const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-      const flow = rfInstance?.screenToFlowPosition({ x: cx, y: cy });
+      const center = getCanvasCenterScreenPoint();
+      const flow = rfInstance?.screenToFlowPosition(center);
       const store = useSpaceStore.getState();
       const centerX = flow?.x ?? 300;
       const centerY = flow?.y ?? 220;
@@ -2874,12 +3765,14 @@ export const SpaceCanvas: React.FC = () => {
     const handleSpawnHierarchicalChainEvent = (e: Event) => {
       const preset = (e as CustomEvent<{ chain?: HierarchicalChainPreset }>).detail?.chain;
       if (!preset) return;
-      const el = document.querySelector('.react-flow__viewport');
-      const rect = el?.getBoundingClientRect();
-      const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-      const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-      const flow = rfInstance?.screenToFlowPosition({ x: cx, y: cy });
+      const center = getCanvasCenterScreenPoint();
+      const flow = rfInstance?.screenToFlowPosition(center);
       spawnHierarchicalChainInSpace(preset, flow?.x, flow?.y);
+    };
+    const handleSpawnCompanyEvent = (e: Event) => {
+      const detail = (e as CustomEvent<{ company: CompanyPreset; scale?: CompanyScale }>).detail;
+      if (!detail?.company) return;
+      spawnCompanyInSpace(detail.company, detail.scale || 'mid');
     };
     const handleOpenWorkspacePanel = () => {
       const firstSpace = useSpaceStore.getState().workspaceZones[0];
@@ -2895,24 +3788,23 @@ export const SpaceCanvas: React.FC = () => {
     };
     window.addEventListener('canvas:spawn-role-zone', handleSpawnRoleZoneEvent);
     window.addEventListener('canvas:spawn-hierarchical-chain', handleSpawnHierarchicalChainEvent);
+    window.addEventListener('canvas:spawn-company', handleSpawnCompanyEvent);
     window.addEventListener('canvas:open-workspace-panel', handleOpenWorkspacePanel);
     window.addEventListener('canvas:open-space-workspace', handleOpenSpaceWorkspaceEvent);
     return () => {
       window.removeEventListener('canvas:spawn-role-zone', handleSpawnRoleZoneEvent);
       window.removeEventListener('canvas:spawn-hierarchical-chain', handleSpawnHierarchicalChainEvent);
+      window.removeEventListener('canvas:spawn-company', handleSpawnCompanyEvent);
       window.removeEventListener('canvas:open-workspace-panel', handleOpenWorkspacePanel);
       window.removeEventListener('canvas:open-space-workspace', handleOpenSpaceWorkspaceEvent);
     };
-  }, [handleOpenWorkspace, rfInstance, spawnRoleZoneInSpace, spawnHierarchicalChainInSpace, showToast]);
+  }, [handleOpenWorkspace, rfInstance, spawnRoleZoneInSpace, spawnHierarchicalChainInSpace, spawnCompanyInSpace, showToast]);
 
   /** Double-click spawn from the library panel: land near the viewport centre. */
   const handleSpawnTemplateFromLibrary = useCallback(
     (template: AgentTemplate) => {
-      const el = document.querySelector('.react-flow__viewport');
-      const rect = el?.getBoundingClientRect();
-      const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-      const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-      const flow = rfInstance?.screenToFlowPosition({ x: cx, y: cy });
+      const center = getCanvasCenterScreenPoint();
+      const flow = rfInstance?.screenToFlowPosition(center);
       handleSpawnTemplate(template, flow?.x ?? 300, flow?.y ?? 220);
     },
     [rfInstance, handleSpawnTemplate],
@@ -3163,11 +4055,15 @@ export const SpaceCanvas: React.FC = () => {
           const memberAgents = store.agents.filter((a) =>
             isAgentInZone(a.pos_x, a.pos_y, roleZone.x, roleZone.y, roleZone.width, roleZone.height),
           );
-          for (const m of memberAgents) {
-            const nextAX = Math.round(m.pos_x + dx);
-            const nextAY = Math.round(m.pos_y + dy);
-            store.updateNodePositionLocally(m.id, nextAX, nextAY);
-            SpaceService.updateNodePosition(m.id, nextAX, nextAY, containingSpace?.id ?? null);
+          if (memberAgents.length > 0) {
+            const deltas = memberAgents.map((m) => ({
+              id: m.id,
+              posX: Math.round(m.pos_x + dx),
+              posY: Math.round(m.pos_y + dy),
+              spaceId: containingSpace?.id ?? null,
+            }));
+            for (const d of deltas) store.updateNodePositionLocally(d.id, d.posX, d.posY);
+            CanvasPositionSync.queueNodePositionsBatch(deltas, true);
           }
         }
 
@@ -3215,29 +4111,41 @@ export const SpaceCanvas: React.FC = () => {
       }
 
       // ── Dragging an entire Workspace Room ────────────────────────────────
-      // Move all member agents along with the room so they stay securely inside
+      // Members and role zones are translated incrementally by the drag loop in
+      // the store. This handler is the fallback flusher: persist their *current*
+      // coordinates instead of applying the room delta a second time.
       if (targetZone) {
-        const dx = position.x - targetZone.x;
-        const dy = position.y - targetZone.y;
-        store.updateWorkspaceZone(id, { x: Math.round(position.x), y: Math.round(position.y) });
+        const finalX = Math.round(position.x);
+        const finalY = Math.round(position.y);
+        if (Math.round(targetZone.x) !== finalX || Math.round(targetZone.y) !== finalY) {
+          store.updateWorkspaceZone(id, { x: finalX, y: finalY });
+        }
 
-        if (dx !== 0 || dy !== 0) {
-          const memberAgents = store.agents.filter((a) =>
-            isAgentInZone(a.pos_x, a.pos_y, targetZone.x, targetZone.y, targetZone.width, targetZone.height)
+        const memberAgents = store.agents.filter((a) =>
+          isAgentInZone(a.pos_x, a.pos_y, finalX, finalY, targetZone.width, targetZone.height),
+        );
+        if (memberAgents.length > 0) {
+          CanvasPositionSync.queueNodePositionsBatch(
+            memberAgents.map((m) => ({
+              id: m.id,
+              posX: Math.round(m.pos_x),
+              posY: Math.round(m.pos_y),
+              spaceId: targetZone.id,
+            })),
+            true,
           );
-          for (const m of memberAgents) {
-            const nextX = Math.round(m.pos_x + dx);
-            const nextY = Math.round(m.pos_y + dy);
-            store.updateNodePositionLocally(m.id, nextX, nextY);
-            SpaceService.updateNodePosition(m.id, nextX, nextY, targetZone.id);
-          }
+        }
 
-          // Translate all hierarchical role zones belonging to this space
-          const containedRoleZones = store.roleZones.filter((rz) => rz.spaceId === targetZone.id);
-          for (const rz of containedRoleZones) {
-            const nextX = Math.round(rz.x + dx);
-            const nextY = Math.round(rz.y + dy);
-            store.updateRoleZone(rz.id, { x: nextX, y: nextY });
+        const finalSpace = {
+          id: targetZone.id,
+          x: finalX,
+          y: finalY,
+          width: targetZone.width,
+          height: targetZone.height,
+        };
+        for (const rz of store.roleZones) {
+          if (roleZoneBelongsToSpace(rz, finalSpace)) {
+            store.updateRoleZone(rz.id, { x: Math.round(rz.x), y: Math.round(rz.y) });
           }
         }
         return;
@@ -3248,13 +4156,10 @@ export const SpaceCanvas: React.FC = () => {
       const containingSpace = zones.find((space) =>
         zoneContainsPoint(space, position.x, position.y),
       );
-      store.updateNodePositionLocally(id, Math.round(position.x), Math.round(position.y));
-      SpaceService.updateNodePosition(
-        id,
-        Math.round(position.x),
-        Math.round(position.y),
-        containingSpace?.id ?? null,
-      );
+      const posX = Math.round(position.x);
+      const posY = Math.round(position.y);
+      store.updateNodePositionLocally(id, posX, posY);
+      CanvasPositionSync.queueNodePosition(id, posX, posY, containingSpace?.id ?? null, true);
     },
     []
   );
@@ -3304,9 +4209,22 @@ export const SpaceCanvas: React.FC = () => {
             instance.fitView({ padding: 0.18, duration: 0 });
           }
         }}
-        onMoveEnd={(_event, viewport) =>
-          useSpaceStore.getState().setCanvasViewport(viewport)
-        }
+        onMoveStart={() => {
+          viewportInteractingRef.current = true;
+        }}
+        onMoveEnd={(_event, viewport) => {
+          viewportInteractingRef.current = false;
+          const next = { x: viewport.x, y: viewport.y, zoom: viewport.zoom };
+          const previous = useSpaceStore.getState().canvasViewport;
+          // Programmatic viewport changes (remote sync, restore, fit) end with a
+          // value identical to what is already in the store. Persisting those
+          // would rebroadcast them and make browsers fight each other forever.
+          if (previous && viewportsEqual(previous, next)) return;
+          useSpaceStore.getState().setCanvasViewport(next);
+          if (!viewportReadyRef.current) return;
+          CanvasPositionSync.queueViewportUpdate(next);
+          markCanvasViewportPersisted();
+        }}
         onPaneContextMenu={handlePaneContextMenu}
         onDragOver={(e) => {
           if (isLibDrag(e.dataTransfer)) {
@@ -3319,9 +4237,15 @@ export const SpaceCanvas: React.FC = () => {
         onDrop={handlePaneDrop}
         minZoom={0.2}
         maxZoom={2.5}
-        panOnDrag={true}
-        zoomOnPinch={true}
+        nodesDraggable={!isCompanyDeploying}
+        nodesConnectable={!isCompanyDeploying}
+        elementsSelectable={!isCompanyDeploying}
+        zoomOnScroll={!isCompanyDeploying}
+        zoomOnPinch={!isCompanyDeploying}
+        panOnDrag={!isCompanyDeploying}
+        panOnScroll={!isCompanyDeploying}
         preventScrolling={true}
+        onlyRenderVisibleElements={false}
       >
         <Background variant={BackgroundVariant.Lines} gap={36} size={1} color={gridLineColor} />
         <Controls showInteractive={false} position="bottom-right" />
@@ -3340,7 +4264,51 @@ export const SpaceCanvas: React.FC = () => {
         onSpawnTemplate={handleSpawnTemplateFromLibrary}
         connectingMcpName={connectingMcpName}
         roleZones={roleZones}
+        isDeployingCompany={isCompanyDeploying}
       />
+
+      {/* Live Enterprise Company Deployment Progress Banner */}
+      {companyDeployment && (
+        <div className="company-deployment-banner" role="status">
+          <div className="company-deployment-content">
+            <div className="company-deployment-header">
+              <div className="company-deployment-title-wrap">
+                {companyDeployment.phase === 'completed' ? (
+                  <CheckCircle2 size={16} className="company-deployment-icon completed" />
+                ) : (
+                  <Loader2 size={16} className="company-deployment-icon spinning" />
+                )}
+                <span className="company-deployment-name">{companyDeployment.companyName}</span>
+              </div>
+              <span className="company-deployment-count">
+                {companyDeployment.current} / {companyDeployment.total} Agents
+              </span>
+            </div>
+
+            <div className="company-deployment-progress-track">
+              <div
+                className={`company-deployment-progress-fill ${companyDeployment.phase === 'completed' ? 'completed' : ''}`}
+                style={{
+                  width: `${Math.round((companyDeployment.current / Math.max(1, companyDeployment.total)) * 100)}%`,
+                }}
+              />
+            </div>
+
+            <div className="company-deployment-detail">
+              <span className="company-deployment-agent-name">{companyDeployment.currentAgentName}</span>
+              <span className="company-deployment-role-title">({companyDeployment.currentRoleTitle})</span>
+            </div>
+
+            {/* ⚠️ Data-loss warning — only shown while actively spawning */}
+            {companyDeployment.phase !== 'completed' && (
+              <div className="company-deployment-data-loss-warning" role="alert">
+                <AlertTriangle size={11} style={{ flexShrink: 0 }} />
+                <span>Draft in progress — do not close or refresh this tab to avoid data loss.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Attach feedback */}
       {toast && (
@@ -3353,53 +4321,73 @@ export const SpaceCanvas: React.FC = () => {
       )}
 
       {/* Destructive confirmation (replaces window.confirm) */}
-      <ConfirmDialog
-        isOpen={pendingDeleteAgentId !== null}
-        tone="danger"
-        title="Remove agent from space"
-        confirmLabel="Remove agent"
-        message={
-          <>
-            <strong>{agents.find((a) => a.id === pendingDeleteAgentId)?.name ?? 'This agent'}</strong> will be
-            permanently deleted, along with its run history, chat sessions and attached MCPs and skills.
-            This cannot be undone.
-          </>
-        }
-        onConfirm={confirmDeleteAgent}
-        onCancel={cancelDeleteAgent}
-      />
+      <LazyMount open={pendingDeleteAgentId !== null}>
+        <ConfirmDialog
+          isOpen={pendingDeleteAgentId !== null}
+          tone="danger"
+          title="Remove agent from space"
+          confirmLabel="Remove agent"
+          message={
+            <>
+              <strong>{agents.find((a) => a.id === pendingDeleteAgentId)?.name ?? 'This agent'}</strong> will be
+              permanently deleted, along with its run history, chat sessions and attached MCPs and skills.
+              This cannot be undone.
+            </>
+          }
+          onConfirm={confirmDeleteAgent}
+          onCancel={cancelDeleteAgent}
+        />
+      </LazyMount>
 
-      <ConfirmDialog
-        isOpen={pendingDeleteRoleZoneId !== null}
-        tone="danger"
-        title="Delete designation zone"
-        confirmLabel="Delete zone"
-        message={
-          <>
-            <strong>{roleZones.find((z) => z.id === pendingDeleteRoleZoneId)?.roleTitle ?? 'This zone'}</strong>{' '}
-            will be removed from its Space. Agents stay where they are and lose this designation and reporting
-            line. This cannot be undone.
-          </>
-        }
-        onConfirm={() => {
-          if (pendingDeleteRoleZoneId) removeRoleZone(pendingDeleteRoleZoneId);
-          setPendingDeleteRoleZoneId(null);
-        }}
-        onCancel={() => setPendingDeleteRoleZoneId(null)}
-      />
+      <LazyMount open={pendingDeleteRoleZoneId !== null}>
+        <ConfirmDialog
+          isOpen={pendingDeleteRoleZoneId !== null}
+          tone="danger"
+          title="Delete designation zone"
+          confirmLabel="Delete zone"
+          message={
+            <>
+              <strong>{roleZones.find((z) => z.id === pendingDeleteRoleZoneId)?.roleTitle ?? 'This zone'}</strong>{' '}
+              will be removed from its Space. Agents stay where they are and lose this designation and reporting
+              line. This cannot be undone.
+            </>
+          }
+          onConfirm={() => {
+            if (pendingDeleteRoleZoneId) removeRoleZone(pendingDeleteRoleZoneId);
+            setPendingDeleteRoleZoneId(null);
+          }}
+          onCancel={() => setPendingDeleteRoleZoneId(null)}
+        />
+      </LazyMount>
 
-      <ZoneBuilderModal
-        isOpen={isRoleZoneBuilderOpen}
-        initial={editingRoleZone}
-        zones={roleZones}
-        title={editingRoleZone ? 'Edit Zone' : 'Create Zone'}
-        saveLabel={editingRoleZone ? 'Save Zone' : 'Create Zone'}
-        onSave={handleSaveRoleZone}
-        onClose={() => {
-          setIsRoleZoneBuilderOpen(false);
-          setEditingRoleZone(null);
-        }}
-      />
+      <LazyMount open={isRoleZoneBuilderOpen}>
+        <ZoneBuilderModal
+          isOpen={isRoleZoneBuilderOpen}
+          initial={editingRoleZone}
+          zones={roleZones}
+          title={editingRoleZone ? 'Edit Zone' : 'Create Zone'}
+          saveLabel={editingRoleZone ? 'Save Zone' : 'Create Zone'}
+          onSave={handleSaveRoleZone}
+          onClose={() => {
+            setIsRoleZoneBuilderOpen(false);
+            setEditingRoleZone(null);
+          }}
+        />
+      </LazyMount>
+
+      <LazyMount open={pendingDeleteSpaceTarget !== null}>
+        <SpaceDeleteModal
+          isOpen={pendingDeleteSpaceTarget !== null}
+          space={pendingDeleteSpaceTarget?.space ?? null}
+          memberAgents={pendingDeleteSpaceTarget?.memberAgents ?? []}
+          memberZones={pendingDeleteSpaceTarget?.memberZones ?? []}
+          busy={isDeletingSpace}
+          onConfirm={handleConfirmSpaceDelete}
+          onCancel={() => {
+            if (!isDeletingSpace) setPendingDeleteSpaceTarget(null);
+          }}
+        />
+      </LazyMount>
 
       {/* Right Click Context Menu (Desktop only) */}
       {!isMobile && (
@@ -3418,76 +4406,90 @@ export const SpaceCanvas: React.FC = () => {
       )}
 
       {/* Agent Modal */}
-      <AgentModal
-        isOpen={isAgentModalOpen}
-        agent={editingAgent}
-        initialData={templateInitialData}
-        initialCoords={newAgentCoords}
-        initialSection={agentModalSection}
-        onSave={handleSaveAgent}
-        onOpenKeys={() => setIsSettingsModalOpen(true)}
-        onClose={() => {
-          setIsAgentModalOpen(false);
-          setEditingAgent(null);
-          setTemplateInitialData(null);
-          setAgentModalSection('general');
-        }}
-      />
+      <LazyMount open={isAgentModalOpen}>
+        <AgentModal
+          isOpen={isAgentModalOpen}
+          agent={editingAgent}
+          initialData={templateInitialData}
+          initialCoords={newAgentCoords}
+          initialSection={agentModalSection}
+          onSave={handleSaveAgent}
+          onOpenKeys={() => setIsSettingsModalOpen(true)}
+          onClose={() => {
+            setIsAgentModalOpen(false);
+            setEditingAgent(null);
+            setTemplateInitialData(null);
+            setAgentModalSection('general');
+          }}
+        />
+      </LazyMount>
 
       {/* MCP Modal */}
-      <McpModal
-        isOpen={!!mcpModalAgentId}
-        agentId={mcpModalAgentId}
-        initialMcpName={mcpModalInitialName}
-        attachedMcpNames={
-          agents.find((a) => a.id === mcpModalAgentId)?.mcps.map((m) => m.mcp_name) || []
-        }
-        onAttach={handleAttachMcp}
-        onClose={() => {
-          setMcpModalAgentId(null);
-          setMcpModalInitialName(null);
-        }}
-      />
+      <LazyMount open={!!mcpModalAgentId}>
+        <McpModal
+          isOpen={!!mcpModalAgentId}
+          agentId={mcpModalAgentId}
+          initialMcpName={mcpModalInitialName}
+          attachedMcpNames={
+            agents.find((a) => a.id === mcpModalAgentId)?.mcps.map((m) => m.mcp_name) || []
+          }
+          onAttach={handleAttachMcp}
+          onClose={() => {
+            setMcpModalAgentId(null);
+            setMcpModalInitialName(null);
+          }}
+        />
+      </LazyMount>
 
       {/* Skill Modal */}
-      <SkillModal
-        isOpen={!!skillModalAgentId}
-        agentId={skillModalAgentId}
-        onAttach={handleAttachSkill}
-        onClose={() => setSkillModalAgentId(null)}
-      />
+      <LazyMount open={!!skillModalAgentId}>
+        <SkillModal
+          isOpen={!!skillModalAgentId}
+          agentId={skillModalAgentId}
+          onAttach={handleAttachSkill}
+          onClose={() => setSkillModalAgentId(null)}
+        />
+      </LazyMount>
 
       {/* Tools Modal (Allowed Tools Configuration) */}
-      <ToolsModal
-        isOpen={!!toolsModalAgent}
-        agent={toolsModalAgent}
-        onSaveDisabledTools={handleSaveDisabledTools}
-        onClose={() => setToolsModalAgent(null)}
-      />
+      <LazyMount open={!!toolsModalAgent}>
+        <ToolsModal
+          isOpen={!!toolsModalAgent}
+          agent={toolsModalAgent}
+          onSaveDisabledTools={handleSaveDisabledTools}
+          onClose={() => setToolsModalAgent(null)}
+        />
+      </LazyMount>
 
       {/* Policy Modal (Guardrails & Boundaries) */}
-      <PolicyModal
-        isOpen={!!policyModalAgent}
-        agent={policyModalAgent}
-        onSavePolicies={handleSavePolicies}
-        onClose={() => setPolicyModalAgent(null)}
-      />
+      <LazyMount open={!!policyModalAgent}>
+        <PolicyModal
+          isOpen={!!policyModalAgent}
+          agent={policyModalAgent}
+          onSavePolicies={handleSavePolicies}
+          onClose={() => setPolicyModalAgent(null)}
+        />
+      </LazyMount>
 
       {/* Secure API Keys & Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-      />
+      <LazyMount open={isSettingsModalOpen}>
+        <SettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+        />
+      </LazyMount>
 
       {/* Slide-Over Drawer */}
-      <AgentDrawer
-        agent={activeDrawerAgent}
-        canvasTheme={currentTheme}
-        onRunNow={handleRunAgent}
-        onStopNow={handleStopAgent}
-        onConfigureMcp={handleAddMcp}
-        onClose={handleCloseDrawer}
-      />
+      <LazyMount open={activeDrawerAgent !== null}>
+        <AgentDrawer
+          agent={activeDrawerAgent}
+          canvasTheme={currentTheme}
+          onRunNow={handleRunAgent}
+          onStopNow={handleStopAgent}
+          onConfigureMcp={handleAddMcp}
+          onClose={handleCloseDrawer}
+        />
+      </LazyMount>
 
       {/* Premium Spatial Workspace Boot Loader */}
       <AppLoader isReady={isAppReady} />

@@ -56,6 +56,7 @@ export class CoreDatabase {
     this.seedDefaultSettings();
     this.seedBundledSkills();
     this.backfillAgentProfileDetails();
+    this.backfillCronJobPrompts();
   }
 
   static getInstance(customPath?: string): CoreDatabase {
@@ -209,6 +210,30 @@ export class CoreDatabase {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS workspace_spaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        role_title TEXT,
+        responsibilities TEXT,
+        workflow_instructions TEXT,
+        level INTEGER NOT NULL DEFAULT 0,
+        parent_zone_id TEXT,
+        color TEXT NOT NULL DEFAULT '#3b82f6',
+        shape TEXT NOT NULL DEFAULT 'rectangle',
+        width REAL NOT NULL DEFAULT 720,
+        height REAL NOT NULL DEFAULT 520,
+        x REAL NOT NULL DEFAULT 0,
+        y REAL NOT NULL DEFAULT 0,
+        repo_url TEXT,
+        working_dir TEXT,
+        project_brief TEXT,
+        workflow_prompt TEXT,
+        delegation_policy TEXT NOT NULL DEFAULT 'auto',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS space_workspace_prompts (
         space_id TEXT PRIMARY KEY,
         name TEXT,
@@ -232,6 +257,8 @@ export class CoreDatabase {
         enabled INTEGER NOT NULL DEFAULT 1,
         last_run_at TEXT,
         next_run_at TEXT,
+        last_status TEXT,
+        last_error TEXT,
         created_by TEXT NOT NULL DEFAULT 'user',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -245,6 +272,24 @@ export class CoreDatabase {
         last_mtime REAL NOT NULL,
         line_count INTEGER NOT NULL,
         PRIMARY KEY (agent_id, file_path)
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_todo_history (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL,
+        task_date TEXT NOT NULL,
+        run_id TEXT,
+        session_id TEXT,
+        content TEXT NOT NULL,
+        status TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'medium',
+        section TEXT,
+        started_at TEXT,
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        metadata_json TEXT,
+        FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
       );
 
       CREATE INDEX IF NOT EXISTS idx_agent_mcps ON agent_mcps(agent_id);
@@ -261,6 +306,7 @@ export class CoreDatabase {
       CREATE INDEX IF NOT EXISTS idx_space_agent_memberships_agent ON space_agent_memberships(agent_id);
       CREATE INDEX IF NOT EXISTS idx_agent_cron_jobs_agent ON agent_cron_jobs(agent_id);
       CREATE INDEX IF NOT EXISTS idx_agent_cron_jobs_next ON agent_cron_jobs(next_run_at);
+      CREATE INDEX IF NOT EXISTS idx_agent_todo_history_agent_date ON agent_todo_history(agent_id, task_date);
     `);
 
     try {
@@ -333,6 +379,16 @@ export class CoreDatabase {
     } catch {
       // already exists
     }
+    try {
+      this.db.exec("ALTER TABLE agent_cron_jobs ADD COLUMN last_status TEXT");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE agent_cron_jobs ADD COLUMN last_error TEXT");
+    } catch {
+      // already exists
+    }
   }
 
   private backfillAgentProfileDetails(): void {
@@ -363,6 +419,99 @@ export class CoreDatabase {
       }
     } catch (e) {
       console.warn('[database] Failed to backfill stock agent profile details:', e);
+    }
+  }
+
+  private backfillCronJobPrompts(): void {
+    try {
+      const rows = this.db.prepare(
+        "SELECT id, name, prompt FROM agent_cron_jobs WHERE prompt NOT LIKE '%mark_cron_job_success%'"
+      ).all() as Array<{ id: string; name: string; prompt: string }>;
+
+      if (!rows || rows.length === 0) return;
+
+      const compactorPrompt =
+        'You are executing the scheduled Workspace Markdown Compactor routine.\n' +
+        'Inspect and distill your persistent markdown memory files located in your workspace memory directory:\n' +
+        '1. `symmetric.md`: Core system facts, team architecture, operational boundaries, and persistent project invariants.\n' +
+        '2. `working.md`: Current sprint tasks, active milestones, scratchpad state, and in-progress deliverables.\n' +
+        '3. `reflective.md`: Learned domain heuristics, past issue resolutions, tool edge-cases, and specialization insights.\n' +
+        '4. `procedural.md`: Standard operating procedures, multi-step workflows, and execution protocols.\n\n' +
+        'Instructions:\n' +
+        '- Inspect each file. If any file has grown beyond 60 lines or contains redundant, conversational logs, compress and distill it into ~60 lines.\n' +
+        '- Preserve all critical technical facts, file paths, repository keys, decision records, and active task items.\n' +
+        '- Maintain clean markdown headings and bullet points. Never truncate or discard essential instructions or active invariants.\n' +
+        '- If a file is already concise (≤ 60 lines) and contains only relevant facts, leave it unchanged.\n' +
+        '- Write updated content back using write_file. Do not delete files.\n' +
+        '- MANDATORY COMPLETION: Once all files are inspected and updated, you MUST invoke the `mark_cron_job_success` tool with a summary of the compacted files to confirm successful completion of this cron job.';
+
+      const eodPrompt =
+        'You are executing the scheduled Daily End-of-Day (EOD) Task Summary routine.\n' +
+        'Review all tasks, tool invocations, and workspace file changes executed today to produce an executive-ready progress report.\n\n' +
+        'Instructions:\n' +
+        '1. Review today\'s chat sessions, execution runs, and completed operations.\n' +
+        '2. If tasks were executed today, compile a structured report with these sections:\n' +
+        '   - ## 🎯 Accomplishments: High-level deliverables, solved problems, and completed milestones.\n' +
+        '   - ## 🛠️ Tools & MCP Integrations: External services or CLI tools leveraged and their outcomes.\n' +
+        '   - ## 📁 Workspace Deliverables: Exact paths of files created or modified.\n' +
+        '   - ## 🚧 Blockers & Pending Items: Incomplete work, unresolved dependencies, or human approval required.\n' +
+        '   - ## 📈 Metrics & Next Steps: Quantifiable impact and priorities for the next session.\n' +
+        '3. Write this summary to `eod_reports/YYYY-MM-DD.md` (substituting today\'s date) with YAML frontmatter:\n' +
+        '---\n' +
+        'date: YYYY-MM-DD\n' +
+        'agent: [Your Agent Name]\n' +
+        'status: [completed | in-progress | blocked]\n' +
+        'tasks_count: [Number of tasks completed]\n' +
+        '---\n' +
+        '4. If no tasks or operations were performed today, record a brief 2-line entry in `eod_reports/YYYY-MM-DD.md` noting the idle status so operational logs remain complete.\n' +
+        '5. MANDATORY COMPLETION: Once `eod_reports/YYYY-MM-DD.md` is written, you MUST invoke the `mark_cron_job_success` tool with a summary of today\'s achievements to confirm successful completion of this cron job.';
+
+      const refinementPrompt =
+        'You are executing the scheduled Self-Refinement, Specialization & Automation routine.\n' +
+        'Your objective is to sharpen your domain expertise, eliminate recurring friction, and create reusable automation scripts for repetitive tasks you perform.\n\n' +
+        'Instructions:\n' +
+        '1. REVIEW RECENT ACTIVITY:\n' +
+        '   - Examine your recent conversations, tool calls, and user requests. Identify any mistakes, slow multi-step workflows, or repeated manual tasks.\n\n' +
+        '2. BUILD REUSABLE AUTOMATION SCRIPTS:\n' +
+        '   - Notice repeated tasks: If the user or workflows frequently ask you to perform similar operations (e.g. log filtering, test analysis, data formatting, code linting, diff auditing, dependency checks, report generation, API syncing):\n' +
+        '   - Generate a parameterized automation script (in Python, Bash, or Node.js) saved in `automation/` or `scripts/` (e.g. `scripts/task_runner.py`).\n' +
+        '   - Every automation script must include:\n' +
+        '     * Clear header comment explaining the script\'s purpose.\n' +
+        '     * Documented input arguments and CLI flags (e.g. `--input`, `--format`, `--target`).\n' +
+        '     * Robust error handling and exit codes.\n' +
+        '     * No hardcoded credentials (use environment variables `$VAR_NAME`).\n' +
+        '   - Register the automation in `automation/index.json` (under `"automations"`) with:\n' +
+        '     * `file`: Relative path to the script (e.g. "scripts/analyze_logs.py")\n' +
+        '     * `purpose`: Exact explanation of what the script does\n' +
+        '     * `inputs`: Description of all arguments and input formats it accepts\n' +
+        '     * `whenToUse`: Specific trigger condition explaining when you should run this script instead of manual tool calls\n' +
+        '     * `created`: Timestamp\n' +
+        '   - Document this automation in `memory/reflective.md` and `memory/procedural.md` so future runs immediately reach for this script to execute tasks 10x faster and without manual mistakes.\n\n' +
+        '3. REFINE DOMAIN KNOWLEDGE:\n' +
+        '   - Update `memory/reflective.md` with:\n' +
+        '     * Specialized domain heuristics and best practices you\'ve acquired.\n' +
+        '     * Edge cases to avoid and self-corrections from past errors.\n' +
+        '     * New skills, tools, or MCP patterns that worked effectively.\n\n' +
+        '4. MANDATORY COMPLETION: Once your automation scripts and domain reflections are written, you MUST invoke the `mark_cron_job_success` tool with a summary of your refinements to confirm successful completion of this cron job.';
+
+      const updateStmt = this.db.prepare("UPDATE agent_cron_jobs SET prompt = ? WHERE id = ?");
+
+      for (const row of rows) {
+        let updated = row.prompt;
+        if (row.name === 'Workspace Markdown Compactor') {
+          updated = compactorPrompt;
+        } else if (row.name === 'Daily EOD Task Summary') {
+          updated = eodPrompt;
+        } else if (row.name === 'Self-Refinement & Specialization') {
+          updated = refinementPrompt;
+        } else {
+          updated = `${row.prompt}\n\n[MANDATORY COMPLETION]: You MUST invoke the 'mark_cron_job_success' tool with your completion summary upon finishing. If this tool is not called, the operation will be considered incomplete/failed and retried.`;
+        }
+        updateStmt.run(updated, row.id);
+      }
+      console.log(`[CoreDatabase] Backfilled ${rows.length} cron jobs to mandate mark_cron_job_success.`);
+    } catch (err) {
+      console.warn('[CoreDatabase] Failed to backfill cron job prompts:', err);
     }
   }
 

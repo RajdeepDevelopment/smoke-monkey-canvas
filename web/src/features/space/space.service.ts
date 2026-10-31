@@ -1,5 +1,5 @@
 import type { SpaceAgentEntity } from '../agent/agent.types.js';
-import type { RoleZone, SpaceWorkflow, SpaceWorkspacePrompt } from './space.types.js';
+import type { RoleZone, GroupWorkspaceZone, SpaceWorkflow, SpaceWorkspacePrompt } from './space.types.js';
 import { getWsUrl, getApiBaseUrl } from '../../config/desktop.bridge.ts';
 
 const API_BASE = {
@@ -31,6 +31,70 @@ export class SpaceService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ posX, posY, ...(spaceId !== undefined ? { spaceId } : {}) }),
     });
+  }
+
+  static async updateNodePositionsBatch(
+    positions: Array<{ id: string; posX: number; posY: number; spaceId?: string | null }>,
+  ): Promise<void> {
+    if (!positions.length) return;
+    await fetch(`${API_BASE}/space/nodes/positions`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ positions }),
+      keepalive: true,
+    });
+  }
+
+  static async fetchWorkspaceSpaces(): Promise<GroupWorkspaceZone[]> {
+    const res = await fetch(`${API_BASE}/space/spaces`);
+    if (!res.ok) {
+      throw new Error(`Failed to load workspace spaces: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async createWorkspaceSpace(space: GroupWorkspaceZone): Promise<GroupWorkspaceZone> {
+    const res = await fetch(`${API_BASE}/space/spaces`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(space),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to create workspace space: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async createWorkspaceSpacesBatch(spaces: Partial<GroupWorkspaceZone>[]): Promise<GroupWorkspaceZone[]> {
+    const res = await fetch(`${API_BASE}/space/spaces/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spaces }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to batch create workspace spaces: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async updateWorkspaceSpace(id: string, updates: Partial<GroupWorkspaceZone>): Promise<GroupWorkspaceZone> {
+    const res = await fetch(`${API_BASE}/space/spaces/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+      keepalive: true,
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to update workspace space: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async deleteWorkspaceSpace(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/space/spaces/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      throw new Error(`Failed to delete workspace space: ${res.statusText}`);
+    }
   }
 
   static async setWorkspaceAgents(spaceId: string, agentIds: string[]): Promise<void> {
@@ -76,11 +140,34 @@ export class SpaceService {
     return res.json();
   }
 
+  static async fetchCanvasViewport(): Promise<{ x: number; y: number; zoom: number; updatedAt?: number } | null> {
+    try {
+      const res = await fetch(`${API_BASE}/space/viewport`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.viewport ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  static async updateCanvasViewport(viewport: { x: number; y: number; zoom: number }): Promise<void> {
+    try {
+      await fetch(`${API_BASE}/space/viewport`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(viewport),
+        keepalive: true,
+      });
+    } catch {}
+  }
+
   static async updateZone(id: string, updates: Partial<RoleZone>): Promise<RoleZone> {
     const res = await fetch(`${API_BASE}/space/zones/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
+      keepalive: true,
     });
     if (!res.ok) {
       throw new Error(`Failed to update workspace zone: ${res.statusText}`);

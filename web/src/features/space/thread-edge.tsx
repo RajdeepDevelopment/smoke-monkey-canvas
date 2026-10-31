@@ -5,6 +5,7 @@ import {
   EdgeLabelRenderer,
   BaseEdge,
 } from '@xyflow/react';
+import { edgePropsEqual } from './edge-memo.js';
 import { Activity, Clock, MessageSquare, Zap } from 'lucide-react';
 import { CONNECTOR_EDGE_Z } from './space.types.js';
 
@@ -17,7 +18,7 @@ export interface ThreadEdgeData {
   onEdgeClick?: () => void;
 }
 
-export const ThreadConnectionEdge: React.FC<EdgeProps> = ({
+const ThreadConnectionEdgeBase: React.FC<EdgeProps> = ({
   id,
   sourceX,
   sourceY,
@@ -29,7 +30,7 @@ export const ThreadConnectionEdge: React.FC<EdgeProps> = ({
   markerEnd,
   data,
 }) => {
-  const edgeData = (data as unknown as ThreadEdgeData) || {};
+  const edgeData = (data ?? {}) as Partial<ThreadEdgeData>;
   const isRunning = edgeData.status === 'running';
   const isFailed = edgeData.status === 'failed';
   const triggerType = edgeData.triggerType || 'manual';
@@ -142,3 +143,4 @@ export const ThreadConnectionEdge: React.FC<EdgeProps> = ({
     </>
   );
 };
+export const ThreadConnectionEdge = React.memo(ThreadConnectionEdgeBase, edgePropsEqual);

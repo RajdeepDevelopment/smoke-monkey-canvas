@@ -113,4 +113,11 @@ export const TOOL_KITS: ToolKit[] = [
 export { SPACE_PRESETS } from './data/spaces.data.js';
 export { ROLE_ZONE_PRESETS } from './data/role-zones.data.js';
 export { HIERARCHICAL_CHAINS, layoutHierarchicalChain } from './data/hierarchical-chains.data.js';
+export {
+  COMPANY_PRESETS,
+  layoutCompany,
+  getZoneSizeForAgents,
+  type PlacedCompanyAgent,
+  type PlacedCompanyZone,
+} from './data/companies.data.js';
 

@@ -397,6 +397,7 @@ export function onMenuAction(callback: (actionId: string) => void): () => void {
   };
   window.addEventListener('canvas-menu-action', windowHandler);
 
+  let disposed = false;
   let unlistenTauri: (() => void) | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tauri = (window as any).__TAURI__;
@@ -408,6 +409,12 @@ export function onMenuAction(callback: (actionId: string) => void): () => void {
         }
       })
       .then((unlistenFn: () => void) => {
+        // The effect that owns this listener may have unmounted before the
+        // async listen() resolved. Never leak the native listener in that case.
+        if (disposed) {
+          unlistenFn();
+          return;
+        }
         unlistenTauri = unlistenFn;
       })
       .catch((err: unknown) => {
@@ -416,6 +423,7 @@ export function onMenuAction(callback: (actionId: string) => void): () => void {
   }
 
   return () => {
+    disposed = true;
     window.removeEventListener('canvas-menu-action', windowHandler);
     if (unlistenTauri) unlistenTauri();
   };

@@ -6359,6 +6359,14 @@ body, html, #root {
     transform: translateY(-1px);
   }
 
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: none;
+    transform: none;
+    box-shadow: none;
+  }
+
   &.connect {
     background: #f59e0b;
     color: #1a1206;
@@ -6452,6 +6460,309 @@ body, html, #root {
 @keyframes libToastIn {
   from { opacity: 0; transform: translate(-50%, 14px) scale(0.96); }
   to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+// ── Floating Enterprise Company Deployment Progress Banner ───────────────────
+.company-deployment-banner {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1250;
+  width: min(440px, calc(100vw - 36px));
+  padding: 12px 16px;
+  background: hsl(var(--card) / 0.94);
+  backdrop-filter: blur(18px);
+  border: 1px solid hsl(var(--border) / 0.85);
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.36), 0 0 24px -4px rgba(59, 130, 246, 0.25);
+  border-radius: 12px;
+  animation: libToastIn 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: auto;
+
+  .company-deployment-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .company-deployment-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .company-deployment-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+  }
+
+  .company-deployment-icon {
+    flex-shrink: 0;
+
+    &.spinning {
+      color: #3b82f6;
+      animation: spin 1s linear infinite;
+    }
+
+    &.completed {
+      color: #10b981;
+    }
+  }
+
+  .company-deployment-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .company-deployment-count {
+    font-size: 11px;
+    font-weight: 550;
+    color: hsl(var(--muted-foreground));
+    font-variant-numeric: tabular-nums;
+  }
+
+  .company-deployment-progress-track {
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    background: hsl(var(--secondary) / 0.8);
+    overflow: hidden;
+  }
+
+  .company-deployment-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #3b82f6, #6366f1);
+    transition: width 0.25s ease-out;
+
+    &.completed {
+      background: #10b981;
+    }
+  }
+
+  .company-deployment-detail {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+    .company-deployment-agent-name {
+      font-weight: 550;
+      color: hsl(var(--foreground) / 0.9);
+    }
+
+    .company-deployment-role-title {
+      color: hsl(var(--muted-foreground) / 0.8);
+    }
+  }
+
+  // ⚠️ Draft-in-progress data-loss warning strip
+  .company-deployment-data-loss-warning {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+    padding: 6px 9px;
+    border-radius: 7px;
+    background: hsl(38 92% 50% / 0.16);
+    border: 1px solid hsl(38 92% 42% / 0.42);
+    color: hsl(30 80% 28%);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+
+    // The canvas themes are class-based (`theme-dark-*` on `.space-container`),
+    // not a `data-theme` attribute. Keep the warning readable on every theme.
+    .theme-dark-midnight &,
+    .theme-dark-carbon &,
+    .theme-dark-nebula &,
+    .theme-dark-matrix & {
+      color: hsl(38 96% 74%);
+      background: hsl(38 92% 50% / 0.13);
+      border-color: hsl(38 92% 58% / 0.4);
+    }
+
+    svg {
+      flex-shrink: 0;
+      color: inherit;
+    }
+
+    span {
+      flex: 1;
+    }
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes skeletonSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.agent-skeleton-node {
+  pointer-events: none;
+  user-select: none;
+  z-index: 15;
+
+  .skeleton-crab-body {
+    position: relative;
+    overflow: hidden;
+    background: hsl(var(--card) / 0.88);
+    border: 1px dashed hsl(var(--primary) / 0.6);
+    box-shadow: 0 10px 28px -4px rgba(59, 130, 246, 0.25), 0 0 0 1px hsl(var(--primary) / 0.2);
+
+    .skeleton-shimmer-sweep {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(59, 130, 246, 0.12) 50%,
+        transparent 100%
+      );
+      animation: skeletonSweep 1.8s infinite ease-in-out;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .skeleton-avatar {
+      background: hsl(var(--primary) / 0.18);
+      border-color: hsl(var(--primary) / 0.35);
+      color: hsl(var(--primary));
+    }
+
+    .skeleton-spin-icon {
+      animation: spin 1s linear infinite;
+    }
+
+    .skeleton-name {
+      opacity: 0.95;
+    }
+
+    .skeleton-role {
+      font-size: 11px;
+      color: hsl(var(--muted-foreground));
+    }
+
+    .skeleton-chip {
+      background: hsl(var(--primary) / 0.15);
+      color: hsl(var(--primary));
+      border: 1px solid hsl(var(--primary) / 0.3);
+      text-transform: uppercase;
+      font-size: 9px;
+      letter-spacing: 0.05em;
+    }
+
+    .skeleton-status-pill {
+      font-size: 10.5px;
+      gap: 4px;
+    }
+
+    .skeleton-model-bar {
+      border-style: dashed;
+      background: hsl(var(--secondary) / 0.35);
+
+      .skeleton-provider-icon {
+        color: hsl(var(--primary));
+      }
+
+      .skeleton-model-text {
+        font-size: 11px;
+        color: hsl(var(--foreground) / 0.8);
+      }
+
+      .skeleton-badge {
+        font-size: 8.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: hsl(var(--primary));
+        background: hsl(var(--primary) / 0.15);
+        border: 1px solid hsl(var(--primary) / 0.3);
+        padding: 1.5px 6px;
+        border-radius: 4px;
+      }
+    }
+
+    .skeleton-prompt-box {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      margin: 10px 0 12px;
+    }
+
+    .skeleton-line {
+      height: 9px;
+      border-radius: 5px;
+      background: hsl(var(--muted) / 0.55);
+
+      &.skeleton-line-full { width: 92%; }
+      &.skeleton-line-partial { width: 62%; }
+    }
+
+    .skeleton-meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .skeleton-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: hsl(var(--secondary) / 0.25);
+      border-radius: 6px;
+      border: 1px solid hsl(var(--border) / 0.5);
+
+      .skeleton-icon-dim {
+        color: hsl(var(--muted-foreground) / 0.7);
+      }
+
+      .skeleton-line-sm {
+        height: 7px;
+        width: 65px;
+        border-radius: 4px;
+        background: hsl(var(--muted) / 0.45);
+      }
+    }
+
+    .skeleton-footer {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding-top: 9px;
+      border-top: 1px dashed hsl(var(--border) / 0.7);
+      font-size: 11px;
+      color: hsl(var(--primary));
+      font-weight: 550;
+
+      .skeleton-sparkle {
+        animation: pulseGlow 1.5s infinite;
+      }
+
+      .skeleton-phase-text {
+        letter-spacing: 0.01em;
+      }
+    }
+  }
 }
 
 // ── Interactive Agent Execution Scheduler Widget ───────────────────────────
@@ -7891,6 +8202,18 @@ body, html, #root {
   }
 }
 
+.react-flow__edge.is-calling {
+  z-index: 100 !important;
+
+  path.react-flow__edge-path {
+    stroke: #10b981 !important;
+    stroke-width: 3px !important;
+    stroke-dasharray: 6 4 !important;
+    animation: peerDashFlow 0.65s linear infinite !important;
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.75)) !important;
+  }
+}
+
 /* Miro-Style Peer Delegation Dock on Agent Card */
 .crab-peer-socket {
   position: relative;
@@ -8088,6 +8411,44 @@ body, html, #root {
 
   &.crab-drop-active {
     box-shadow: 0 0 0 2px var(--pod-accent, #38bdf8), 0 0 24px var(--pod-accent, #38bdf8) !important;
+  }
+
+  &.skeleton-pod-avatar-node {
+    pointer-events: none;
+    user-select: none;
+    background: rgba(15, 23, 42, 0.4) !important;
+    border: 1px dashed hsl(var(--primary) / 0.5) !important;
+    box-shadow: 0 8px 24px -4px rgba(59, 130, 246, 0.2) !important;
+    overflow: hidden;
+
+    .skeleton-avatar-disc {
+      background: radial-gradient(circle, hsl(var(--primary) / 0.22), hsl(var(--secondary) / 0.8)) !important;
+      border: 2px dashed hsl(var(--primary) / 0.6) !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: hsl(var(--primary));
+      box-shadow: 0 0 16px -2px hsl(var(--primary) / 0.4);
+    }
+
+    .skeleton-pod-provider {
+      opacity: 0.85;
+      border-style: dashed;
+      background: hsl(var(--secondary) / 0.4);
+    }
+
+    .skeleton-avatar-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: hsl(var(--foreground));
+      opacity: 0.95;
+    }
+
+    .skeleton-avatar-role {
+      font-size: 10.5px;
+      color: hsl(var(--muted-foreground));
+      opacity: 0.75;
+    }
   }
 
   .peer-connector-handle,
@@ -15365,14 +15726,48 @@ body, html, #root {
 }
 
 /* ── React Flow Edge Rendering & Z-Index Layering ────────────────────────── */
-/* Ensures connector lines, peer edges, thread edges and hierarchy edges remain
-   crisp and visible above room backdrops while still clickable and hoverable. */
+/* Do NOT force z-index on .react-flow__edges or .react-flow__nodes container elements.
+   Allowing them to remain auto lets positioned descendants participate in the shared
+   viewport stacking context, preserving the true layering:
+     workspaceZone (1) < roleZone (2) < lines & edges (5, 6) < threads & assets (15) < agents (20) < active agent (50)
+*/
 .react-flow__edges {
-  z-index: 10 !important;
   pointer-events: none;
 
   svg {
     overflow: visible;
+  }
+}
+
+.react-flow__nodes {
+  pointer-events: none;
+}
+
+.react-flow__node {
+  pointer-events: auto;
+}
+
+.react-flow__node-groupWorkspace {
+  z-index: 1;
+}
+
+.react-flow__node-roleZone {
+  z-index: 2;
+}
+
+.react-flow__node-threadProcess,
+.react-flow__node-agentAssets {
+  z-index: 15;
+  pointer-events: auto;
+}
+
+.react-flow__node-crabAgent,
+.react-flow__node-agentSkeleton {
+  z-index: 20;
+  pointer-events: auto;
+
+  &.selected {
+    z-index: 50;
   }
 }
 
@@ -15383,6 +15778,15 @@ body, html, #root {
 
 .react-flow__edge-path {
   pointer-events: stroke;
+}
+
+.react-flow__edge.hierarchy-edge,
+.react-flow__edge-hierarchyEdge {
+  pointer-events: none !important;
+
+  path {
+    pointer-events: none !important;
+  }
 }
 
 /* ── Space Right-Side Unconfigured MCP Rail (Synchronous Zoom & Scale) ──── */
@@ -16011,6 +16415,266 @@ body, html, #root {
       border-color: rgba(0, 0, 0, 0.08);
       color: #1e293b;
     }
+  }
+}
+
+/* ── Turnkey Company Presets UI Styles ── */
+.lib-companies-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 24px 0;
+}
+
+.lib-company-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(18, 22, 34, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+
+  &:hover {
+    background: rgba(24, 30, 48, 0.88);
+    border-color: rgba(99, 102, 241, 0.45);
+    transform: translateY(-1.5px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 16px rgba(99, 102, 241, 0.15);
+  }
+
+  &.lib-item-selected {
+    background: rgba(28, 35, 58, 0.95);
+    border-color: #6366f1;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.25);
+  }
+}
+
+.lib-company-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lib-company-cat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2.5px 8px;
+  border-radius: 999px;
+  border-width: 1px;
+  border-style: solid;
+  letter-spacing: 0.02em;
+}
+
+.lib-company-industry-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.lib-company-main-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lib-company-name {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 750;
+  color: #f8fafc;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.lib-company-tagline {
+  margin: 0;
+  font-size: 11.5px;
+  font-style: italic;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.lib-company-scale-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+
+  .lib-scale-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 2px;
+  }
+}
+
+.lib-scale-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  .lib-scale-code {
+    display: none;
+  }
+
+  .lib-scale-full {
+    font-weight: 700;
+  }
+
+  .lib-scale-agents-count {
+    font-size: 9.5px;
+    opacity: 0.8;
+  }
+
+  &:hover {
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  &.active {
+    background: rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.6);
+    color: #fff;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+  }
+}
+
+.lib-company-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.lib-metric-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  font-size: 10.5px;
+  color: #cbd5e1;
+
+  .lib-metric-icon {
+    color: #818cf8;
+    flex-shrink: 0;
+  }
+
+  strong {
+    color: #fff;
+    font-weight: 750;
+  }
+}
+
+.lib-company-root-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: rgba(99, 102, 241, 0.08);
+  border-left: 2px solid #6366f1;
+  border-radius: 0 4px 4px 0;
+
+  .lib-root-title {
+    color: #818cf8;
+    font-weight: 600;
+  }
+
+  .lib-root-name {
+    color: #f1f5f9;
+    font-weight: 600;
+  }
+}
+
+.lib-company-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.lib-company-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  cursor: grab;
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.lib-company-deploy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+
+  &:hover {
+    background: linear-gradient(135deg, #4f46e5, #4338ca);
+    transform: translateY(-0.5px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
   }
 }
 

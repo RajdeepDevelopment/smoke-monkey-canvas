@@ -83,5 +83,24 @@ export function findNearestAncestorWithMembers<T extends ZoneGeometry>(
 }
 
 export function zoneContainsPoint(zone: ZoneGeometry, x: number, y: number): boolean {
-  return x >= zone.x && x <= zone.x + zone.width && y >= zone.y && y <= zone.y + zone.height;
+  // 1. Direct point inside zone with 24px boundary tolerance
+  const pad = 24;
+  if (
+    x >= zone.x - pad &&
+    x <= zone.x + zone.width + pad &&
+    y >= zone.y - pad &&
+    y <= zone.y + zone.height + pad
+  ) {
+    return true;
+  }
+
+  // 2. Avatar or card center footprint check
+  const centerX = x + 100;
+  const centerY = y + 80;
+  return (
+    centerX >= zone.x &&
+    centerX <= zone.x + zone.width &&
+    centerY >= zone.y &&
+    centerY <= zone.y + zone.height
+  );
 }

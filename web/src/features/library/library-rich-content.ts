@@ -186,7 +186,7 @@ curl -X POST https://api.smokemonkey.ai/v1/agents/spawn \\
   -H "Content-Type: application/json" \\
   -d '{
     "name": "Production SRE Sentinel",
-    "model": "nvidia/nemotron-3-super-120b-a12b",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "cron_schedule": "*/15 * * * *",
     "recommended_mcps": ["github-mcp", "postgres-mcp"]
   }'

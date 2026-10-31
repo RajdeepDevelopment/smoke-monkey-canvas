@@ -95,8 +95,8 @@ export const RoleZoneNode: React.FC<{ data: RoleZoneNodeData; selected?: boolean
             position="bottom-right"
             minWidth={240}
             minHeight={140}
-            maxWidth={2200}
-            maxHeight={1600}
+            maxWidth={25000}
+            maxHeight={25000}
             onResizeEnd={(_event, params) => {
               data.onResizeZone?.(
                 data.id,

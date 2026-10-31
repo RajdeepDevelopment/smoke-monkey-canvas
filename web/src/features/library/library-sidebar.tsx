@@ -17,9 +17,9 @@ import type { StockMcp, McpReadiness } from '../mcp/mcp.types.js';
 import { buildStockMcpLookup, canonicalStockMcps } from '../mcp/mcp.catalog.js';
 import type { AgentTemplate } from '../agent/agent.templates.js';
 import { ENTERPRISE_AGENT_TEMPLATES } from '../agent/agent.templates.js';
-import type { LibraryTab, LibDragPayload, PromptPreset, RoleZonePreset, StockSkillItem, ToolKit } from './library.types.js';
+import type { LibraryTab, LibDragPayload, PromptPreset, RoleZonePreset, StockSkillItem, ToolKit, CompanyPreset, CompanyScale } from './library.types.js';
 import { writeLibDragPayload, setActiveDragPayload, PLUGIN_CATEGORY_ORDER } from './library.types.js';
-import { STOCK_SKILLS, TOOL_KITS, SPACE_PRESETS, ROLE_ZONE_PRESETS, HIERARCHICAL_CHAINS } from './library.data.js';
+import { STOCK_SKILLS, TOOL_KITS, SPACE_PRESETS, ROLE_ZONE_PRESETS, HIERARCHICAL_CHAINS, COMPANY_PRESETS } from './library.data.js';
 import { CUSTOM_PLUGINS, pluginToSkillItem, formatStars, VERIFIED_AT, type PluginCategory } from './library.plugins.js';
 import {
   LIB_TAB_ICONS, LIB_TAB_COLORS, skillCategoryIcon, skillCategoryColor,
@@ -35,7 +35,8 @@ import { AgentClockScheduler, describeCron } from './agent-clock-scheduler.js';
 import { openExternalLink, isTauri } from '../../config/desktop.bridge.js';
 import { useIsMobile } from '../common/use-mobile.js';
 import { LibrarySidebarMobile } from './mobile/library-sidebar.mobile.js';
-import { ZoneBuilderModal, type ZoneDraft } from '../space/zone-builder.modal.js';
+import type { ZoneDraft } from '../space/zone-builder.modal.js';
+import { LazyMount } from '../common/lazy-mount.js';
 import type { RoleZone } from '../space/space.types.js';
 
 function formatAgentModelBadge(modelId: string): string {
@@ -49,6 +50,8 @@ function formatAgentModelBadge(modelId: string): string {
   const name = modelId.split('/').pop() || modelId;
   return name.replace(/-20\d{6}/, '').replace(/-instruct$/, '');
 }
+
+const ZoneBuilderModal = React.lazy(() => import('../space/zone-builder.modal.js').then((m) => ({ default: m.ZoneBuilderModal })));
 
 const MCP_CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Custom MCPs': <Sparkles size={12} />,
@@ -247,7 +250,7 @@ export const createBlankCustomAgent = (): AgentTemplate => ({
   role: 'Specialized Autonomous Worker',
   description: 'Custom autonomous agent configured with your chosen model, directive prompt, schedule, and tool permissions.',
   system_prompt: 'You are an autonomous AI specialist for Smoke Monkey Canvas. Formulate structured execution plans, invoke available tools methodically, verify results before concluding tasks, and maintain high standards of quality.',
-  default_model: 'nvidia/nemotron-3-super-120b-a12b',
+  default_model: 'nvidia/nemotron-3-ultra-550b-a55b',
   provider: 'nvidia',
   tags: ['Custom', 'Autonomous', 'Specialist'],
   suggested_cron: null,
@@ -466,6 +469,7 @@ const isGitStockSkill = (skill: StockSkillItem): boolean => {
 
 /** Detail inspector item types */
 export type DetailItem =
+  | { kind: 'company'; item: CompanyPreset; scale?: CompanyScale }
   | { kind: 'agent'; item: AgentTemplate; isCustom?: boolean }
   | { kind: 'mcp'; item: StockMcp; isCustom?: boolean }
   | { kind: 'skill'; item: StockSkillItem; isCustom?: boolean }
@@ -477,6 +481,7 @@ export type DetailItem =
 const PLUGIN_SKILLS: StockSkillItem[] = CUSTOM_PLUGINS.map(pluginToSkillItem);
 
 const TABS: { id: LibraryTab; label: string; shortLabel: string; color: string }[] = [
+  { id: 'companies', label: 'Company Presets', shortLabel: 'Company', color: LIB_TAB_COLORS.companies },
   { id: 'mcp', label: 'MCP Servers', shortLabel: 'MCP', color: LIB_TAB_COLORS.mcp },
   { id: 'spaces', label: 'Office Spaces', shortLabel: 'Spaces', color: LIB_TAB_COLORS.spaces },
   { id: 'zones', label: 'Zones', shortLabel: 'Zones', color: LIB_TAB_COLORS.zones },
@@ -488,6 +493,7 @@ const TABS: { id: LibraryTab; label: string; shortLabel: string; color: string }
 ];
 
 const TAB_DESCRIPTIONS: Record<LibraryTab, string> = {
+  companies: 'Company Presets',
   mcp: 'MCP Servers',
   spaces: 'Office Spaces & Pods',
   zones: 'Hierarchical Role Zones',
@@ -526,6 +532,8 @@ interface LibrarySidebarProps {
   connectingMcpName?: string | null;
   /** Persisted hierarchical role zones currently on the canvas. */
   roleZones?: RoleZone[];
+  /** True while a company is being deployed; blocks starting a second one. */
+  isDeployingCompany?: boolean;
 }
 
 const RAIL_WIDTH = 58;
@@ -552,6 +560,7 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   onSpawnTemplate,
   connectingMcpName,
   roleZones = [],
+  isDeployingCompany = false,
 }) => {
   const [activeTab, setActiveTab] = useState<LibraryTab | null>(null);
   const AGENT_PAGE_SIZE = 60;
@@ -563,6 +572,11 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
   const [skillSource, setSkillSource] = useState<SkillSource>('plugins');
   const [zoneSubTab, setZoneSubTab] = useState<'chains' | 'single'>('chains');
   const [searchQuery, setSearchQuery] = useState('');
+  const [companyScales, setCompanyScales] = useState<Record<string, CompanyScale>>({});
+  const getCompanyScale = useCallback((companyId: string): CompanyScale => companyScales[companyId] || 'mid', [companyScales]);
+  const setCompanyScale = useCallback((companyId: string, scale: CompanyScale) => {
+    setCompanyScales((prev) => ({ ...prev, [companyId]: scale }));
+  }, []);
   const [manualCats, setManualCats] = useState<Set<string>>(new Set(['Custom MCPs', 'Code & Git', 'Web & Scraping']));
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [pos, setPos] = useState({ x: 12, y: 88 });
@@ -1790,6 +1804,29 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
       ? (selectedDetail.item.recommended_mcps || []).filter((name) => catalogMcpMap.has(name))
       : [];
 
+  const filteredCompanies = useMemo(() => {
+    return COMPANY_PRESETS.filter((company) => {
+      const matchesCat = selectedCategory === 'All' || company.category === selectedCategory;
+      const matchesSearch = matchQuery(
+        [
+          company.name,
+          company.tagline,
+          company.domain,
+          company.category,
+          company.description,
+          ...Object.values(company.scales).flatMap((s) => [
+            s.space.name,
+            s.space.description || '',
+            ...s.zones.map((z) => `${z.roleTitle} ${z.name}`),
+            ...s.agents.map((a) => `${a.agentName || a.roleTitle || ''} ${a.roleTitle || ''}`),
+          ]),
+        ],
+        searchQuery,
+      );
+      return matchesCat && matchesSearch;
+    });
+  }, [selectedCategory, searchQuery]);
+
   const filteredSpaces = useMemo(() => {
     return SPACE_PRESETS.filter((preset) => {
       const matchesCat = selectedCategory === 'All' || preset.category === selectedCategory;
@@ -1863,6 +1900,10 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
 
   // Compute category pills list dynamically for current tab
   const currentCategoryList = useMemo(() => {
+    if (activeTab === 'companies') {
+      const cats = Array.from(new Set(COMPANY_PRESETS.map((c) => c.category))).sort();
+      return ['All', ...cats];
+    }
     if (activeTab === 'mcp') {
       // Curated categories first, then any category the catalogue adds (e.g.
       // the imported MCP.ai list) so it can be filtered like the rest.
@@ -2032,7 +2073,9 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
                 <GripHorizontal size={13} />
               </span>
               <span className="lib-panel-count">
-                {activeTab === 'mcp'
+                {activeTab === 'companies'
+                  ? filteredCompanies.length
+                  : activeTab === 'mcp'
                   ? allMcps.length
                   : activeTab === 'spaces'
                     ? filteredSpaces.length
@@ -2137,6 +2180,159 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
           </div>
 
           <div className="lib-scroll-body" id="lib-agents-scroll">
+            {/* ── Turnkey Company Presets (Space + Hierarchical Zones + Placed Agents) ── */}
+            {activeTab === 'companies' && (
+              <>
+                <p className="lib-drag-hint">
+                  Turn-key enterprise companies · Drag onto canvas or click &quot;Deploy&quot; to spawn a complete Space, Hierarchical Zones, and pre-assigned real Agents.
+                </p>
+
+                <div className="lib-companies-list">
+                  {filteredCompanies.map((company) => {
+                    const currentScale = getCompanyScale(company.id);
+                    const scaleConfig = company.scales[currentScale] || company.scales.mid;
+                    const isSelected = selectedDetail?.kind === 'company' && selectedDetail.item.id === company.id;
+                    const rootZone = scaleConfig.zones.find((z) => z.level === 0) || scaleConfig.zones[0];
+                    const itemKey = `company:${company.id}`;
+
+                    return (
+                      <div
+                        key={itemKey}
+                        className={`${itemClass(itemKey, 'lib-item lib-card-item lib-company-card')} ${isSelected ? 'lib-item-selected' : ''}`}
+                        onClick={() => handleSelectDetail({ kind: 'company', item: company, scale: currentScale })}
+                        style={{
+                          '--company-accent': scaleConfig.space.color || '#6366f1',
+                          borderColor: isSelected ? (scaleConfig.space.color || '#6366f1') : undefined,
+                        } as React.CSSProperties}
+                      >
+                        {/* Header Badge Row */}
+                        <div className="lib-company-badge-row">
+                          <span
+                            className="lib-company-cat-pill"
+                            style={{
+                              color: scaleConfig.space.color,
+                              borderColor: `${scaleConfig.space.color}40`,
+                              background: `${scaleConfig.space.color}15`,
+                            }}
+                          >
+                            <Briefcase size={10} />
+                            {company.category}
+                          </span>
+                          <span className="lib-company-industry-tag">{company.domain}</span>
+                        </div>
+
+                        {/* Title and Tagline */}
+                        <div className="lib-company-main-header">
+                          <h4 className="lib-company-name">{company.name}</h4>
+                          <p className="lib-company-tagline">{company.tagline}</p>
+                        </div>
+
+                        {/* Scale Switcher: Small | Mid | Large */}
+                        <div className="lib-company-scale-selector" onClick={(e) => e.stopPropagation()}>
+                          <span className="lib-scale-label">Scale:</span>
+                          {(['small', 'mid', 'large'] as const).map((sc) => {
+                            const scCfg = company.scales[sc];
+                            const active = currentScale === sc;
+                            return (
+                              <button
+                                key={sc}
+                                type="button"
+                                className={`lib-scale-pill ${active ? 'active' : ''}`}
+                                onClick={() => {
+                                  setCompanyScale(company.id, sc);
+                                  if (isSelected) {
+                                    setSelectedDetail({ kind: 'company', item: company, scale: sc });
+                                  }
+                                }}
+                                title={`${sc.toUpperCase()}: ${scCfg.agents.length} Agents, ${scCfg.zones.length} Zones (${scCfg.space.width}×${scCfg.space.height})`}
+                              >
+                                <span className="lib-scale-code">{sc.charAt(0).toUpperCase()}</span>
+                                <span className="lib-scale-full">{sc.toUpperCase()}</span>
+                                <span className="lib-scale-agents-count">({scCfg.agents.length})</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Live Scale Metrics Chip Grid */}
+                        <div className="lib-company-metrics-grid">
+                          <div className="lib-metric-chip" title="Pre-assigned Real Agents in org hierarchy">
+                            <Users size={11} className="lib-metric-icon" />
+                            <span><strong>{scaleConfig.agents.length}</strong> Agents</span>
+                          </div>
+                          <div className="lib-metric-chip" title="Hierarchical role & designation zones">
+                            <Network size={11} className="lib-metric-icon" />
+                            <span><strong>{scaleConfig.zones.length}</strong> Zones</span>
+                          </div>
+                          <div className="lib-metric-chip" title="Space room dimensions">
+                            <Building2 size={11} className="lib-metric-icon" />
+                            <span>{scaleConfig.space.width}×{scaleConfig.space.height}</span>
+                          </div>
+                        </div>
+
+                        {/* Executive Root Preview */}
+                        {rootZone && (
+                          <div className="lib-company-root-preview">
+                            <span className="lib-root-title">Executive Lead:</span>
+                            <span className="lib-root-name">{rootZone.roleTitle}</span>
+                          </div>
+                        )}
+
+                        {/* Card Footer Actions */}
+                        <div className="lib-company-actions" onClick={(e) => e.stopPropagation()}>
+                          <div
+                            className="lib-company-drag-handle"
+                            draggable
+                            onDragStart={(e) =>
+                              startDrag(itemKey, e, {
+                                kind: 'company',
+                                companyPreset: company,
+                                companyScale: currentScale,
+                              })
+                            }
+                            onDragEnd={endDrag}
+                            title="Drag this complete Company with its Space, Zones & Agents onto canvas"
+                          >
+                            <GripHorizontal size={12} />
+                            <span>Drag Company</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="lib-company-deploy-btn"
+                            disabled={isDeployingCompany}
+                            onClick={() => {
+                              if (isDeployingCompany) return;
+                              window.dispatchEvent(
+                                new CustomEvent('canvas:spawn-company', {
+                                  detail: { company, scale: currentScale },
+                                }),
+                              );
+                            }}
+                            title={
+                              isDeployingCompany
+                                ? 'A company deployment is already running'
+                                : `Deploy ${company.name} (${currentScale.toUpperCase()} scale) directly onto canvas`
+                            }
+                          >
+                            <Plus size={12} />
+                            <span>{isDeployingCompany ? 'Deploying...' : 'Deploy'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {filteredCompanies.length === 0 && (
+                    <div className="lib-empty">
+                      <Briefcase size={24} />
+                      <p>No company presets match &quot;{selectedCategory !== 'All' ? selectedCategory : searchQuery}&quot;</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
             {/* ── MCP Servers ── */}
             {activeTab === 'mcp' && (
               <>
@@ -3433,6 +3629,257 @@ export const LibrarySidebar: React.FC<LibrarySidebarProps> = ({
       {/* ── Level 3: Inner Section Detail Panel (Inspector) ── */}
       {selectedDetail && !isMobile && (
         <div className="lib-detail-panel" style={{ width: DETAIL_WIDTH }}>
+          {/* Turnkey Company Details (Space, Hierarchical Zones & Placed Agents) */}
+          {selectedDetail.kind === 'company' && (() => {
+            const company = selectedDetail.item;
+            const currentScale = selectedDetail.scale || getCompanyScale(company.id);
+            const scaleConfig = company.scales[currentScale] || company.scales.mid;
+            const itemKey = `company:${company.id}`;
+
+            return (
+              <div className="lib-detail-content">
+                <div
+                  className="lib-detail-header"
+                  onMouseDown={handleDockDragStart}
+                  title="Drag to reposition workspace dock"
+                >
+                  <div className="lib-detail-badge-row">
+                    <div className="lib-detail-badge-wrap">
+                      <span
+                        className="lib-detail-badge"
+                        style={{
+                          background: `${scaleConfig.space.color}22`,
+                          color: scaleConfig.space.color,
+                          border: `1px solid ${scaleConfig.space.color}44`,
+                        }}
+                      >
+                        <Briefcase size={10} style={{ marginRight: 4, display: 'inline' }} />
+                        {company.category}
+                      </span>
+                      <span className="lib-custom-badge" style={{ background: '#3b82f620', color: '#60a5fa', borderColor: '#3b82f640' }}>
+                        {company.domain}
+                      </span>
+                      <span className="lib-drag-grip-indicator" title="Drag to move entire dock">
+                        <GripHorizontal size={13} />
+                      </span>
+                    </div>
+                    <button className="lib-detail-close" onClick={() => setSelectedDetail(null)}>
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <h3 className="lib-detail-title">{company.name}</h3>
+                  <p className="lib-detail-role" style={{ color: '#94a3b8', fontStyle: 'italic', marginTop: 2 }}>
+                    &ldquo;{company.tagline}&rdquo;
+                  </p>
+                  <p className="lib-card-desc" style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.45 }}>
+                    {company.description}
+                  </p>
+
+                  {/* Scale Switcher inside Inspector */}
+                  <div className="lib-detail-scale-bar" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 650, color: '#94a3b8' }}>Scale Tier:</span>
+                    {(['small', 'mid', 'large'] as const).map((sc) => {
+                      const scCfg = company.scales[sc];
+                      const active = currentScale === sc;
+                      return (
+                        <button
+                          key={sc}
+                          type="button"
+                          className={`lib-scale-pill ${active ? 'active' : ''}`}
+                          onClick={() => {
+                            setCompanyScale(company.id, sc);
+                            setSelectedDetail({ kind: 'company', item: company, scale: sc });
+                          }}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: 10.5,
+                            borderRadius: 6,
+                            background: active ? `${scaleConfig.space.color}30` : 'rgba(255,255,255,0.04)',
+                            borderColor: active ? scaleConfig.space.color : 'rgba(255,255,255,0.1)',
+                            color: active ? '#fff' : '#94a3b8',
+                            borderWidth: 1,
+                            borderStyle: 'solid',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <strong>{sc.toUpperCase()}</strong> ({scCfg.agents.length} Agents)
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="lib-detail-body">
+                  {/* Space Configuration & Workflow Directives */}
+                  <div className="lib-detail-section">
+                    <div className="lib-detail-section-header">
+                      <span className="lib-detail-section-title">
+                        Space Room: {scaleConfig.space.name}
+                      </span>
+                      <span style={{ fontSize: 10.5, color: '#64748b' }}>
+                        {scaleConfig.space.width}×{scaleConfig.space.height}px
+                      </span>
+                    </div>
+
+                    <div className="lib-markdown-box" style={{ maxHeight: 150, overflowY: 'auto' }}>
+                      <div className="lib-markdown">
+                        <ReactMarkdown>
+                          {scaleConfig.space.workflowPrompt || scaleConfig.space.description}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Workflow Instructions */}
+                  {scaleConfig.space.workflowInstructions && (
+                    <div className="lib-detail-section">
+                      <span className="lib-detail-section-title">Workflow Execution SOP</span>
+                      <div className="lib-markdown-box" style={{ maxHeight: 130, overflowY: 'auto' }}>
+                        <div className="lib-markdown">
+                          <ReactMarkdown>{scaleConfig.space.workflowInstructions}</ReactMarkdown>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Responsibilities & Delegation */}
+                  <div className="lib-detail-section">
+                    <span className="lib-detail-section-title">Corporate Governance & Delegation</span>
+                    <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: '#cbd5e1', lineHeight: 1.5 }}>
+                      {(typeof scaleConfig.space.responsibilities === 'string'
+                        ? scaleConfig.space.responsibilities.split('\n').map((s) => s.replace(/^[-*•\s]+/, '').trim()).filter(Boolean)
+                        : []
+                      ).slice(0, 3).map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                    {scaleConfig.space.delegationPolicy && (
+                      <div style={{ marginTop: 6, fontSize: 10.5, color: '#94a3b8', fontStyle: 'italic' }}>
+                        <strong>Delegation:</strong> {scaleConfig.space.delegationPolicy}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Hierarchical Role Zones & Pre-assigned Agents */}
+                  <div className="lib-detail-section">
+                    <div className="lib-detail-section-header">
+                      <span className="lib-detail-section-title">
+                        Hierarchical Zones ({scaleConfig.zones.length}) &amp; Agents ({scaleConfig.agents.length})
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                      {scaleConfig.zones.map((zone) => {
+                        const assigned = scaleConfig.agents.filter((a) => a.zoneRoleTitle === zone.roleTitle);
+                        const tierLabel = zone.level === 0 ? 'L0 Executive' : zone.level === 1 ? 'L1 VP / Dir' : 'L2 Lead / Specialist';
+
+                        return (
+                          <div
+                            key={zone.name}
+                            style={{
+                              background: 'rgba(255,255,255,0.025)',
+                              border: '1px solid rgba(255,255,255,0.07)',
+                              borderLeft: `3px solid ${zone.color || scaleConfig.space.color}`,
+                              borderRadius: 6,
+                              padding: '6px 8px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#f1f5f9' }}>
+                                {zone.roleTitle}
+                              </span>
+                              <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>
+                                {tierLabel}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 1 }}>
+                              {zone.name}
+                            </div>
+
+                            {/* Assigned Agents */}
+                            {assigned.length > 0 && (
+                              <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                {assigned.map((ag) => {
+                                  const agDisplayName = ag.agentName || ag.roleTitle || 'Specialist';
+                                  return (
+                                    <span
+                                      key={agDisplayName}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        fontSize: 10,
+                                        background: `${scaleConfig.space.color}15`,
+                                        border: `1px solid ${scaleConfig.space.color}35`,
+                                        borderRadius: 4,
+                                        padding: '2px 6px',
+                                        color: '#e2e8f0',
+                                      }}
+                                    >
+                                      <Brain size={10} color={scaleConfig.space.color} />
+                                      <span>{agDisplayName}</span>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lib-detail-footer">
+                  <div
+                    className="lib-detail-drag-badge"
+                    draggable
+                    onDragStart={(e) =>
+                      startDrag(itemKey, e, {
+                        kind: 'company',
+                        companyPreset: company,
+                        companyScale: currentScale,
+                      })
+                    }
+                    onDragEnd={endDrag}
+                    title="Drag onto canvas to spawn company"
+                  >
+                    <GripHorizontal size={13} />
+                    <span>Drag Complete Company to Canvas</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="lib-spawn-btn"
+                    disabled={isDeployingCompany}
+                    onClick={() => {
+                      if (isDeployingCompany) return;
+                      window.dispatchEvent(
+                        new CustomEvent('canvas:spawn-company', {
+                          detail: { company, scale: currentScale },
+                        }),
+                      );
+                    }}
+                    style={{
+                      background: `linear-gradient(135deg, ${scaleConfig.space.color}, ${scaleConfig.space.color}dd)`,
+                      color: '#fff',
+                      fontWeight: 700,
+                      gap: 6,
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>
+                      {isDeployingCompany
+                        ? 'Company Deploying...'
+                        : `Deploy Whole Company (${currentScale.toUpperCase()})`}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Agent Template Details with Live Model Configuration & Dragging */}
           {selectedDetail.kind === 'agent' && (
             <div className="lib-detail-content">
@@ -5548,18 +5995,20 @@ ${selectedDetail.item.tools.map((t) => `- \`${t}\`: Built-in safe workspace prim
         </div>
       )}
 
-      <ZoneBuilderModal
-        isOpen={isZoneBuilderOpen}
-        initial={editingZonePreset}
-        zones={roleZones}
-        title={editingZonePreset?.id ? 'Edit Zone' : 'Create Zone'}
-        saveLabel={editingZonePreset?.id ? 'Save Zone' : 'Add Zone Preset'}
-        onSave={saveZonePreset}
-        onClose={() => {
-          setIsZoneBuilderOpen(false);
-          setEditingZonePreset(null);
-        }}
-      />
+      <LazyMount open={isZoneBuilderOpen}>
+        <ZoneBuilderModal
+          isOpen={isZoneBuilderOpen}
+          initial={editingZonePreset}
+          zones={roleZones}
+          title={editingZonePreset?.id ? 'Edit Zone' : 'Create Zone'}
+          saveLabel={editingZonePreset?.id ? 'Save Zone' : 'Add Zone Preset'}
+          onSave={saveZonePreset}
+          onClose={() => {
+            setIsZoneBuilderOpen(false);
+            setEditingZonePreset(null);
+          }}
+        />
+      </LazyMount>
 
       {/* ── Mobile Library Sheet with full Level 2 & Inner Detail Navigation ── */}
       {isMobile && activeTab && (

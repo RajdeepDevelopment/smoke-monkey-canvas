@@ -195,6 +195,15 @@ export interface ActiveRunRecord {
   partsCount: number;
 }
 
+export interface ActiveDelegationRecord {
+  id: string;
+  sourceAgentId: string;
+  targetAgentId: string;
+  taskTitle?: string;
+  sessionId?: string;
+  startedAt: string;
+}
+
 export type WorkspaceFileCategory =
   | 'image'
   | 'video'
@@ -248,6 +257,8 @@ export interface AgentCronJobRecord {
   enabled: number;
   last_run_at: string | null;
   next_run_at: string | null;
+  last_status?: 'completed' | 'failed' | 'running' | null;
+  last_error?: string | null;
   created_by: CronJobSource;
   created_at: string;
   updated_at: string;
