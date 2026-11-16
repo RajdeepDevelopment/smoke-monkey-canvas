@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ensureAgentTodosDir } from './agent.todos.js';
+import { reconcileSystemPromptWithProfile, isSystemPromptStale } from './agent.prompt.js';
 
 /**
  * Per-agent workspaces & the shared agent registry.
@@ -523,11 +524,14 @@ Rewritten at the start of every run with that run's task.
 // ── Shared registry README (written once) ──────────────────────────────────
 
 export const SMARTNESS_MD_TEMPLATE = `# Operational Playbook
-- **Ambiguity**: Do not guess. Work clear parts first; ask caller/manager via \`delegate_task(chat_id)\`.
-- **Failures**: Inspect \`reports/\`. Send fixes via \`delegate_task(chat_id)\` or escalate.
-- **Reporting**: Report status, deliverables (file paths), test results, and next steps.
+- **Threading (chat_id)**: When continuing a conversation or replying, ALWAYS pass \`chat_id\` to \`delegate_task\` so the other agent receives your message in that thread.
+- **Action-First**: When assigned a task or cascading instructions, execute \`delegate_task\` or your tools in your CURRENT turn. Do not narrate future promises without tool calls.
+- **Task Closure**: When finishing any delegated task assigned to you, call \`close_delegation_task(chat_id: ..., status: ..., summary: ..., deliverables: [...])\` to formally seal deliverables back to the caller. Do not rely on natural turn completion.
+- **Ambiguity**: Do not guess. Work clear parts first; ask caller/manager via \`delegate_task(target_agent_id: ..., chat_id: ...)\`.
+- **Failures**: Inspect \`reports/\`. Send fixes via \`delegate_task(target_agent_id: ..., chat_id: ...)\` or escalate.
+- **Reporting**: Report status, deliverables (file paths), test results, and next steps upward with \`communication_type: 'report_status'\`.
 - **Approvals**: For destructive actions or prod changes, request sign-off via \`delegate_task(communication_type: 'request_approval')\`.
-- **Cross-Team**: Coordinate with peer leads via \`delegate_task(chat_id)\`.
+- **Cross-Team**: Coordinate with peer leads via \`delegate_task(chat_id: ...)\`.
 - **Memory**: Save reusable facts/procedures via \`manage_agent_memory\`.
 `;
 
@@ -716,6 +720,26 @@ export const ensureAgentWorkspace = (
     writeIfMissing(path.join(ws.scriptsDir, '.gitignore'), SCRIPTS_GITIGNORE);
     writeIfMissing(path.join(ws.automationDir, 'README.md'), AUTOMATION_README);
     writeIfMissing(ws.automationIndexFile, AUTOMATION_INDEX_SEED);
+    const syncScriptPath = path.join(ws.automationDir, 'feature-sync.sh');
+    writeIfMissing(
+      syncScriptPath,
+      `#!/bin/bash
+# Feature Sync Automation Script
+# Usage: ./feature-sync.sh [folder_path] [since_timestamp]
+# Detects files modified in owned feature directories
+FOLDER="\${1:-.}"
+SINCE="\${2:-}"
+
+if [ -n "$SINCE" ]; then
+  find "$FOLDER" -type f -newermt "$SINCE" -not -path "*/.smoke-agent/*" -not -path "*/.git/*" -not -path "*/node_modules/*" 2>/dev/null
+else
+  find "$FOLDER" -type f -mmin -180 -not -path "*/.smoke-agent/*" -not -path "*/.git/*" -not -path "*/node_modules/*" 2>/dev/null
+fi
+`,
+    );
+    try {
+      fs.chmodSync(syncScriptPath, 0o755);
+    } catch {}
     writeIfMissing(path.join(ws.logsDir, '.gitignore'), IGNORE_ALL);
     writeIfMissing(path.join(ws.artifactsDir, '.gitignore'), IGNORE_ALL);
     writeIfMissing(path.join(ws.assetsExcelDir, 'README.md'), ASSETS_FOLDER_README('Excel / data exports', 'ALL generated spreadsheets and data exports (.xlsx, .csv, .tsv) MUST be saved here — and only here.'));
@@ -1277,7 +1301,21 @@ export const writeCommonAgentRegistry = (
 export const memoryMatrixContentBlock = (ws: AgentWorkspace): string => {
   const blocks: string[] = [];
 
-  for (const m of MEMORY_FILES) {
+  const DIMENSION_SPECIALIZATION_ROLES: Record<string, string> = {
+    'facts.md': 'Verified ground-truth project invariants: Codebase paths, Git repos/branches, microservice ports, server hosts, DB schemas, env vars, and architectural facts.',
+    'semantic.md': 'Deep domain concepts & architecture: Business logic rules, data models, domain terminology, algorithms, protocol schemas, and design rationale.',
+    'associative.md': 'Mental models & component topology: Service dependencies, API routes, data flow between modules, and peer collaboration handoffs.',
+    'procedural.md': 'Proven execution recipes & runbooks: Step-by-step build, test, and deploy recipes, curl commands, shell runbooks, and debugging workflows.',
+    'reflective.md': 'Meta-cognitive critique & edge cases: Self-evaluations, past error post-mortems, blind spots, performance bottlenecks, and quality guidelines.',
+    'prospective.md': 'Future intentions & deferred tasks: Backlog items, upcoming sprint milestones, scheduled reminders, and "remember to do X when Y occurs".',
+    'identity.md': 'Role boundaries & specialization focus: Ownership scope, specialization depth, authority boundaries (e.g. non-coding leadership vs developer).',
+    'preferences.md': 'Stable preferences & coding conventions: Language standards, linting rules, formatting guidelines, and preferred communication styles.',
+    'working.md': 'Active scratchpad: Current task checklist, in-flight hypotheses, and scratchpad for the ongoing turn.',
+    'episodic.md': 'Autobiographical execution log: Chronological record of major runs, milestone outcomes, and key deliverables completed.',
+  };
+
+  for (let i = 0; i < MEMORY_FILES.length; i++) {
+    const m = MEMORY_FILES[i];
     const filePath = ws.memoryFiles[m.file];
     let content = '';
     try {
@@ -1293,16 +1331,21 @@ export const memoryMatrixContentBlock = (ws: AgentWorkspace): string => {
 
     const lines = content.split('\n');
     let displayContent = content;
-    if (lines.length > 120) {
+    // Keep up to 250 lines complete. If exceptionally huge, keep top 160 lines and bottom 60 lines so headers are never lost
+    if (lines.length > 250) {
+      const topPart = lines.slice(0, 160).join('\n');
+      const bottomPart = lines.slice(-60).join('\n');
       displayContent =
-        lines.slice(-100).join('\n') +
-        `\n\n<!-- Note: Truncated to latest 100 lines for prompt budget. Full file (${lines.length} lines) available at ${filePath} -->`;
+        `${topPart}\n\n<!-- [Note: Middle ${lines.length - 220} lines omitted for runtime prompt budget. Full file available at ${filePath}] -->\n\n${bottomPart}`;
     }
 
-    blocks.push(`#### 📄 [${m.category}] ${m.file}
-- **Absolute File Path**: \`${filePath}\`
-- **Purpose**: ${m.purpose}
-- **Current Live Content**:
+    const specRole = DIMENSION_SPECIALIZATION_ROLES[m.file] || m.purpose;
+
+    blocks.push(`### 📁 Dimension [${i + 1}/10]: ${m.category} (\`${m.file}\`)
+- **File Path**: \`${filePath}\`
+- **Cognitive Purpose**: ${m.purpose}
+- **Specialization Role**: ${specRole}
+- **Current Live Inner Content**:
 \`\`\`markdown
 ${displayContent}
 \`\`\``);
@@ -1320,37 +1363,75 @@ export const workspacePrompt = (
   ws: AgentWorkspace,
   common: CommonRegistryPaths,
   agentId: string,
-) => `## YOUR AGENT WORKSPACE (private persistent memory, data & configuration)
-You have a private persistent workspace that belongs only to you. These paths are unique to your agent id (\`${agentId}\`) and are safe to read and write with your file tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_directory\`, ...).
-
-Your agent workspace root: "${ws.dir.replace(/\/?$/, '')}"
-
-### Agent memory (ten human-like memory dimensions)
-Persistent agent memory is stored in "${ws.memoryDir.replace(/\/?$/, '')}" as ten specialized markdown files.
-The complete LIVE contents of all 10 memory files are pre-loaded directly below into your runtime context for instant cognitive recall. You do NOT need to call \`read_file\` to explore their initial contents.
+) => `## 🧠 COGNITIVE RUNTIME MEMORY MATRIX (10 LIVE DIMENSIONS)
+You possess a 10-dimension Human Memory Matrix stored in your private workspace ("${ws.memoryDir.replace(/\/?$/, '')}").
+The complete LIVE contents of all 10 memory files are pre-loaded directly below into your runtime context for instant cognitive recall. You do NOT need to call \`read_file\` to read them at the start of your turn.
 
 ${memoryMatrixContentBlock(ws)}
 
-### Memory update & learning rules
-1. **Instant Memory Recall**: Use the pre-loaded memory contents above immediately. Do not waste tool calls reading unchanged memory files at task start.
-2. **Pushing Learned Facts & Updates**:
-   - When you discover, verify, or learn new ground-truth facts about the user, project, environment, or system, ALWAYS write or append them directly to \`${ws.memoryFiles['facts.md']}\` using \`manage_agent_memory\` (action: "append") or your file editing tools (\`edit_file\`, \`write_file\`).
-   - Treat \`facts.md\` as verified information. Do not promote unverified guesses or assumptions into facts.
-3. **Task Scratchpad & Working Memory**:
-   - Keep \`working.md\` (\`${ws.memoryFiles['working.md']}\`) focused on the current task and update or replace scratchpad content as goals evolve.
-4. **Procedural Workflows & Runbooks**:
-   - When you establish reusable step-by-step procedures or execution runbooks, record them in \`procedural.md\` (\`${ws.memoryFiles['procedural.md']}\`).
-5. **Deferred Intentions & Reminders**:
-   - Use \`prospective.md\` (\`${ws.memoryFiles['prospective.md']}\`) for scheduled follow-ups, deferred tasks, and future trigger conditions ("when X happens, do Y").
-6. **Reflections & Meta-Cognition**:
-   - Use \`reflective.md\` (\`${ws.memoryFiles['reflective.md']}\`) for meta-cognition, self-critique, and capturing lessons from mistakes or near-misses.
-7. **Relationships & Mental Models**:
-   - Use \`associative.md\` (\`${ws.memoryFiles['associative.md']}\`) for dependency linkages and mental models of systems and entities.
-8. **Identity & Preferences**:
-   - Use \`identity.md\` (\`${ws.memoryFiles['identity.md']}\`) for your evolving persona, voice nuances, and role boundaries.
-   - Use \`preferences.md\` (\`${ws.memoryFiles['preferences.md']}\`) for stable user preferences, coding styles, and working norms.
-9. When information becomes obsolete, update or remove it rather than continuously appending to the file.
-10. Do not expose raw internal memory files to the user unless the user explicitly asks for their contents.
+### 🎯 ACTIVE SPECIALIZATION HARVESTING & CONTINUOUS LEARNING DIRECTIVE
+Your professional value and technical autonomy as an AI agent stem entirely from your specialization. An agent who forgets what they did or leaves their memory files as generic templates remains novice. You must actively collect, harvest, and remember verified facts, architectural models, and procedural recipes so your domain specialization continuously deepens over time.
+
+#### 📚 What to Collect & Remember in Each Memory Dimension:
+1. **\`facts.md\` (Ground-Truth Invariants)**:
+   - Verified project directory path (\`${ws.dir.replace(/\/?$/, '')}\`) and Git repository URL / branch.
+   - Exact microservice ports, server hosts, API gateway addresses, and environment variable names.
+   - Database table names, schemas, and primary/foreign keys.
+   - Absolute paths to critical configuration files (\`package.json\`, \`docker-compose.yml\`, \`tsconfig.json\`).
+   - Invariants: Rules that never change (e.g. non-coding executive governance, zero-downtime policy).
+
+2. **\`semantic.md\` (Domain Concepts & Architecture)**:
+   - High-level architectural paradigms (e.g. Next.js 15 App Router, dual-engine RAG, CQRS, event sourcing).
+   - Core business logic rules and domain terminology specific to your role.
+   - Data models, entity definitions, and interface contracts.
+   - Trade-offs, design rationale, and why certain architectural decisions were made.
+
+3. **\`associative.md\` (Cross-Component Mental Models & Topology)**:
+   - Service connection topologies: Which component talks to which other component.
+   - API route mappings, event bus topics, and WebSocket streaming channels.
+   - Peer collaboration handoffs: Who you receive tasks from (upstream callers) and who you delegate subtasks to (downstream specialists).
+
+4. **\`procedural.md\` (Execution Recipes & Runbooks)**:
+   - Step-by-step verified execution recipes for building, testing, linting, and running the project.
+   - Exact terminal commands, curl invocations, test runner flags, and deployment procedures.
+   - Troubleshooting and debugging runbooks for recurring issues.
+
+5. **\`reflective.md\` (Self-Critique, Blind Spots & Error Patterns)**:
+   - Post-mortems from previous execution errors (e.g. rate limit handling, wrong parameters, hallucinated paths).
+   - Performance bottlenecks, memory overhead gotchas, and edge cases to avoid.
+   - Honest self-evaluations and quality checklists before reporting task completion.
+
+6. **\`prospective.md\` (Future Intentions & Backlog)**:
+   - Deferred tasks, future milestones, and technical debt to address later.
+   - "Remember to do X when Y completes" triggers.
+   - Active sprint backlog items assigned to your specialization.
+
+7. **\`identity.md\` (Evolving Role & Domain Boundaries)**:
+   - Your exact specialization focus, ownership boundaries, and domain boundaries.
+   - How your role has evolved through experience.
+   - Authority limits (e.g. non-coding strategic governance vs hands-on code development).
+
+8. **\`preferences.md\` (Stable Conventions)**:
+   - Coding styles, language idioms, linting preferences, commit message conventions, formatting standards.
+
+9. **\`working.md\` (Active Task Scratchpad)**:
+   - Immediate sub-goals, checklist, and scratchpad for the current running task.
+
+10. **\`episodic.md\` (Milestone History)**:
+    - Chronological log of major completed runs, significant milestones, and key decisions.
+
+#### ⚡ How and When to Update Memory:
+- **During or immediately after completing any task**: If you discovered a new fact, resolved a bug, learned an API endpoint, or refined a procedure, you MUST call \`manage_agent_memory\` with \`action: 'append'\` or \`'write'\`, or batch update with \`entries: [...]\` to persist it into the appropriate file.
+- **Self-Refining Specialization Profile**: Call \`update_agent_profile\` to update your \`role\`, \`specialty\`, and \`description\` to reflect your deepened domain expertise.
+- **Tool Equipping**: Call \`attach_skill\` or \`attach_mcp\` when you need specialized toolsets to accomplish your domain tasks.
+- **Instant Recall**: Use the pre-loaded memory contents above immediately. Do not waste tool calls reading unchanged memory files at task start.
+- When information becomes obsolete, update or replace it rather than continuously appending conflicting facts.
+- Do not expose raw internal memory files to the user unless the user explicitly asks for their contents.
+
+## YOUR AGENT WORKSPACE (private persistent memory, data & configuration)
+You have a private persistent workspace that belongs only to you. These paths are unique to your agent id (\`${agentId}\`) and are safe to read and write with your file tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_directory\`, ...).
+
+Your agent workspace root: "${ws.dir.replace(/\/?$/, '')}"
 
 ### Base system prompt & instructions (Self-Rebuilding)
 Your active base system prompt is mirrored at "${ws.systemPromptFile}".
@@ -1738,9 +1819,19 @@ export const reconcileAgentWorkspaceRuntime = (input: ReconcileRuntimeInput) => 
     if (fs.existsSync(ws.systemPromptFile)) {
       const filePrompt = fs.readFileSync(ws.systemPromptFile, 'utf8').trim();
       if (filePrompt && filePrompt !== agent.system_prompt) {
-        db.updateAgent(agentId, { system_prompt: filePrompt });
-        updatedSystemPrompt = filePrompt;
-        hasChanges = true;
+        if (isSystemPromptStale(filePrompt, agent)) {
+          const healed = reconcileSystemPromptWithProfile(filePrompt, agent);
+          try {
+            fs.writeFileSync(ws.systemPromptFile, `${healed}\n`, 'utf8');
+          } catch {}
+          db.updateAgent(agentId, { system_prompt: healed });
+          updatedSystemPrompt = healed;
+          hasChanges = true;
+        } else {
+          db.updateAgent(agentId, { system_prompt: filePrompt });
+          updatedSystemPrompt = filePrompt;
+          hasChanges = true;
+        }
       }
     }
   } catch (err) {

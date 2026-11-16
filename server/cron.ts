@@ -1,6 +1,27 @@
 import cronParser from 'cron-parser';
-import type { CanvasDatabase } from './db.js';
-import type { AgentRunner, WebSocketBroadcaster } from './runner.js';
+
+interface CronAgentRecord {
+  id: string;
+  name: string;
+  status: string;
+  cron_enabled: number;
+  cron_schedule: string | null;
+  next_run_at: string | null;
+}
+
+interface CronDatabase {
+  getAllAgents(): CronAgentRecord[];
+  updateAgent(id: string, patch: { next_run_at?: string | null; status?: string }): unknown;
+}
+
+interface CronRunner {
+  isAgentRunning(agentId: string): boolean;
+  runAgent(agentId: string, triggerType?: 'cron' | 'manual'): Promise<unknown>;
+}
+
+interface CronBroadcaster {
+  broadcast(message: { type: string; agentId: string; runId?: string; data?: unknown }): void;
+}
 
 export function calculateNextRun(cronSchedule: string): string | null {
   try {
@@ -14,13 +35,13 @@ export function calculateNextRun(cronSchedule: string): string | null {
 }
 
 export class CronScheduler {
-  private db: CanvasDatabase;
-  private runner: AgentRunner;
-  private ws: WebSocketBroadcaster;
+  private db: CronDatabase;
+  private runner: CronRunner;
+  private ws: CronBroadcaster;
   private timer: NodeJS.Timeout | null = null;
   private isChecking = false;
 
-  constructor(db: CanvasDatabase, runner: AgentRunner, ws: WebSocketBroadcaster) {
+  constructor(db: CronDatabase, runner: CronRunner, ws: CronBroadcaster) {
     this.db = db;
     this.runner = runner;
     this.ws = ws;

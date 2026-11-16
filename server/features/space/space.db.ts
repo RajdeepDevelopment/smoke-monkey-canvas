@@ -147,9 +147,16 @@ export function rowToWorkspaceSpace(row: WorkspaceSpaceRow): any {
 
 export class SpaceDb {
   private coreDb: CoreDatabase;
+  private static maintenanceDone = false;
 
   constructor(coreDb?: CoreDatabase) {
     this.coreDb = coreDb ?? CoreDatabase.getInstance();
+    if (!SpaceDb.maintenanceDone) {
+      SpaceDb.maintenanceDone = true;
+      try {
+        this.repairOrphanParentZones();
+      } catch {}
+    }
   }
 
   getAllSpaceEntities(): SpaceAgentEntity[] {
@@ -279,12 +286,41 @@ export class SpaceDb {
     }
   }
 
-  getZones(): SpaceZone[] {
-    this.repairOrphanParentZones();
+  cleanupOrphanedZones(): number {
+    try {
+      const result = this.coreDb.db.prepare(`
+        DELETE FROM space_zones
+        WHERE space_id IS NOT NULL
+          AND space_id NOT IN (SELECT id FROM workspace_spaces)
+      `).run();
+      return Number(result.changes);
+    } catch {
+      return 0;
+    }
+  }
+
+  getZones(spaceId?: string | null): SpaceZone[] {
+    if (spaceId) {
+      const rows = this.coreDb.db
+        .prepare(`SELECT * FROM space_zones WHERE space_id = ? ORDER BY level ASC, created_at ASC`)
+        .all(spaceId) as unknown as SpaceZoneRow[];
+      return rows.map(rowToZone);
+    }
     const rows = this.coreDb.db
-      .prepare(`SELECT * FROM space_zones ORDER BY level ASC, created_at ASC`)
+      .prepare(`
+        SELECT * FROM space_zones
+        WHERE space_id IS NULL OR space_id IN (SELECT id FROM workspace_spaces)
+        ORDER BY level ASC, created_at ASC
+      `)
       .all() as unknown as SpaceZoneRow[];
     return rows.map(rowToZone);
+  }
+
+  getSpaceAgentIds(spaceId: string): string[] {
+    const rows = this.coreDb.db
+      .prepare(`SELECT agent_id FROM space_agent_memberships WHERE space_id = ?`)
+      .all(spaceId) as { agent_id: string }[];
+    return rows.map((r) => r.agent_id);
   }
 
   /**
@@ -392,6 +428,7 @@ export class SpaceDb {
   createZonesBatch(inputs: SpaceZoneInput[]): SpaceZone[] {
     const now = new Date().toISOString();
     const results: SpaceZone[] = [];
+    const createdIds: string[] = [];
     this.coreDb.db.exec('BEGIN');
     try {
       const stmt = this.coreDb.db.prepare(`
@@ -403,6 +440,7 @@ export class SpaceDb {
       `);
       for (const input of inputs) {
         const id = input.id?.trim() || randomUUID();
+        createdIds.push(id);
         stmt.run(
           id,
           input.name,
@@ -428,11 +466,9 @@ export class SpaceDb {
         );
       }
       this.coreDb.db.exec('COMMIT');
-      for (const input of inputs) {
-        if (input.id?.trim()) {
-          const z = this.getZone(input.id.trim());
-          if (z) results.push(z);
-        }
+      for (const id of createdIds) {
+        const z = this.getZone(id);
+        if (z) results.push(z);
       }
       return results;
     } catch (err) {
@@ -449,6 +485,7 @@ export class SpaceDb {
     for (const [key, column] of Object.entries(ZONE_COLUMNS)) {
       if (!(key in patch)) continue;
       const raw = (patch as Record<string, unknown>)[key];
+      if (raw === undefined) continue;
       let value: string | number | null;
       if (key === 'shape') value = normalizeShape(raw);
       else if (key === 'delegationPolicy') value = normalizePolicy(raw);
@@ -456,8 +493,6 @@ export class SpaceDb {
         value = Number.isFinite(Number(raw)) ? Number(raw) : 0;
       } else if (key === 'roleTitle') {
         value = typeof raw === 'string' && raw.trim() ? raw.trim() : (patch.name ?? 'Team Member');
-      } else if (raw === undefined) {
-        continue;
       } else {
         value = (raw as string | null) ?? null;
       }
@@ -657,7 +692,18 @@ export class SpaceDb {
     return this.getWorkspaceSpace(id);
   }
 
-  deleteWorkspaceSpace(id: string): boolean {
+  deleteWorkspaceSpace(id: string, options?: { deleteZones?: boolean }): boolean {
+    try {
+      if (options?.deleteZones === false) {
+        this.coreDb.db.prepare(`UPDATE space_zones SET space_id = NULL WHERE space_id = ?`).run(id);
+      } else {
+        this.coreDb.db.prepare(`DELETE FROM space_zones WHERE space_id = ?`).run(id);
+      }
+      this.coreDb.db.prepare(`DELETE FROM space_agent_memberships WHERE space_id = ?`).run(id);
+      this.coreDb.db.prepare(`DELETE FROM space_workspace_prompts WHERE space_id = ?`).run(id);
+    } catch {
+      // ignore table or foreign key errors
+    }
     const result = this.coreDb.db.prepare(`DELETE FROM workspace_spaces WHERE id = ?`).run(id);
     return Number(result.changes) > 0;
   }
@@ -688,5 +734,87 @@ export class SpaceDb {
 
   setCanvasViewport(viewport: CanvasViewport): void {
     this.coreDb.setSetting('canvas_viewport', JSON.stringify(viewport));
+  }
+
+  // ── Explore Sessions ─────────────────────────────────────────────────────
+
+  createExploreSession(input: {
+    space_id: string;
+    brief_markdown?: string | null;
+    attached_docs?: Array<{filename: string; content: string}>;
+    git_url?: string | null;
+    git_local_path?: string | null;
+    tech_stack?: string[];
+    sync_interval_hours?: number;
+    provider?: string | null;
+    model?: string | null;
+  }): import('../agent/agent.types.js').ExploreSessionRecord {
+    const id = `explore_${Date.now()}_${randomUUID().slice(0, 8)}`;
+    const now = new Date().toISOString();
+    const stmt = this.coreDb.db.prepare(`
+      INSERT INTO company_explore_sessions (
+        id, space_id, status, brief_markdown, attached_docs_json,
+        git_url, git_local_path, tech_stack_json, sync_interval_hours, provider, model, created_at
+      ) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      id,
+      input.space_id,
+      input.brief_markdown ?? null,
+      JSON.stringify(input.attached_docs ?? []),
+      input.git_url ?? null,
+      input.git_local_path ?? null,
+      JSON.stringify(input.tech_stack ?? []),
+      input.sync_interval_hours ?? 3,
+      input.provider ?? 'nvidia',
+      input.model ?? 'nvidia/nemotron-3.5-lightning-30b-a3b',
+      now,
+    );
+    return this.getExploreSession(id)!;
+  }
+
+  getExploreSession(id: string): import('../agent/agent.types.js').ExploreSessionRecord | null {
+    const stmt = this.coreDb.db.prepare(`SELECT * FROM company_explore_sessions WHERE id = ?`);
+    return (stmt.get(id) as unknown as import('../agent/agent.types.js').ExploreSessionRecord) ?? null;
+  }
+
+  getExploreSessionBySpace(spaceId: string): import('../agent/agent.types.js').ExploreSessionRecord | null {
+    const stmt = this.coreDb.db.prepare(`
+      SELECT * FROM company_explore_sessions WHERE space_id = ? ORDER BY created_at DESC LIMIT 1
+    `);
+    return (stmt.get(spaceId) as unknown as import('../agent/agent.types.js').ExploreSessionRecord) ?? null;
+  }
+
+  updateExploreSession(id: string, patch: {
+    status?: import('../agent/agent.types.js').ExploreSessionStatus;
+    explorer_agent_id?: string | null;
+    architect_agent_id?: string | null;
+    explore_report_json?: string | null;
+    completed_at?: string | null;
+    provider?: string | null;
+    model?: string | null;
+  }): void {
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    if (patch.status !== undefined) { fields.push('status = ?'); values.push(patch.status); }
+    if (patch.explorer_agent_id !== undefined) { fields.push('explorer_agent_id = ?'); values.push(patch.explorer_agent_id); }
+    if (patch.architect_agent_id !== undefined) { fields.push('architect_agent_id = ?'); values.push(patch.architect_agent_id); }
+    if (patch.explore_report_json !== undefined) { fields.push('explore_report_json = ?'); values.push(patch.explore_report_json); }
+    if (patch.completed_at !== undefined) { fields.push('completed_at = ?'); values.push(patch.completed_at); }
+    if (patch.provider !== undefined) { fields.push('provider = ?'); values.push(patch.provider); }
+    if (patch.model !== undefined) { fields.push('model = ?'); values.push(patch.model); }
+    if (fields.length === 0) return;
+    values.push(id);
+    const stmt = this.coreDb.db.prepare(`UPDATE company_explore_sessions SET ${fields.join(', ')} WHERE id = ?`);
+    stmt.run(...(values as any[]));
+  }
+
+  listExploreSessions(spaceId?: string): import('../agent/agent.types.js').ExploreSessionRecord[] {
+    if (spaceId) {
+      const stmt = this.coreDb.db.prepare(`SELECT * FROM company_explore_sessions WHERE space_id = ? ORDER BY created_at DESC`);
+      return stmt.all(spaceId) as unknown as import('../agent/agent.types.js').ExploreSessionRecord[];
+    }
+    const stmt = this.coreDb.db.prepare(`SELECT * FROM company_explore_sessions ORDER BY created_at DESC`);
+    return stmt.all() as unknown as import('../agent/agent.types.js').ExploreSessionRecord[];
   }
 }

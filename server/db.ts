@@ -70,6 +70,10 @@ export class CanvasDatabase {
       mkdirSync(dir, { recursive: true });
     }
     this.db = new DatabaseSync(resolvedPath);
+    try {
+      this.db.exec('PRAGMA journal_mode = WAL;');
+      this.db.exec('PRAGMA busy_timeout = 5000;');
+    } catch {}
     this.initTables();
   }
 
@@ -83,7 +87,7 @@ export class CanvasDatabase {
       CREATE TABLE IF NOT EXISTS agents (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        model TEXT NOT NULL DEFAULT 'nvidia/nemotron-3-super-120b-a12b',
+        model TEXT NOT NULL DEFAULT 'nvidia/nemotron-3.5-lightning-30b-a3b',
         provider TEXT NOT NULL DEFAULT 'nvidia',
         system_prompt TEXT NOT NULL,
         cron_schedule TEXT,

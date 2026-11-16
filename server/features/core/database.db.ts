@@ -51,11 +51,13 @@ export class CoreDatabase {
     this.db = new DatabaseSync(resolvedPath);
     try {
       this.db.exec('PRAGMA journal_mode = WAL;');
+      this.db.exec('PRAGMA busy_timeout = 5000;');
     } catch {}
     this.bootstrapTables();
     this.seedDefaultSettings();
     this.seedBundledSkills();
     this.backfillAgentProfileDetails();
+    this.backfillAgentExploreColumns();
     this.backfillCronJobPrompts();
   }
 
@@ -75,7 +77,7 @@ export class CoreDatabase {
       CREATE TABLE IF NOT EXISTS agents (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        model TEXT NOT NULL DEFAULT 'nvidia/nemotron-3-super-120b-a12b',
+        model TEXT NOT NULL DEFAULT 'nvidia/nemotron-3.5-lightning-30b-a3b',
         provider TEXT NOT NULL DEFAULT 'nvidia',
         system_prompt TEXT NOT NULL,
         cron_schedule TEXT,
@@ -292,6 +294,23 @@ export class CoreDatabase {
         FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS company_explore_sessions (
+        id TEXT PRIMARY KEY,
+        space_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        brief_markdown TEXT,
+        attached_docs_json TEXT DEFAULT '[]',
+        git_url TEXT,
+        git_local_path TEXT,
+        tech_stack_json TEXT DEFAULT '[]',
+        explore_report_json TEXT,
+        explorer_agent_id TEXT,
+        sync_interval_hours INTEGER NOT NULL DEFAULT 3,
+        created_at TEXT NOT NULL,
+        completed_at TEXT,
+        FOREIGN KEY(space_id) REFERENCES workspace_spaces(id) ON DELETE CASCADE
+      );
+
       CREATE INDEX IF NOT EXISTS idx_agent_mcps ON agent_mcps(agent_id);
       CREATE INDEX IF NOT EXISTS idx_agent_skills ON agent_skills(agent_id);
       CREATE INDEX IF NOT EXISTS idx_runs_agent ON runs(agent_id);
@@ -386,6 +405,44 @@ export class CoreDatabase {
     }
     try {
       this.db.exec("ALTER TABLE agent_cron_jobs ADD COLUMN last_error TEXT");
+    } catch {
+      // already exists
+    }
+  }
+
+  private backfillAgentExploreColumns(): void {
+    try {
+      this.db.exec("ALTER TABLE agents ADD COLUMN feature_ownership_json TEXT DEFAULT '[]'");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE agents ADD COLUMN owned_space_id TEXT");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE agents ADD COLUMN agent_tier TEXT DEFAULT 'leaf'");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE agents ADD COLUMN last_sync_at TEXT");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE company_explore_sessions ADD COLUMN provider TEXT");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE company_explore_sessions ADD COLUMN model TEXT");
+    } catch {
+      // already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE company_explore_sessions ADD COLUMN architect_agent_id TEXT");
     } catch {
       // already exists
     }

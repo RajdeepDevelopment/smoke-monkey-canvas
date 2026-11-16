@@ -1,0 +1,101 @@
+{
+  "id": "company-growth-marketing",
+  "name": "Hyperscale Growth Agency",
+  "category": "Marketing & Creative",
+  "domain": "Performance Marketing & Conversion Optimization",
+  "tagline": "Full-funnel customer acquisition, automated ad optimization, high-converting landing pages, and multi-channel attribution.",
+  "operatingCadence": "Rapid weekly creative and experiment test cadences with strict ROAS targets, conversion lift goals, and strict ETA tracking.",
+  "workAreas": [
+    {
+      "name": "Agency Directorate & Client Strategy",
+      "roles": ["Managing Director", "VP Growth Strategy", "Client Partner"],
+      "focus": "Client growth retainers, media budget pacing, ROAS commitments, and multi-client revenue targets.",
+      "targets": "Client average ROAS >3.5x, 100% budget pacing accuracy, 95%+ client retention rate."
+    },
+    {
+      "name": "Growth Architecture & Attribution Analytics",
+      "roles": ["Head of Marketing Technology", "Attribution Data Architect"],
+      "focus": "Server-side tracking (CAPI, GA4), multi-touch attribution models, customer data platform (CDP) setup, and initial campaign exploration.",
+      "targets": "100% first-party tracking accuracy, sub-10s data latency, zero direct copywriting or execution by leadership."
+    },
+    {
+      "name": "Campaign Operations & Account Management",
+      "roles": ["Growth Operations Manager", "Account Lead"],
+      "focus": "Weekly sprint planning, creative brief assignment, media budget allocation, mandatory ETA tracking, and active follow-ups.",
+      "targets": "100% brief allocation with agreed ETAs, zero ad campaign launch delays, weekly sprint burndown tracking."
+    },
+    {
+      "name": "Creative Production & Performance Copywriting",
+      "roles": ["Senior Conversion Copywriter", "Motion Designer", "Frontend Landing Page Developer"],
+      "focus": "High-converting ad creatives, video hooks, landing page variants (Tailwind/Next.js), and interactive calculator widgets.",
+      "targets": "85%+ unit test coverage on landing page code, >3% landing page conversion rates, delivery within agreed ETAs."
+    },
+    {
+      "name": "QA, Analytics & Conversion Verification",
+      "roles": ["Marketing QA Lead", "CRO Analytics Specialist"],
+      "focus": "UTM tracking validation, pixel firing verification, cross-device mobile rendering tests, defect reporting, and launch gating.",
+      "targets": "Zero broken tracking links, 100% passing pixel QA audits, immediate tracking defect reports to management."
+    },
+    {
+      "name": "Paid Media Buying & Automation",
+      "roles": ["Paid Media Lead", "Bidding Automation Engineer"],
+      "focus": "Meta Ads Manager, Google Search/PMax automation, automated bid rules, and creative fatigue rotation.",
+      "targets": "Zero budget overspend incidents, automated bid adjustments every 4 hours, >20% creative win rate."
+    }
+  ],
+  "targets": {
+    "primarySla": "99.9% tracking pixel & landing page uptime with sub-1.2s page load speed",
+    "qualityStandard": "100% verified UTM attribution, zero broken links, >3.5x average client ROAS",
+    "sprintVelocity": "Weekly creative batch drops with verified A/B test results and statistical significance",
+    "etaDiscipline": "All creative briefs and landing page builds require specialist ETA commitment before start; proactive manager follow-ups"
+  },
+  "workflows": {
+    "featureDevelopment": {
+      "title": "Creative Campaign & Landing Page Release Pipeline",
+      "steps": [
+        "1. Intake & Strategic Brief: Campaign goals or creative test angles established by VP Growth Strategy or Client Brief.",
+        "2. Triage & Resource Allocation: Growth Operations Manager reviews media targets, checks creative team bandwidth, and approves brief.",
+        "3. Specialist Assignment: Manager assigns the landing page build or creative assets to copywriters and developers via delegate_task.",
+        "4. Mandatory ETA Request: Manager requests a concrete Estimated Time of Arrival (ETA) before design or coding commences.",
+        "5. ETA Commitment & Tracking: Specialist commits to an ETA, logged on the agency campaign schedule.",
+        "6. Active Follow-Ups: If creative assets or landing page code lag behind the ETA, Manager intervenes, clears asset dependencies, and keeps launch on schedule.",
+        "7. Implementation & Testing: Copywriter crafts angles, frontend developer codes responsive landing page with conversion tracking hooks.",
+        "8. Creative Review: Head of Marketing Technology reviews tracking tags and Lighthouse performance metrics (>90 required).",
+        "9. Marketing QA Verification Gate: QA executes cross-device click-throughs, verifies CAPI server-side event transmission. If tracking fails, QA logs defect back to Manager; if verified, sign-off is granted.",
+        "10. Campaign Launch: Paid Media Lead activates ad groups and connects verified landing page URLs."
+      ]
+    },
+    "bugTriageAndResolution": {
+      "title": "Tracking Discrepancy & Ad Fatigue Resolution Lifecycle",
+      "steps": [
+        "1. Defect Discovery: Analytics alerts flag a conversion drop, broken UTM tracking, or ad platform pixel discrepancy.",
+        "2. QA Defect Report: QA logs an emergency ticket with affected ad IDs, URL parameters, conversion drop logs submitted to Growth Manager.",
+        "3. Management Triage: Growth Operations Manager pauses affected ad spend, escalates priority to P0, and dispatches to MarTech developer.",
+        "4. Urgent ETA Request: Manager requests an emergency fix ETA (sub-30min to prevent wasted ad spend).",
+        "5. Continuous Follow-Up: Manager monitors progress continuously; if ETA expires, escalates to VP Growth.",
+        "6. Fix Implementation: Developer resolves tag manager trigger or webhook delivery error, verifying event payloads.",
+        "7. QA Verification: QA runs test purchases and verifies real-time receipt in Meta Events Manager and GA4.",
+        "8. Campaign Resumption: Paid Media Lead unpauses ads and confirms normalized ROAS telemetry."
+      ]
+    },
+    "initialProjectOnboarding": {
+      "title": "First-Time Agency Account & Tech Stack Exploration Protocol",
+      "steps": [
+        "1. Head of MarTech Discovery: Explores client web property, tag management containers, ad accounts, CRM integrations, and existing analytics.",
+        "2. Architecture Memorization: MarTech Head records pixel IDs, conversion events, and domain structure into facts.md via manage_agent_memory.",
+        "3. Module Partitioning: MarTech Head breaks account into Creative Copy, Landing Pages, Analytics, and Paid Media, delegating to Managers.",
+        "4. Managerial Decomposition: Growth Operations Manager inspects assets, records operational workflows in procedural.md, and assigns tasks.",
+        "5. Specialist Deep-Dive: Specialists inspect existing ad creatives, review historical top-performing copy, and test local development environments.",
+        "6. Universal Memory Commitment: All specialists record verified conversion benchmarks, tone-of-voice guidelines, and tracking parameters into facts.md and procedural.md."
+      ]
+    },
+    "leadershipRules": {
+      "title": "Strict Agency Leadership Fidelity & Separation of Concerns",
+      "rules": [
+        "Managing Directors and MarTech Heads NEVER write ad copy, design banners, or edit landing page code directly.",
+        "Management coordinates client strategy, allocates media budgets, demands explicit ETAs, tracks deliverables, and unblocks specialists.",
+        "When asked to write code or copy, leadership explains the agency hierarchy and immediately delegates downward using delegate_task."
+      ]
+    }
+  }
+}

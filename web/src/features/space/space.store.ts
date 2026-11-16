@@ -248,6 +248,7 @@ export interface SpaceStoreState {
   setAssetsThreadExpanded: (agentId: string, expanded: boolean) => void;
   visibleAssetsThreads: Record<string, boolean>;
   toggleAssetsThreadVisible: (agentId: string) => void;
+  setAssetsThreadVisible: (agentId: string, visible: boolean) => void;
   assetsPositions: Record<string, { x: number; y: number }>;
   setAssetsPosition: (agentId: string, pos: { x: number; y: number }) => void;
   agentUnreadAssetsCounts: Record<string, number>;
@@ -275,6 +276,8 @@ export interface SpaceStoreState {
   addRoleZonesBatch: (zones: (Omit<RoleZone, 'id'> & { id?: string })[]) => Promise<RoleZone[]>;
   updateRoleZone: (id: string, updates: Partial<RoleZone>) => void;
   removeRoleZone: (id: string) => void;
+
+  reloadCanvasData: () => Promise<void>;
 }
 
 /** Determine if an agent card or pod is inside or substantially overlapping a workspace room zone */
@@ -353,6 +356,35 @@ let activeDraggedZoneId: string | null = null;
 let activeDraggedMemberIds = new Set<string>();
 let activeDraggedRoleZoneIds = new Set<string>();
 let activeDraggedRoleZonesMoved = false;
+
+// Shallow equality check to avoid recreating agents state and thrashing canvas re-renders
+function agentsEqual(prev: SpaceAgentEntity[], next: SpaceAgentEntity[]): boolean {
+  if (prev === next) return true;
+  if (!prev || !next) return false;
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (
+      a.id !== b.id ||
+      a.status !== b.status ||
+      a.name !== b.name ||
+      a.role !== b.role ||
+      a.model !== b.model ||
+      a.provider !== b.provider ||
+      a.pos_x !== b.pos_x ||
+      a.pos_y !== b.pos_y ||
+      a.cron_enabled !== b.cron_enabled ||
+      a.cron_expression !== b.cron_expression ||
+      a.updated_at !== b.updated_at ||
+      a.skills?.length !== b.skills?.length ||
+      a.mcps?.length !== b.mcps?.length
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 export const useSpaceStore = create<SpaceStoreState>((set) => ({
   // Agent dynamic moods & expressions (Per-agent live state with debounce/auto-revert)
@@ -488,9 +520,13 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
   edges: [],
 
   setAgents: (updater) => {
-    set((state) => ({
-      agents: typeof updater === 'function' ? updater(state.agents) : updater,
-    }));
+    set((state) => {
+      const next = typeof updater === 'function' ? updater(state.agents) : updater;
+      if (agentsEqual(state.agents, next)) {
+        return state;
+      }
+      return { agents: next };
+    });
   },
 
   setNodes: (updater) => {
@@ -869,12 +905,24 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
   reviewedAssets: loadReviewedAssets(),
   markAssetReviewed: (agentId, path) => {
     set((state) => {
+      const key = `${agentId}:${path}`;
+      const alreadyReviewed = Boolean(state.reviewedAssets[key]);
       const next = {
         ...state.reviewedAssets,
-        [`${agentId}:${path}`]: new Date().toISOString(),
+        [key]: new Date().toISOString(),
       };
       saveReviewedAssets(next);
-      return { reviewedAssets: next };
+      if (alreadyReviewed) {
+        return { reviewedAssets: next };
+      }
+      const cur = state.agentUnreadAssetsCounts[agentId] ?? 0;
+      return {
+        reviewedAssets: next,
+        agentUnreadAssetsCounts: {
+          ...state.agentUnreadAssetsCounts,
+          [agentId]: Math.max(0, cur - 1),
+        },
+      };
     });
   },
   markAllAssetsReviewed: (agentId, paths) => {
@@ -885,7 +933,13 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
         next[`${agentId}:${p}`] = now;
       });
       saveReviewedAssets(next);
-      return { reviewedAssets: next };
+      return {
+        reviewedAssets: next,
+        agentUnreadAssetsCounts: {
+          ...state.agentUnreadAssetsCounts,
+          [agentId]: 0,
+        },
+      };
     });
   },
 
@@ -924,6 +978,14 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
       visibleAssetsThreads: {
         ...state.visibleAssetsThreads,
         [agentId]: state.visibleAssetsThreads[agentId] === false ? true : false,
+      },
+    }));
+  },
+  setAssetsThreadVisible: (agentId, visible) => {
+    set((state) => ({
+      visibleAssetsThreads: {
+        ...state.visibleAssetsThreads,
+        [agentId]: visible,
       },
     }));
   },
@@ -1106,6 +1168,22 @@ export const useSpaceStore = create<SpaceStoreState>((set) => ({
       return { workspaceZones: next };
     });
     void SpaceService.deleteWorkspaceSpace(id).catch(() => {});
+  },
+  reloadCanvasData: async () => {
+    try {
+      const [agentsData, backendSpaces, zones] = await Promise.all([
+        SpaceService.fetchSpaceAgents().catch(() => []),
+        SpaceService.fetchWorkspaceSpaces().catch(() => []),
+        SpaceService.fetchZones().catch(() => []),
+      ]);
+      set((state) => ({
+        agents: agentsData,
+        roleZones: Array.isArray(zones) ? zones : state.roleZones,
+        workspaceZones: Array.isArray(backendSpaces) && backendSpaces.length > 0 ? backendSpaces : state.workspaceZones,
+      }));
+    } catch (err) {
+      console.warn('[SpaceStore] Failed to reload canvas data:', err);
+    }
   },
 }));
 

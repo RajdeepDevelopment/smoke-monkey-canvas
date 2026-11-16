@@ -20,20 +20,15 @@ export const PROVIDER_CATALOG: ProviderOption[] = [
     apiKeyName: 'NVIDIA_API_KEY',
     models: [
       {
-        id: 'nvidia/nemotron-3-ultra-550b-a55b',
-        label: 'Nemotron 3 Ultra 550B ★',
-        description: 'Ultra-scale MoE reasoning powerhouse for complex workflows and autonomous office operations.',
+        id: 'nvidia/nemotron-3.5-lightning-30b-a3b',
+        label: 'Nemotron 3.5 Lightning 30B ★',
+        description: 'Instant response times with state-of-the-art 30B agentic reasoning and tool execution on NVIDIA NIM.',
         isDefault: true,
       },
       {
-        id: 'nvidia/nemotron-3-super-120b-a12b',
-        label: 'Nemotron 3 Super 120B',
-        description: 'Flagship agentic reasoning and tool execution on NVIDIA NIM.',
-      },
-      {
-        id: 'nvidia/nemotron-3.5-lightning-30b-a3b',
-        label: 'Nemotron 3.5 Lightning 30B',
-        description: 'Instant response times for fast verification and monitoring.',
+        id: 'nvidia/nemotron-3-ultra-550b-a55b',
+        label: 'Nemotron 3 Ultra 550B',
+        description: 'Ultra-scale MoE reasoning powerhouse for complex workflows and autonomous office operations.',
       },
       {
         id: 'nvidia/nemotron-3.5-bolt-e4b',

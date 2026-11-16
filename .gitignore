@@ -92,3 +92,5 @@ coverage/
 
 # Smoke Monkey agent runtime artifacts
 .smoke/
+.smoke-agents/
+.smoke-repos/

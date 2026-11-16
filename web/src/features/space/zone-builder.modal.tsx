@@ -47,8 +47,8 @@ export const ROLE_PRESETS: RolePreset[] = [
     name: 'Executive Command',
     width: 760,
     height: 420,
-    responsibilities: 'Own engineering strategy, architecture, delivery quality and final technical decisions. Set priorities for every manager below you.',
-    workflowInstructions: 'Break company goals into manager-level missions. Delegate strategy execution downward, review rollups, and escalate only product/business tradeoffs to the user.',
+    responsibilities: 'Deeply explore project repository & requirements docs, divide system module/feature-wise, record architecture across 10 memory dimensions, configure specializations and memory files for lower layers, and govern technical delivery.',
+    workflowInstructions: 'Ingest project files & PRDs. Deconstruct into modules/features, commit system architecture across 10 memory dimensions via manage_agent_memory, specialize subordinate agents via update_agent_profile, attach tools (attach_skill/mcp), and delegate module ownership to Engineering Managers with explicit memory & ETA mandates. Enforce 85%+ test coverage for leads/devs, review rollups, and never write direct code.',
   },
   {
     key: 'manager',

@@ -251,8 +251,8 @@ export const AgentModal: React.FC<AgentModalProps> = ({
   const defaultProvider = agent?.provider || initialData?.provider || 'nvidia';
   const defaultModel =
     agent?.model === 'meta/llama-3.3-70b-instruct' || agent?.model === 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'
-      ? 'nvidia/nemotron-3-super-120b-a12b'
-      : agent?.model || initialData?.model || 'nvidia/nemotron-3-super-120b-a12b';
+      ? 'nvidia/nemotron-3.5-lightning-30b-a3b'
+      : agent?.model || initialData?.model || 'nvidia/nemotron-3.5-lightning-30b-a3b';
   const defaultPrompt =
     agent?.system_prompt ||
     initialData?.system_prompt ||

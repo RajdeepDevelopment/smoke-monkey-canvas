@@ -23,6 +23,10 @@ export interface AgentRecord {
   working_dir?: string | null;
   max_memory_mb?: number | null;
   created_at: string;
+  feature_ownership_json?: string | null;  // JSON: FeatureOwnership[]
+  owned_space_id?: string | null;
+  agent_tier?: 'architect' | 'manager' | 'leaf' | null;
+  last_sync_at?: string | null;
 }
 
 export interface AgentConnectionRecord {
@@ -206,5 +210,77 @@ export interface AgentTodoDaySummary {
   specializations: string[];
   crossedMidnight?: boolean;
   todos: AgentTodoRecord[];
+}
+
+export interface FeatureOwnership {
+  feature_id: string;
+  feature: string;
+  folders: string[];
+  key_files: string[];
+  description: string;
+  complexity?: 'high' | 'medium' | 'low';
+}
+
+export type ExploreSessionStatus = 'pending' | 'exploring' | 'complete' | 'building' | 'built' | 'failed';
+
+export interface ExploreFeature {
+  id: string;
+  name: string;
+  description: string;
+  folders: string[];
+  key_files: string[];
+  complexity: 'high' | 'medium' | 'low';
+  suggested_agent_name: string;
+}
+
+export interface ExploreZonePlan {
+  name: string;
+  role_title: string;
+  description?: string;
+  color?: string;
+  sub_zones?: Array<{
+    name: string;
+    role_title?: string;
+    features: string[];  // feature IDs
+  }>;
+}
+
+export interface ExploreManagerPlan {
+  name: string;
+  zone: string;
+  manages_features: string[];  // feature IDs
+  description?: string;
+}
+
+export interface ExploreReport {
+  company_name: string;
+  company_type: 'software_product' | 'agency' | 'internal_tooling' | 'non_tech';
+  tech_stack: string[];
+  project_summary: string;
+  features: ExploreFeature[];
+  zones_plan: ExploreZonePlan[];
+  managers_plan: ExploreManagerPlan[];
+  required_mcps: string[];
+  agent_count_estimate: number;
+  explore_summary: string;
+}
+
+export interface ExploreSessionRecord {
+  id: string;
+  space_id: string;
+  status: ExploreSessionStatus;
+  brief_markdown: string | null;
+  attached_docs_json: string;  // JSON: Array<{filename: string, content: string}>
+  git_url: string | null;
+  git_local_path: string | null;
+  tech_stack_json: string;  // JSON: string[]
+  explore_report_json: string | null;  // JSON: ExploreReport
+  explorer_agent_id: string | null;
+  architect_agent_id?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  sync_interval_hours: number;
+  created_at: string;
+  completed_at: string | null;
 }
 

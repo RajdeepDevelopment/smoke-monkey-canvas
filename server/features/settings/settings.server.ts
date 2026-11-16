@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import fs from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { spawn, execFile } from 'node:child_process';
 import { CoreDatabase } from '../core/database.db.js';
@@ -90,19 +90,110 @@ export function createSettingsRouter(): Router {
     res.json({ cwd, home, directories: available });
   });
 
+  // POST /api/settings/browse-directory
+  // Opens native macOS / Windows / Linux folder picker dialog and returns absolute POSIX path
+  router.post('/browse-directory', async (_req: Request, res: Response) => {
+    try {
+      const platform = process.platform;
+      let selectedPath = '';
+
+      if (platform === 'darwin') {
+        // macOS Native Finder Folder Dialog
+        const script = 'POSIX path of (choose folder with prompt "Select Project Directory for Company Creation")';
+        selectedPath = await new Promise<string>((resolvePromise, rejectPromise) => {
+          execFile('osascript', ['-e', script], (error, stdout, _stderr) => {
+            if (error) {
+              // User cancelled dialog or error
+              if (error.code === 1 || error.message.includes('User canceled')) {
+                resolvePromise('');
+              } else {
+                rejectPromise(error);
+              }
+            } else {
+              resolvePromise(stdout.trim());
+            }
+          });
+        });
+      } else if (platform === 'win32') {
+        // Windows PowerShell Folder Dialog
+        const psCommand = `Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Select Project Directory'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`;
+        selectedPath = await new Promise<string>((resolvePromise) => {
+          execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', psCommand], (error, stdout) => {
+            if (error) {
+              resolvePromise('');
+            } else {
+              resolvePromise(stdout.trim());
+            }
+          });
+        });
+      } else {
+        // Linux: try zenity or kdialog
+        selectedPath = await new Promise<string>((resolvePromise) => {
+          execFile('zenity', ['--file-selection', '--directory', '--title=Select Project Directory'], (err, stdout) => {
+            if (!err && stdout.trim()) {
+              resolvePromise(stdout.trim());
+            } else {
+              execFile('kdialog', ['--getexistingdirectory', process.cwd()], (kErr, kStdout) => {
+                if (!kErr && kStdout.trim()) {
+                  resolvePromise(kStdout.trim());
+                } else {
+                  resolvePromise('');
+                }
+              });
+            }
+          });
+        });
+      }
+
+      if (selectedPath) {
+        const cleanPath = selectedPath.replace(/[\/\\]$/, '');
+        let exists = false;
+        let isDirectory = false;
+        try {
+          const stat = fs.statSync(cleanPath);
+          exists = true;
+          isDirectory = stat.isDirectory();
+        } catch {}
+
+        res.json({
+          path: cleanPath,
+          exists,
+          isDirectory,
+          cancelled: false,
+        });
+      } else {
+        res.json({
+          path: '',
+          exists: false,
+          isDirectory: false,
+          cancelled: true,
+        });
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to open directory dialog', cancelled: true });
+    }
+  });
+
   // POST /api/settings/resolve-path
+  // Resolves paths with smart auto-discovery across sibling repositories and standard folders
   router.post('/resolve-path', (req: Request, res: Response) => {
     const rawPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
     if (!rawPath) {
-      res.json({ resolved: '', exists: false, isDirectory: false });
+      res.json({ resolved: '', exists: false, isDirectory: false, suggestions: [] });
       return;
     }
+
+    const home = homedir();
+    const cwd = process.cwd();
+
+    // 1. Direct path resolution
     let target = rawPath;
     if (target.startsWith('~/') || target === '~') {
-      target = target.replace(/^~(?=$|\/|\\)/, homedir());
-    } else {
-      target = resolve(process.cwd(), target);
+      target = target.replace(/^~(?=$|\/|\\)/, home);
+    } else if (!isAbsolute(target)) {
+      target = resolve(cwd, target);
     }
+
     let exists = false;
     let isDirectory = false;
     try {
@@ -110,11 +201,73 @@ export function createSettingsRouter(): Router {
       exists = true;
       isDirectory = stat.isDirectory();
     } catch {}
+
+    // 2. If not found and input was a relative name (e.g. "project", "smoke-monkey"),
+    // search smart candidate locations:
+    let autoDiscovered = false;
+    const suggestions: string[] = [];
+
+    if (!exists && !rawPath.startsWith('/') && !rawPath.startsWith('\\') && !rawPath.startsWith('~')) {
+      const cleanRel = rawPath.replace(/^\.[\/\\]/, '');
+      const candidates = [
+        resolve(cwd, '..', cleanRel),                      // Sibling folder in parent (e.g. /Testing/RAG/<name>)
+        resolve(home, 'Desktop', cleanRel),                 // ~/Desktop/<name>
+        resolve(home, 'Documents', cleanRel),               // ~/Documents/<name>
+        resolve(home, 'Downloads', cleanRel),               // ~/Downloads/<name>
+        resolve(home, cleanRel),                            // ~/<name>
+        resolve(home, '.smoke-agents', cleanRel),          // ~/.smoke-agents/<name>
+      ];
+
+      for (const cand of candidates) {
+        try {
+          const stat = fs.statSync(cand);
+          if (stat.isDirectory()) {
+            target = cand;
+            exists = true;
+            isDirectory = true;
+            autoDiscovered = true;
+            break;
+          }
+        } catch {}
+      }
+
+      // If still not found, search parent directory and desktop for suggestions
+      if (!exists) {
+        const searchRoots = [resolve(cwd, '..'), resolve(home, 'Desktop')];
+        for (const root of searchRoots) {
+          try {
+            if (fs.existsSync(root)) {
+              const entries = fs.readdirSync(root, { withFileTypes: true });
+              for (const entry of entries) {
+                if (!entry.name.startsWith('.')) {
+                  const fullP = resolve(root, entry.name);
+                  try {
+                    const s = fs.statSync(fullP);
+                    if (s.isDirectory()) {
+                      const entryLower = entry.name.toLowerCase();
+                      const cleanLower = cleanRel.toLowerCase();
+                      if (entryLower.includes(cleanLower) || cleanLower.includes(entryLower)) {
+                        if (!suggestions.includes(fullP)) {
+                          suggestions.push(fullP);
+                        }
+                      }
+                    }
+                  } catch {}
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+
     res.json({
       raw: rawPath,
       resolved: target,
       exists,
       isDirectory,
+      autoDiscovered,
+      suggestions: suggestions.slice(0, 5),
     });
   });
 

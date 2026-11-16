@@ -15,6 +15,7 @@ import { createMcpRouter } from './features/mcp/mcp.server.js';
 
 import { createSettingsRouter } from './features/settings/settings.server.js';
 import { createSkillRouter } from './features/skill/skill.server.js';
+import { createExploreRouter } from './features/space/explore.server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = join(__filename, '..');
@@ -67,6 +68,7 @@ export function startAppServer(opts: AppServerOptions = {}) {
 
   // 2. Mount feature routers
   app.use('/api/space', createSpaceRouter());
+  app.use('/api/explore', createExploreRouter());
   app.use('/api/agents', createAgentRouter());
   app.use('/api/mcp', createMcpRouter());
   app.use('/api/settings', createSettingsRouter());

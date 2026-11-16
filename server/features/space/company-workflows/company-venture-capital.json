@@ -1,0 +1,101 @@
+{
+  "id": "company-venture-capital",
+  "name": "Vanguard Horizon Ventures",
+  "category": "Investment & Capital",
+  "domain": "Venture Capital & Investment Syndicate",
+  "tagline": "Early-stage and growth equity investments, technical code diligence, portfolio company scaling, and syndicate operations.",
+  "operatingCadence": "Weekly Investment Committee (IC) deal review cycles with quantitative diligence gates, LP reporting, and strict ETA tracking.",
+  "workAreas": [
+    {
+      "name": "Investment Committee & General Partnership",
+      "roles": ["Managing Partner", "General Partner", "Chief Investment Officer"],
+      "focus": "Fund strategy, LP relations, final term sheet authorization, board seat governance, and capital call approvals.",
+      "targets": ">3.0x Net TVPI, top-quartile DPI returns, 100% SEC regulatory compliance."
+    },
+    {
+      "name": "Technical Diligence & Codebase Audit",
+      "roles": ["Partner & Chief Technical Diligence Officer", "Principal Technical Auditor"],
+      "focus": "Target startup codebase inspection, technical debt evaluation, AI infrastructure unit economics, and initial venture exploration.",
+      "targets": "100% pre-investment IP and security audits, sub-48h technical diligence memos, zero direct coding by partnership."
+    },
+    {
+      "name": "Deal Flow Operations & Syndicate Management",
+      "roles": ["Venture Operations Director", "Deal Principal"],
+      "focus": "Deal pipeline triage, financial model coordination, diligence workstream allocation, mandatory ETA tracking, and active follow-ups.",
+      "targets": "100% pipeline deal coverage with agreed diligence ETAs, zero missed deal deadlines, weekly IC memo reviews."
+    },
+    {
+      "name": "Financial Modeling & Valuation Analysis",
+      "roles": ["Senior Investment Associate", "Venture Analyst", "Cap Table Specialist"],
+      "focus": "Discounted cash flow (DCF), cap table waterfall dilution models, cohort retention analysis, and comprehensive investment memos.",
+      "targets": "100% mathematically verified cap table waterfalls, error-free financial models, delivery within agreed ETAs."
+    },
+    {
+      "name": "Legal Diligence & Compliance Verification",
+      "roles": ["General Counsel & Diligence Lead", "SEC Compliance Specialist"],
+      "focus": "SAFE/Priced equity review, voting rights, liquidation preferences, founder vesting audits, defect/risk reporting, and closing gates.",
+      "targets": "Zero unflagged cap table defects, 100% clean legal diligence audits, comprehensive risk reports to Investment Committee."
+    },
+    {
+      "name": "Platform & Portfolio Growth",
+      "roles": ["Head of Platform", "Talent & Network Partner"],
+      "focus": "Portfolio founder advisory, enterprise customer introductions, executive recruiting, and portfolio value-add metrics.",
+      "targets": ">80 Net Promoter Score (NPS) from portfolio founders, 50+ enterprise intros per quarter, verified hiring support."
+    }
+  ],
+  "targets": {
+    "primarySla": "Sub-48h technical diligence turnaround, 100% verified legal & financial deal audits",
+    "qualityStandard": "Zero undetected IP encumbrances or cap table discrepancies in authorized deals",
+    "sprintVelocity": "Weekly Investment Committee deal decisions with verified quantitative memos and risk matrices",
+    "etaDiscipline": "All diligence memos, cap table audits, and founder reviews require associate ETA commitment before start; proactive director follow-ups"
+  },
+  "workflows": {
+    "featureDevelopment": {
+      "title": "Deal Evaluation & Investment Memo Pipeline",
+      "steps": [
+        "1. Intake & Pipeline Sourcing: Inbound startup pitch or partner referral enters the active deal pipeline.",
+        "2. Triage & Preliminary Screening: Deal Principal reviews deck, checks thesis fit, and approves for deep diligence.",
+        "3. Diligence Workstream Assignment: Venture Operations Director assigns financial modeling, technical code review, and legal review to designated team members via delegate_task.",
+        "4. Mandatory ETA Request: Director requests a concrete Estimated Time of Arrival (ETA) for completed financial model and diligence memo.",
+        "5. ETA Commitment & Tracking: Investment Associate and Technical Auditor commit to specific ETAs, logged on the IC review schedule.",
+        "6. Active Follow-Ups: If diligence findings or market sizing lag past the ETA, Director intervenes, secures founder interview access, and protects deal timing.",
+        "7. Implementation & Analysis: Associate builds financial waterfall model; Technical Auditor performs deep code and security review.",
+        "8. Partner Review: Chief Technical Diligence Officer reviews code audit and IP risk assessments.",
+        "9. Compliance & Legal QA Verification Gate: General Counsel checks cap table dilution, IP assignments, and investor rights. If red flags are found, QA reports back to Director; if clean, memo receives sign-off.",
+        "10. Investment Committee Authorization: Managing Partners review synthesized memo at weekly IC meeting and vote on term sheet issuance."
+      ]
+    },
+    "bugTriageAndResolution": {
+      "title": "Diligence Red Flag, IP Encumbrance, and Model Error Resolution Lifecycle",
+      "steps": [
+        "1. Defect Discovery: Technical diligence discovers open-source GPL license contamination, unassigned founder IP, or cap table calculation error.",
+        "2. QA Risk Report: Auditor files an emergency diligence defect ticket detailing legal/technical risk, valuation impact, and remediation steps submitted to Venture Director.",
+        "3. Management Triage: Venture Operations Director pauses term sheet drafting, flags issue to lead partner, and dispatches to legal/technical leads.",
+        "4. Urgent ETA Request: Director requests an expedited resolution ETA from founder legal counsel and diligence team.",
+        "5. Continuous Follow-Up: Director monitors resolution progress continuously; if ETA lapses, escalates to Managing Partner to renegotiate or withdraw.",
+        "6. Fix Implementation: Target company executes IP assignment agreements, remediates GPL dependency, or corrects cap table records.",
+        "7. Verification: Diligence lead re-audits code and corporate records, confirming complete risk mitigation.",
+        "8. Deal Resumption: Investment Committee approves updated terms and proceeds to closing."
+      ]
+    },
+    "initialProjectOnboarding": {
+      "title": "First-Time Portfolio & Diligence Vault Exploration Protocol",
+      "steps": [
+        "1. Partner Diligence Discovery: Explores target startup virtual data room (VDR), codebase repository, cap tables, and financial statements.",
+        "2. Architecture Memorization: Technical Partner records tech stack, cloud spend unit economics, and IP ownership into facts.md via manage_agent_memory.",
+        "3. Module Partitioning: Partner divides review into Financial Models, Codebase Quality, Legal Covenants, and Market Sizing, delegating to Directors.",
+        "4. Managerial Decomposition: Venture Director inspects data room folders, records diligence procedures in procedural.md, and assigns tasks.",
+        "5. Associate Deep-Dive: Associates inspect financial models, run sensitivity analyses, and verify historical cohort retention.",
+        "6. Universal Memory Commitment: All team members record verified valuation metrics, customer reference calls, and risk flags into facts.md and procedural.md."
+      ]
+    },
+    "leadershipRules": {
+      "title": "Strict Investment Leadership Fidelity & Separation of Concerns",
+      "rules": [
+        "Managing Partners and General Partners NEVER build financial spreadsheets from scratch, write code, or execute legal filings directly.",
+        "Leadership sets investment strategy, leads partner discussions, demands explicit ETAs, negotiates term sheets, and unblocks diligence leads.",
+        "When asked to write code or spreadsheets, leadership explains the venture capital partnership hierarchy and immediately delegates downward using delegate_task."
+      ]
+    }
+  }
+}

@@ -172,6 +172,24 @@ export function isUserDeliverableAsset(file: WorkspaceFileItem): boolean {
   return true;
 }
 
+export function computeAgentUnreadAssets(
+  files: WorkspaceFileItem[],
+  agentId: string,
+  reviewedAssets: Record<string, string>,
+): WorkspaceFileItem[] {
+  return files.filter((f) => {
+    if (f.isDirectory) return false;
+    if (!isUserDeliverableAsset(f)) return false;
+    const key = `${agentId}:${f.path}`;
+    const reviewedAt = reviewedAssets[key];
+    if (!reviewedAt) return true;
+    if (f.mtime && new Date(f.mtime).getTime() > new Date(reviewedAt).getTime()) {
+      return true;
+    }
+    return false;
+  });
+}
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -226,26 +244,10 @@ export const AgentAssetsNode: React.FC<{ data: AgentAssetsNodeData }> = React.me
     return unsubscribe;
   }, [fetchFiles, agentId]);
 
-  // Filter deliverables/assets: only real outputs created for the user
-  const allDeliverables = useMemo(() => {
-    return files.filter((f) => {
-      if (f.isDirectory) return false;
-      return isUserDeliverableAsset(f);
-    });
-  }, [files]);
-
   // Determine unread status
   const unreadAssets = useMemo(() => {
-    return allDeliverables.filter((f) => {
-      const key = `${agentId}:${f.path}`;
-      const reviewedAt = reviewedAssets[key];
-      if (!reviewedAt) return true;
-      if (f.mtime && new Date(f.mtime).getTime() > new Date(reviewedAt).getTime()) {
-        return true;
-      }
-      return false;
-    });
-  }, [allDeliverables, agentId, reviewedAssets]);
+    return computeAgentUnreadAssets(files, agentId, reviewedAssets);
+  }, [files, agentId, reviewedAssets]);
 
   // Keep agent unread count synced for agent card badge
   useEffect(() => {

@@ -17,6 +17,7 @@ import {
 import type { GroupWorkspaceNodeData } from './space.types.js';
 import { AgentAvatar } from '../agent/agent-avatar.js';
 import { SpaceUnconfiguredMcpsRail } from './space-unconfigured-mcps-rail.js';
+import { SpaceProjectDock } from './space-project-dock.js';
 
 const COLOR_PALETTE = [
   { name: 'Sky Blue', hex: '#38bdf8' },
@@ -40,6 +41,30 @@ export const GroupWorkspaceNode: React.FC<{ data: GroupWorkspaceNodeData; select
     const [isEditingName, setIsEditingName] = useState(false);
     const [nameDraft, setNameDraft] = useState(data.name);
     const [showPalette, setShowPalette] = useState(false);
+    const [isDockDismissed, setIsDockDismissed] = useState<boolean>(() => {
+      try {
+        const stored = localStorage.getItem(`sm_dock_dismissed_${data.id}`);
+        if (stored !== null) return stored === 'true';
+        // By default: if space already has agents, place dock on side; if empty, center it
+        return (data.memberAgents?.length ?? 0) > 0;
+      } catch {
+        return false;
+      }
+    });
+
+    const handleDismissDock = () => {
+      setIsDockDismissed(true);
+      try {
+        localStorage.setItem(`sm_dock_dismissed_${data.id}`, 'true');
+      } catch {}
+    };
+
+    const handleCenterDock = () => {
+      setIsDockDismissed(false);
+      try {
+        localStorage.removeItem(`sm_dock_dismissed_${data.id}`);
+      } catch {}
+    };
 
     const handleSaveName = () => {
       setIsEditingName(false);
@@ -63,8 +88,13 @@ export const GroupWorkspaceNode: React.FC<{ data: GroupWorkspaceNodeData; select
     const color = data.color || '#38bdf8';
     const isCircle = data.shape === 'circle';
 
-    // Responsive width thresholds
+    const hasAgents = members.length > 0;
+    // Keep dock centered while exploring/building or until user explicitly dismisses via X button
+    const showCenteredDock = !isDockDismissed;
+
+    // Responsive width & height thresholds
     const currentWidth = data.width || 720;
+    const currentHeight = data.height || 520;
     const isCompact = currentWidth < 680;
     const isNarrow = currentWidth < 550;
     const isMini = currentWidth < 440;
@@ -360,7 +390,26 @@ export const GroupWorkspaceNode: React.FC<{ data: GroupWorkspaceNodeData; select
 
         {/* ── Floor / Bounding Zone Interior ──────────────────────────────── */}
         <div className="group-workspace-interior group-workspace-drag-handle">
-          {members.length === 0 ? (
+          {showCenteredDock ? (
+            <div className="spd-center-overlay nodrag nopan">
+              <SpaceProjectDock
+                spaceId={data.id}
+                companyName={data.name}
+                color={color}
+                repoUrl={data.repoUrl}
+                workingDir={data.workingDir}
+                projectBrief={data.projectBrief}
+                spaceWidth={currentWidth}
+                spaceHeight={currentHeight}
+                hasAgents={false}
+                isCenteredMode={true}
+                configuredKeys={data.configuredKeys}
+                onOpenDrawer={data.onOpenDrawer}
+                onDismissToSide={handleDismissDock}
+                onUpdateSpace={(updates) => data.onUpdateZone?.(data.id, updates as any)}
+              />
+            </div>
+          ) : members.length === 0 ? (
             <div className="zone-empty-hint">
               <Sparkles size={16} style={{ color, opacity: 0.7 }} />
               <span>Drag & drop agents into this room to group them</span>
@@ -446,6 +495,26 @@ export const GroupWorkspaceNode: React.FC<{ data: GroupWorkspaceNodeData; select
           onRemoveMcp={data.onRemoveMcp}
           onOpenAgent={data.onOpenDrawer}
         />
+
+        {/* ── Space-Specific Project Dock (Side mid-position when dismissed or when agents exist) ── */}
+        {!showCenteredDock && (
+          <SpaceProjectDock
+            spaceId={data.id}
+            companyName={data.name}
+            color={color}
+            repoUrl={data.repoUrl}
+            workingDir={data.workingDir}
+            projectBrief={data.projectBrief}
+            spaceWidth={currentWidth}
+            spaceHeight={currentHeight}
+            hasAgents={hasAgents}
+            isCenteredMode={false}
+            configuredKeys={data.configuredKeys}
+            onOpenDrawer={data.onOpenDrawer}
+            onCenterDock={handleCenterDock}
+            onUpdateSpace={(updates) => data.onUpdateZone?.(data.id, updates as any)}
+          />
+        )}
       </div>
     );
   },

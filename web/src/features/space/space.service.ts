@@ -90,8 +90,9 @@ export class SpaceService {
     return res.json();
   }
 
-  static async deleteWorkspaceSpace(id: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/space/spaces/${id}`, { method: 'DELETE' });
+  static async deleteWorkspaceSpace(id: string, options?: { deleteZones?: boolean }): Promise<void> {
+    const query = options?.deleteZones === false ? '?deleteZones=false' : '';
+    const res = await fetch(`${API_BASE}/space/spaces/${id}${query}`, { method: 'DELETE' });
     if (!res.ok) {
       throw new Error(`Failed to delete workspace space: ${res.statusText}`);
     }
@@ -260,5 +261,89 @@ export class SpaceService {
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       ws?.close();
     };
+  }
+
+  // ── Explore Phase & Discovery ──────────────────────────────────────────────
+
+  static async startExplore(payload: {
+    space_id: string;
+    company_name: string;
+    brief_markdown?: string;
+    attached_docs?: Array<{ filename: string; content: string }>;
+    git_url?: string;
+    git_local_path?: string;
+    tech_stack?: string[];
+    sync_interval_hours?: number;
+    provider?: string;
+    model?: string;
+  }): Promise<{ session: any; explorerAgentId: string }> {
+    const res = await fetch(`${API_BASE}/explore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to start explore: ${await res.text()}`);
+    }
+    return res.json();
+  }
+
+  static async getExploreSession(sessionId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/explore/${encodeURIComponent(sessionId)}`);
+    if (!res.ok) {
+      throw new Error(`Failed to get explore session: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async getExploreReport(sessionId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/explore/${encodeURIComponent(sessionId)}/report`);
+    if (!res.ok) {
+      throw new Error(`Failed to get explore report: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async getExploreEvents(sessionId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/explore/${encodeURIComponent(sessionId)}/events`);
+    if (!res.ok) {
+      throw new Error(`Failed to get explore events: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  static async acceptExploreReport(
+    sessionId: string,
+    opts?: { provider?: string; model?: string },
+  ): Promise<{ architectAgentId: string }> {
+    const res = await fetch(`${API_BASE}/explore/${encodeURIComponent(sessionId)}/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts || {}),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to accept explore report: ${await res.text()}`);
+    }
+    return res.json();
+  }
+
+  static async syncExplore(sessionId: string): Promise<{ explorerAgentId: string; message: string }> {
+    const res = await fetch(`${API_BASE}/explore/${encodeURIComponent(sessionId)}/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to sync explore: ${await res.text()}`);
+    }
+    return res.json();
+  }
+
+  static async listExploreSessions(spaceId?: string): Promise<any[]> {
+    const query = spaceId ? `?space_id=${encodeURIComponent(spaceId)}` : '';
+    const res = await fetch(`${API_BASE}/explore${query}`);
+    if (!res.ok) {
+      throw new Error(`Failed to list explore sessions: ${res.statusText}`);
+    }
+    return res.json();
   }
 }

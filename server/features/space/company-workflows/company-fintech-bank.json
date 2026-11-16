@@ -1,0 +1,101 @@
+{
+  "id": "company-fintech-bank",
+  "name": "Aegis Financial & Capital Core",
+  "category": "FinTech & Banking",
+  "domain": "Core Banking & Algorithmic Trading",
+  "tagline": "Institutional ledger integrity, real-time settlement rails, and automated regulatory compliance.",
+  "operatingCadence": "Continuous audit compliance with four-eyes principle, PCI-DSS Level 1 security, and strict ETA tracking.",
+  "workAreas": [
+    {
+      "name": "Executive & Risk Governance",
+      "roles": ["CEO", "Chief Risk Officer", "Chief Compliance Officer"],
+      "focus": "Banking charters, capital adequacy ratios, AML/KYC policies, and regulatory reporting.",
+      "targets": "100% regulatory compliance, zero unmitigated AML alerts, capital adequacy >15%."
+    },
+    {
+      "name": "Technology & Quantitative Architecture",
+      "roles": ["CTO", "Lead Quant Architect"],
+      "focus": "Double-entry ledger design, settlement engine architecture, HSM cryptography, and initial financial system exploration.",
+      "targets": "Sub-10ms transaction settlement, zero double-spend anomalies, zero coding by leadership."
+    },
+    {
+      "name": "Core Banking Management & Treasury",
+      "roles": ["Banking Operations Manager", "Product Lead"],
+      "focus": "Sprint coordination, audit trail verification, developer task allocation, mandatory ETA tracking, and active follow-ups.",
+      "targets": "100% ticket allocation with agreed ETAs, four-eyes approval enforcement, zero deadline drift."
+    },
+    {
+      "name": "Payment Rails & Ledger Engineering",
+      "roles": ["Senior Backend Engineer", "Smart Contract / Ledger Engineer"],
+      "focus": "ACID transactional code, payment gateway integrations (FedNow, SWIFT, SEPA), and automated reconciliation.",
+      "targets": "90%+ unit test coverage, idempotent API operations, delivery within agreed ETAs."
+    },
+    {
+      "name": "Financial QA & Compliance Audit",
+      "roles": ["Financial QA Lead", "Audit Automation Specialist"],
+      "focus": "Balance invariant testing, negative balance fuzzing, penetration testing, defect logging, and release gating.",
+      "targets": "Zero ledger invariant failures, immediate defect reporting to management, 100% test automation pass rate."
+    },
+    {
+      "name": "DevSecOps & Financial Infrastructure",
+      "roles": ["DevSecOps Lead", "Infrastructure Engineer"],
+      "focus": "Air-gapped HSM key management, immutable audit logging, PCI-DSS boundary controls, and zero-trust cloud.",
+      "targets": "Zero unauthorized access attempts, 99.999% ledger uptime, encrypted telemetry."
+    }
+  ],
+  "targets": {
+    "primarySla": "99.999% transaction engine availability with sub-10ms ledger settlement",
+    "qualityStandard": "Double-entry balance invariants verified with 90%+ test coverage and fuzzing suites",
+    "sprintVelocity": "Bi-weekly certified releases with cryptographic audit proofs and four-eyes approvals",
+    "etaDiscipline": "All tasks require developer ETA commitment before start; proactive manager follow-ups on deadline"
+  },
+  "workflows": {
+    "featureDevelopment": {
+      "title": "Transactional Feature Development Pipeline",
+      "steps": [
+        "1. Intake & Scoping: Requirements originate from Risk/Compliance or Product, architected by the Technology Office.",
+        "2. Triage & Risk Sign-Off: Banking Operations Manager reviews compliance impact, checks cryptographic security, and approves ticket.",
+        "3. Developer Assignment: Manager assigns the feature ticket to the designated payment/ledger engineer via delegate_task.",
+        "4. Mandatory ETA Request: Manager requests a concrete Estimated Time of Arrival (ETA) before any code or smart contract is drafted.",
+        "5. ETA Commitment & Tracking: Developer commits to a specific ETA, logged onto the regulatory sprint board.",
+        "6. Active Follow-Ups: If milestones or status updates are delayed, Manager conducts proactive follow-up, addresses security blockers, and maintains schedule.",
+        "7. Implementation & Testing: Developer builds idempotent, ACID-compliant code accompanied by comprehensive balance invariant tests.",
+        "8. Four-Eyes Code Review: Two independent senior engineers review PR changes for concurrency race conditions and cryptographic correctness.",
+        "9. Compliance & QA Audit Gate: QA runs negative balance fuzzing, rate-limiting tests, and settlement reconciliation. Deficiencies are reported back to Manager with repro steps.",
+        "10. Deployment: DevSecOps Lead signs off on immutable deployment with hardware security module verification."
+      ]
+    },
+    "bugTriageAndResolution": {
+      "title": "Financial Defect Discovery, Triage, and Remediation Lifecycle",
+      "steps": [
+        "1. Defect Discovery: Discrepancy detected by reconciliation monitors, QA balance fuzzing, or audit checks.",
+        "2. QA Defect Report: QA logs a critical incident ticket with transaction hashes, state dumps, and repro steps, submitted to Banking Operations Manager.",
+        "3. Management Triage: Manager immediately isolates the component, assigns highest priority, and dispatches to the owning ledger engineer.",
+        "4. Urgent ETA Request: Manager requests an expedited remediation ETA from the developer.",
+        "5. ETA Follow-Up: Manager monitors progress continuously; if ETA is near expiry without resolution, escalates to CTO immediately.",
+        "6. Fix Implementation: Developer remedies the transaction logic and adds invariant tests preventing duplicate or invalid state changes.",
+        "7. QA & Compliance Verification: QA verifies zero balance leakage across test ledgers and approves the fix.",
+        "8. Hotfix Deployment: DevSecOps deploys the verified patch through the secure multi-signature pipeline."
+      ]
+    },
+    "initialProjectOnboarding": {
+      "title": "First-Time Financial Codebase & Ledger Onboarding Protocol",
+      "steps": [
+        "1. CTO Ledger Discovery: CTO explores core banking repository, data models, ledger schemas, and regulatory compliance rules.",
+        "2. Architecture Memorization: CTO records financial architecture, payment rail endpoints, and security keys into facts.md via manage_agent_memory.",
+        "3. Module Partitioning: CTO divides system into Settlement, Ledger, Auth, and Audit modules, delegating to Managers.",
+        "4. Managerial Decomposition: Banking Operations Manager inspects module directories and records procedures into procedural.md.",
+        "5. Developer Deep-Dive: Developers inspect assigned financial microservices, verify local mock databases and tests.",
+        "6. Universal Memory Commitment: All engineers commit verified transaction flows, schemas, and error codes into facts.md and procedural.md so the enterprise retains permanent memory."
+      ]
+    },
+    "leadershipRules": {
+      "title": "Strict Banking Leadership Fidelity & Separation of Concerns",
+      "rules": [
+        "CTO and Banking Operations Managers NEVER write application code or edit database records directly.",
+        "Management coordinates compliance approvals, assigns tickets, enforces ETA commitments, and unblocks engineers.",
+        "When asked to write code, leadership explains the financial institution hierarchy and immediately delegates downward using delegate_task."
+      ]
+    }
+  }
+}

@@ -274,6 +274,8 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
   const isAvatarMode = !isPodCardExpanded;
   const [showAvatarPicker, setShowAvatarPicker] = useState<boolean>(false);
   const [isHovered, setIsHovered] = useState<boolean>(false);
+  const [isExpandedMcps, setIsExpandedMcps] = useState<boolean>(false);
+  const [isExpandedSkills, setIsExpandedSkills] = useState<boolean>(false);
 
   // ── Pod Dynamic Sizing & Density Metrics ──
   const density = data.podDensity || 'standard';
@@ -658,18 +660,101 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
             )}
           </div>
 
-          {/* ── Attached MCPs Chips Row (Visible with remove X icon) ── */}
-          {data.mcps && data.mcps.length > 0 && (
-            <div className="pod-skills-chips-row pod-mcps-chips-row nodrag nopan">
+          {/* ── Attached MCPs row: single line with MCP tag + '+N' badge side-by-side ── */}
+          {data.mcps && data.mcps.length > 0 && !isExpandedMcps && (
+            <div className="pod-chip-line pod-mcp-chip-line nodrag nopan">
+              <div
+                className="pod-skill-chip-tag pod-mcp-chip-tag"
+                title={`MCP: ${data.mcps[0].label || data.mcps[0].mcp_name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onAddMcp?.(data.id, data.mcps[0].mcp_name);
+                }}
+              >
+                <Plug size={9} className="skill-chip-icon" />
+                <span className="skill-chip-text">{data.mcps[0].label || data.mcps[0].mcp_name}</span>
+                {data.onDeleteMcp && (
+                  <button
+                    type="button"
+                    className="skill-chip-remove-btn"
+                    title={`Remove MCP "${data.mcps[0].label || data.mcps[0].mcp_name}"`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      data.onDeleteMcp(data.id, data.mcps[0].id || data.mcps[0].mcp_name);
+                    }}
+                  >
+                    <X size={8} />
+                  </button>
+                )}
+              </div>
+              {data.mcps.length > 1 && (
+                <button
+                  type="button"
+                  className="pod-skill-chip-tag pod-mcp-chip-tag pod-chip-expand-badge"
+                  title={`Show all ${data.mcps.length} MCPs`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsExpandedMcps(true);
+                  }}
+                >
+                  <span>+{data.mcps.length - 1}</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Attached Skills row: single line with Skill tag + '+N' badge side-by-side ── */}
+          {data.skills && data.skills.length > 0 && !isExpandedSkills && (
+            <div className="pod-chip-line pod-skill-chip-line nodrag nopan">
+              <div
+                className="pod-skill-chip-tag"
+                title={`Skill: ${data.skills[0].skill_name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onEdit(data, 'general');
+                }}
+              >
+                <Sparkles size={9} className="skill-chip-icon" />
+                <span className="skill-chip-text">{data.skills[0].skill_name}</span>
+                {data.onDeleteSkill && (
+                  <button
+                    type="button"
+                    className="skill-chip-remove-btn"
+                    title={`Remove skill "${data.skills[0].skill_name}"`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      data.onDeleteSkill(data.id, data.skills[0].id);
+                    }}
+                  >
+                    <X size={8} />
+                  </button>
+                )}
+              </div>
+              {data.skills.length > 1 && (
+                <button
+                  type="button"
+                  className="pod-skill-chip-tag pod-chip-expand-badge"
+                  title={`Show all ${data.skills.length} skills`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsExpandedSkills(true);
+                  }}
+                >
+                  <span>+{data.skills.length - 1}</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Expanded MCPs (shown below when user clicks +N) ── */}
+          {data.mcps && data.mcps.length > 1 && isExpandedMcps && (
+            <div className="pod-skills-chips-row pod-mcps-chips-row is-expanded-row nodrag nopan">
               {data.mcps.map((mcp) => (
                 <div
                   key={mcp.id || mcp.mcp_name}
                   className="pod-skill-chip-tag pod-mcp-chip-tag"
                   title={`MCP: ${mcp.label || mcp.mcp_name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    data.onAddMcp?.(data.id, mcp.mcp_name);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); data.onAddMcp?.(data.id, mcp.mcp_name); }}
                 >
                   <Plug size={9} className="skill-chip-icon" />
                   <span className="skill-chip-text">{mcp.label || mcp.mcp_name}</span>
@@ -678,31 +763,33 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
                       type="button"
                       className="skill-chip-remove-btn"
                       title={`Remove MCP "${mcp.label || mcp.mcp_name}"`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        data.onDeleteMcp(data.id, mcp.id || mcp.mcp_name);
-                      }}
+                      onClick={(e) => { e.stopPropagation(); data.onDeleteMcp(data.id, mcp.id || mcp.mcp_name); }}
                     >
                       <X size={8} />
                     </button>
                   )}
                 </div>
               ))}
+              <button
+                type="button"
+                className="pod-skill-chip-tag pod-mcp-chip-tag pod-chip-expand-badge is-expanded nodrag nopan"
+                title="Collapse MCPs"
+                onClick={(e) => { e.stopPropagation(); setIsExpandedMcps(false); }}
+              >
+                <span>Collapse</span>
+              </button>
             </div>
           )}
 
-          {/* ── Skills Chips Row (Always Visible side-by-side, No Hover Needed) ── */}
-          {data.skills && data.skills.length > 0 && (
-            <div className="pod-skills-chips-row nodrag nopan">
+          {/* ── Expanded Skills (shown below when user clicks +N) ── */}
+          {data.skills && data.skills.length > 1 && isExpandedSkills && (
+            <div className="pod-skills-chips-row is-expanded-row nodrag nopan">
               {data.skills.map((skill) => (
                 <div
                   key={skill.id}
                   className="pod-skill-chip-tag"
                   title={`Skill: ${skill.skill_name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    data.onEdit(data, 'general');
-                  }}
+                  onClick={(e) => { e.stopPropagation(); data.onEdit(data, 'general'); }}
                 >
                   <Sparkles size={9} className="skill-chip-icon" />
                   <span className="skill-chip-text">{skill.skill_name}</span>
@@ -711,16 +798,21 @@ export const CrabAgentNode: React.FC<CrabAgentNodeProps> = React.memo(({ data })
                       type="button"
                       className="skill-chip-remove-btn"
                       title={`Remove skill "${skill.skill_name}"`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        data.onDeleteSkill(data.id, skill.id);
-                      }}
+                      onClick={(e) => { e.stopPropagation(); data.onDeleteSkill(data.id, skill.id); }}
                     >
                       <X size={8} />
                     </button>
                   )}
                 </div>
               ))}
+              <button
+                type="button"
+                className="pod-skill-chip-tag pod-chip-expand-badge is-expanded nodrag nopan"
+                title="Collapse skills"
+                onClick={(e) => { e.stopPropagation(); setIsExpandedSkills(false); }}
+              >
+                <span>Collapse</span>
+              </button>
             </div>
           )}
         </div>

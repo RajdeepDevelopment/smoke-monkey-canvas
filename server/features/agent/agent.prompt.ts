@@ -101,13 +101,15 @@ Use \`delegate_task\` to coordinate with configured peers:
 ${peerLines}
 
 ### DELEGATION & TWO-WAY PROTOCOL:
-1. **Delegating Work**: Call \`delegate_task\` with \`target_agent_id\` (or peer name) and your \`instructions\` or \`prompt\`. (\`task_title\` and \`requirements_file_path\` are optional). Only delegate to "READY & CONFIGURED" peers.
-2. **Parallel Subtasks**: For multiple tasks/peers, execute concurrently via \`tasks: [{ target_agent_id, instructions }, ...]\`.
-3. **Two-Way Threads**: Every run returns \`chat_id\`. Reuse \`"chat_id": "<returned_chat_id>"\` to follow up, answer questions, or continue discussions with shared context.
-4. **Clarifying Doubts**: If requirements are unclear, do not guess. Put questions under \`### ❓ QUESTIONS / DOUBTS FOR CALLER\` in your report. The caller answers via \`delegate_task(chat_id)\`.
+1. **Delegating Work**: Call \`delegate_task\` with \`target_agent_id\` set to the peer's exact Agent ID (e.g. \`agent_...\` as listed under Available Peers above). Do NOT guess or invent names; any delegation with an invalid or unverified target agent ID will be strictly REJECTED. Only delegate to "READY & CONFIGURED" peers.
+2. **Parallel Subtasks**: When delegating to multiple peers or cascading to a squad, execute concurrently via \`tasks: [{ target_agent_id: "...", instructions: "..." }, ...]\`. This runs them in parallel.
+3. **Two-Way Threading (ALWAYS Use chat_id)**: Every delegated task provides or returns a \`chat_id\`. If you have a \`chat_id\`, you MUST supply \`"chat_id": "<chat_id>"\` when replying, following up, or reporting status so the other agent receives your response in that exact conversational thread. Never drop the chat_id!
+4. **Clarifying Doubts**: If requirements are unclear, do not guess. Put questions under \`### ❓ QUESTIONS / DOUBTS FOR CALLER\` in your report. The caller answers via \`delegate_task(target_agent_id: ..., chat_id: ...)\`.
 5. **Intents**: Set \`communication_type\`: \`'delegate'\` (assign work), \`'report_status'\` (deliverables upward), \`'request_approval'\` (sign-off for risky actions), or \`'inform'\` (peer sync).
-6. **Review**: Check peer reports in \`reports/\` before completing your run.
-7. **Checking Peer Specializations & Recent Work**: Use \`get_agent_profile\` or \`get_agent_todo_history\` with \`target_agent_id\` to inspect peer agents' recent completed tasks and proven specialties before delegating.`;
+6. **Action-First (No Empty Narratives)**: When assigned a task or cascading instructions to subordinates/peers, you MUST invoke \`delegate_task\` or execution tools in your CURRENT turn. NEVER output text like "I will delegate this to..." without actually calling the tool in that same turn.
+7. **Review**: Check peer reports in \`reports/\` before completing your run.
+8. **Checking Peer Specializations & Recent Work**: Use \`get_agent_profile\` or \`get_agent_todo_history\` with \`target_agent_id\` to inspect peer agents' recent completed tasks and proven specialties before delegating.
+9. **Closing Delegated Tasks (\`close_delegation_task\`)**: When executing a task that was delegated to you by another agent, you MUST invoke \`close_delegation_task\` with \`"chat_id": "<chat_id>"\`, \`"status": "completed"\` (or \`"failed"\` / \`"blocked"\`), \`"summary"\`, and \`"deliverables"\` upon finishing. Merely stopping your turn is not sufficient; calling \`close_delegation_task\` formally seals and delivers your deliverables, notes, and sign-off back to the caller agent.`;
 };
 
 export interface EffectivePromptInput {
@@ -125,6 +127,8 @@ export interface EffectivePromptInput {
   peerAgents?: PeerAgentWithConfig[];
   /** Live hierarchy, role and delegation workflow generated from canvas zones. */
   teamWorkflow?: string;
+  /** Whether this agent has an enabled Smoke Monkey Canvas MCP attachment. */
+  hasCanvasMcp?: boolean;
 }
 
 /**
@@ -219,6 +223,41 @@ export const buildTaskExecutionGuidanceBlock = (): string => {
 };
 
 /**
+ * Guidance instructing the agent that they are equipped with the Smoke Monkey Canvas MCP,
+ * explaining their live governance authority over the canvas where they are stationed,
+ * and mandating direct invocation of canvas_* tools when asked to create or expand teams.
+ */
+export const buildCanvasMcpGovernanceBlock = (): string => {
+  return `## 🎨 SMOKE MONKEY CANVAS GOVERNANCE & LIVE MULTI-AGENT CONTROL:
+You are an active autonomous agent stationed directly on the **Smoke Monkey Canvas** spatial workspace — you are not an isolated chat assistant, but a living member of this interactive visual multi-agent organization.
+- **Direct Workspace Control**: You are equipped with the **\`smoke-monkey-canvas\` MCP server**, which gives you live, programmatic governance over the very canvas workspace you inhabit!
+- **Full Canvas Authority**: Using your \`canvas_*\` MCP tools, you have the power to configure, hire, spawn, modify, reposition, connect, and govern the agents and department zones on this canvas where you are stationed.
+- **WHEN ASKED TO CREATE OR EXPAND TEAMS (ACTION MANDATE)**:
+  - When the user or your leadership instructs you to:
+    • "Add more agents", "Hire engineers/specialists", "Build an engineering team/squad"
+    • "Create a new department or zone", "Expand our company", "Reorganize the hierarchy"
+    • "Attach tools or skills to agents", "Connect reporting lines", "Audit or fix the layout"
+  - **DO NOT** simply reply with descriptive conversational text, high-level advice, or passive promises to do it later.
+  - **YOU MUST DIRECTLY INVOKE THE CANVAS MCP TOOLS IN YOUR ACTIVE TURN!**
+  - Execute the full team creation lifecycle immediately:
+    1. Create the Department Zone with its operational contract via \`canvas_create_zone\`.
+    2. Spawn specialized agents stationed inside the zone via \`canvas_create_agent\`.
+    3. Equip each agent with tools and skills via \`canvas_attach_mcp\` and \`canvas_attach_skill\`.
+    4. Wire reporting and peer relationships via \`canvas_connect_agents\`.
+    5. Run layout verification via \`canvas_audit_ui(space_id: "<your_space_id>", auto_fix: true)\` to guarantee zero card collisions and zero zone overlaps.
+- **Your Essential Canvas MCP Tools**:
+  • \`canvas_create_zone\`: Set up department zones with operational responsibilities and \`workflowInstructions\`.
+  • \`canvas_create_agent\`: Hire and station specialized agents inside designated department zones.
+  • \`canvas_attach_mcp\`: Attach MCP servers (e.g. GitHub, Firecrawl, Canvas MCP) to any agent.
+  • \`canvas_attach_skill\`: Equip agents with specialized skills from the stock catalog.
+  • \`canvas_connect_agents\`: Connect manager-subordinate reporting (\`reports_to\`) and peer collaboration (\`peer\`) lines.
+  • \`canvas_update_agent\` & \`canvas_update_zone\`: Reconfigure titles, models, prompts, dimensions, or duties.
+  • \`canvas_reposition_agents\`: Cleanly position agents inside zones (\`pos_x = zone.x + 50 + slot * 240, pos_y = zone.y + 75\`).
+  • \`canvas_audit_ui\`: Run UI layout quality audits with \`{ auto_fix: true }\` to eliminate overlaps and maintain 100/100 presentation quality.
+- **Space Scope Enforcement**: Always pass your assigned \`space_id\` so all created zones and agents belong to your home office space.`;
+};
+
+/**
  * THE core runtime system prompt shared by every agent on this backend —
  * appended (via buildSubPrompts) after each agent's own base prompt on every
  * run regardless of how the agent was created or whether its prompt was later
@@ -226,9 +265,10 @@ export const buildTaskExecutionGuidanceBlock = (): string => {
  * task-execution protocol (read attached skills/plugins before work, keep the
  * live todo list truthfully updated on long tasks).
  */
-export const buildCoreRuntimePromptBlocks = (): string[] => [
+export const buildCoreRuntimePromptBlocks = (hasCanvasMcp = false): string[] => [
   buildChatDisplayGuidanceBlock(),
   buildTaskExecutionGuidanceBlock(),
+  ...(hasCanvasMcp ? [buildCanvasMcpGovernanceBlock()] : []),
 ];
 
 export const buildSmartnessBlock = (ws: AgentWorkspace): string => {
@@ -248,12 +288,16 @@ export const buildSubPrompts = (input: EffectivePromptInput): string[] => {
   const disabledBlock = buildDisabledToolsBlock(input.disabledTools);
   if (disabledBlock) blocks.push(disabledBlock);
   blocks.push(buildResourceConstraintsBlock(input.resolvedWorkspace, input.memoryLimitMb));
+
+  // 🧠 PRIORITY: Inject the 10-Dimension Cognitive Runtime Memory Matrix with live inner contents
+  // and explicit instructions to collect domain knowledge and build specialization.
+  blocks.push(workspacePrompt(input.manifest, input.common, input.agentId));
+
   const voice = personalityPrompt(parseIdList(input.personalities));
   if (voice) blocks.push(voice);
   const format = outputStylePrompt(parseIdList(input.outputStyles));
   if (format) blocks.push(format);
-  blocks.push(...buildCoreRuntimePromptBlocks());
-  blocks.push(workspacePrompt(input.manifest, input.common, input.agentId));
+  blocks.push(...buildCoreRuntimePromptBlocks(Boolean(input.hasCanvasMcp)));
   blocks.push(buildSmartnessBlock(input.manifest));
   blocks.push(buildMcpAuthGuidanceBlock());
 
@@ -284,3 +328,117 @@ export const buildEffectiveSystemPrompt = (
   baseSystemPrompt: string,
   input: EffectivePromptInput,
 ): string => [baseSystemPrompt, ...buildSubPrompts(input)].filter(Boolean).join('\n\n');
+
+export interface ProfileSyncData {
+  name: string;
+  role?: string | null;
+  specialty?: string | null;
+  description?: string | null;
+  responsibilities?: string[] | string | null;
+  duties?: string[] | string | null;
+}
+
+/**
+ * Checks whether an agent's base system prompt is stale compared to its current
+ * name/role profile (e.g. prompt still says "People Ops Concierge" while the
+ * agent was renamed to "Smoke Monkey Canvas Outreach Agent").
+ */
+export const isSystemPromptStale = (
+  systemPrompt: string | undefined | null,
+  agent: { name: string; role?: string | null },
+): boolean => {
+  if (!systemPrompt || !systemPrompt.trim()) return true;
+  const nameMatch = systemPrompt.match(/agent name:\s*"([^"]+)"/i);
+  if (nameMatch && nameMatch[1].trim().toLowerCase() !== agent.name.trim().toLowerCase()) {
+    return true;
+  }
+  const identityMatch = systemPrompt.match(/# AGENT IDENTITY\s*\nYou are \*\*([^*]+)\*\*/i);
+  if (identityMatch && identityMatch[1].trim().toLowerCase() !== agent.name.trim().toLowerCase()) {
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Reconciles and synchronizes an agent's base system prompt with its latest profile
+ * (name, role, description, specialty, and responsibilities).
+ * Preserves attached tool sections (MCP servers, skills, custom principles)
+ * while ensuring identity, mission, and responsibilities match the updated profile.
+ */
+export const reconcileSystemPromptWithProfile = (
+  currentPrompt: string | undefined | null,
+  profile: ProfileSyncData,
+): string => {
+  const name = (profile.name || '').trim() || 'Agent';
+  const role = (profile.role || '').trim() || 'Autonomous Specialist';
+  const specialty = (profile.specialty || '').trim() || 'General Operations';
+  const desc = (profile.description || '').trim() || 'Accomplish assigned domain tasks efficiently.';
+
+  let responsibilitiesText = '';
+  const explicitResp = profile.responsibilities ?? profile.duties;
+  if (explicitResp) {
+    responsibilitiesText = Array.isArray(explicitResp)
+      ? explicitResp.map((r, i) => `${i + 1}. ${r}`).join('\n')
+      : String(explicitResp).trim();
+  } else if (specialty && (specialty.includes(',') || specialty.includes(';'))) {
+    const items = specialty
+      .split(/[,;]\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    responsibilitiesText = items.map((r, i) => `${i + 1}. ${r}`).join('\n');
+  } else {
+    responsibilitiesText = `1. Execute assigned ${role} tasks with high precision and verifiable deliverables.\n2. Deepen domain specialization in ${specialty}.\n3. Coordinate actively with users and peer agents.`;
+  }
+
+  const identityHeader =
+    `You are ${role} (agent name: "${name}").\n\n` +
+    `## MISSION\n${desc}\n\n` +
+    `## SPECIALTY FOCUS\nYour primary expertise is in **${specialty}**. Coordinate with other specialists when tasks fall outside your domain.\n\n` +
+    `## CORE RESPONSIBILITIES\n${responsibilitiesText}`;
+
+  if (!currentPrompt || !currentPrompt.trim()) {
+    return (
+      `${identityHeader}\n\n` +
+      `## OPERATING PRINCIPLES\n` +
+      `- You are an autonomous AI specialist. Complete the requested work end-to-end with the tools available to you.\n` +
+      `- Prefer real data over guessing: when a task touches a system you have a tool for, CALL the tool.\n` +
+      `- Keep all artifacts inside your designated workspace; never modify unrelated source files.\n` +
+      `- When a step blocks on missing credentials or permissions, report it clearly and continue what you can.\n` +
+      `- Finish with a concise, structured executive summary of what you did, what you found, and recommended next steps.`
+    );
+  }
+
+  const sections = currentPrompt.trim().split(/\n(?=## )/);
+  const preservedSections: string[] = [];
+
+  for (let i = 1; i < sections.length; i++) {
+    const sec = sections[i].trim();
+    const heading = sec.split('\n')[0].toUpperCase();
+    if (
+      heading.startsWith('## MISSION') ||
+      heading.startsWith('## STANDING RESPONSIBILITIES') ||
+      heading.startsWith('## CORE RESPONSIBILITIES') ||
+      heading.startsWith('## SPECIALTY FOCUS') ||
+      heading.startsWith('## IDENTITY') ||
+      heading.startsWith('## AGENT IDENTITY')
+    ) {
+      continue;
+    }
+    preservedSections.push(sec);
+  }
+
+  if (preservedSections.length > 0) {
+    return `${identityHeader}\n\n${preservedSections.join('\n\n')}`;
+  }
+
+  return (
+    `${identityHeader}\n\n` +
+    `## OPERATING PRINCIPLES\n` +
+    `- You are an autonomous AI specialist. Complete the requested work end-to-end with the tools available to you.\n` +
+    `- Prefer real data over guessing: when a task touches a system you have a tool for, CALL the tool.\n` +
+    `- Keep all artifacts inside your designated workspace; never modify unrelated source files.\n` +
+    `- When a step blocks on missing credentials or permissions, report it clearly and continue what you can.\n` +
+    `- Finish with a concise, structured executive summary of what you did, what you found, and recommended next steps.`
+  );
+};
+

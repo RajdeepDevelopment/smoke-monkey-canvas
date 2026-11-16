@@ -95,6 +95,28 @@ export const BrandIcons: Record<string, React.FC<{ size?: number; className?: st
   ),
 
   // ── Stock MCP Integrations ────────────────────────────────────────────────
+  smokemonkeycanvas: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#06B6D4" fillOpacity="0.2" stroke="#06B6D4" strokeWidth="2" />
+      <circle cx="8" cy="8" r="2.5" fill="#06B6D4" />
+      <circle cx="16" cy="8" r="2.5" fill="#38BDF8" />
+      <circle cx="12" cy="16" r="2.5" fill="#818CF8" />
+      <line x1="8" y1="8" x2="16" y2="8" stroke="#06B6D4" strokeWidth="1.5" strokeDasharray="2 2" />
+      <line x1="8" y1="8" x2="12" y2="16" stroke="#06B6D4" strokeWidth="1.5" />
+      <line x1="16" y1="8" x2="12" y2="16" stroke="#38BDF8" strokeWidth="1.5" />
+    </svg>
+  ),
+  smokemonkey: ({ size = 16, className = '' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#06B6D4" fillOpacity="0.2" stroke="#06B6D4" strokeWidth="2" />
+      <circle cx="8" cy="8" r="2.5" fill="#06B6D4" />
+      <circle cx="16" cy="8" r="2.5" fill="#38BDF8" />
+      <circle cx="12" cy="16" r="2.5" fill="#818CF8" />
+      <line x1="8" y1="8" x2="16" y2="8" stroke="#06B6D4" strokeWidth="1.5" strokeDasharray="2 2" />
+      <line x1="8" y1="8" x2="12" y2="16" stroke="#06B6D4" strokeWidth="1.5" />
+      <line x1="16" y1="8" x2="12" y2="16" stroke="#38BDF8" strokeWidth="1.5" />
+    </svg>
+  ),
   github: ({ size = 16, className = '' }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
       <path
@@ -484,6 +506,18 @@ export const BRAND_CONFIGS: Record<string, BrandMeta> = {
     bgColor: 'rgba(91, 91, 246, 0.18)',
     borderColor: 'rgba(91, 91, 246, 0.38)',
     glowColor: 'rgba(91, 91, 246, 0.35)',
+  },
+  smokemonkeycanvas: {
+    color: '#06B6D4',
+    bgColor: 'rgba(6, 182, 212, 0.14)',
+    borderColor: 'rgba(6, 182, 212, 0.32)',
+    glowColor: 'rgba(6, 182, 212, 0.35)',
+  },
+  smokemonkey: {
+    color: '#06B6D4',
+    bgColor: 'rgba(6, 182, 212, 0.14)',
+    borderColor: 'rgba(6, 182, 212, 0.32)',
+    glowColor: 'rgba(6, 182, 212, 0.35)',
   },
   github: {
     color: '#FFFFFF',

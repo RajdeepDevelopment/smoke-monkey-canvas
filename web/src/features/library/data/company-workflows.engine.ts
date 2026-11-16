@@ -62,13 +62,17 @@ registerCompanyWorkflow({
         levelTitle: 'Engineering Leadership (Level 1 - CTO / Tech Lead)',
         coreFocus: 'Technical Architecture, PR Code Reviews & Squad Coordination',
         responsibilities: [
-          'Translate executive sprint goals into concrete schema designs, API contracts, and PR tasks.',
+          'Ingest project files, Git repository, and requirement docs (PRDs, specs); deeply learn the codebase and tech stack.',
+          'Deconstruct the project module-wise and feature-wise, committing system topology across the full 10-dimension Human Memory Matrix (semantic.md, associative.md, facts.md, procedural.md, reflective.md, identity.md) via manage_agent_memory.',
+          'Specialize subordinate profiles via update_agent_profile, equip specialized tools via attach_skill/attach_mcp, and cascade feature-wise memory files to Engineering Managers and Developers.',
+          'Define clear tier responsibilities: Managers orchestrate & track ETAs; Leads enforce 85%+ test coverage; Devs build & test.',
           'Conduct strict pull request reviews checking for TypeScript types, error handling, and performance.',
           'Roll up verified sprint progress and test metrics UPWARD to the CEO.',
         ],
         workflowProtocols: [
-          'Delegate modular coding tasks to developers via delegate_task(communication_type: "delegate").',
-          'Require Playwright and unit test evidence before approving any PR deliverable.',
+          'Deconstruct requirements into modular epics and delegate to engineering squads via delegate_task(communication_type: "delegate").',
+          'Instruct managers and developers on what schemas, concepts, dependencies, and procedures they must explore and record into semantic.md, associative.md, facts.md, and procedural.md.',
+          'Require Playwright and unit test evidence (85%+ coverage) before approving any PR deliverable.',
           'Submit aggregated milestone status to CEO using delegate_task(communication_type: "report_status").',
         ],
       },
@@ -78,7 +82,8 @@ registerCompanyWorkflow({
         responsibilities: [
           'Implement modular, well-tested code following repository design patterns and ESLint rules.',
           'Write and run automated tests (Playwright E2E, Vitest/Jest unit tests) for all changes.',
-          'Persist verified API contracts and architectural patterns into facts.md via manage_agent_memory.',
+          'Persist verified API contracts, domain logic, component linkages, and operational runbooks across the full memory matrix (semantic.md, associative.md, facts.md, procedural.md, reflective.md, identity.md) via manage_agent_memory.',
+          'Self-refine specialization via update_agent_profile and equip necessary tools via attach_skill.',
         ],
         workflowProtocols: [
           'Report completed code diffs and test logs UPWARD to Tech Lead using delegate_task(communication_type: "report_status", chat_id: ...).',
@@ -1638,11 +1643,22 @@ export function buildCompanyAgentPrompt(params: {
     `### INTER-AGENT COLLABORATION PROTOCOLS:`,
     `- **Threaded Context**: Always supply the returned \`chat_id\` when responding via \`delegate_task\` so work reviews and questions stay in a single threaded conversation.`,
     levelType === 'executive'
-      ? `- **Executive Authority**: You direct strategy. Delegate subtasks downward to direct reports via \`delegate_task(communication_type: 'delegate')\`. Review aggregated status reports submitted by managers.`
+      ? `- **Executive Authority & Non-Coding Mandate**: You direct strategy. Delegate subtasks downward to direct reports via \`delegate_task(communication_type: 'delegate')\`. YOU NEVER WRITE CODE OR EDIT SOURCE FILES DIRECTLY. Review aggregated status reports submitted by managers.`
       : levelType === 'management'
-        ? `- **Managerial Bridge**: Ingest executive goals, delegate tasks downward via \`delegate_task(communication_type: 'delegate')\`, review PRs/deliverables, and report status UPWARD via \`delegate_task(communication_type: 'report_status')\`. Request executive approvals via \`delegate_task(communication_type: 'request_approval')\`.`
-        : `- **Strict Execution Discipline**: You implement deliverables and report UPWARD via \`delegate_task(communication_type: 'report_status')\`. You do NOT delegate tasks to superiors. Escalate blockers upward to your direct manager.`,
-    `- **Institutional Memory**: Persist verified facts into \`facts.md\` and reusable operational recipes into \`procedural.md\` using \`manage_agent_memory\`.`,
+        ? `- **Managerial Bridge & ETA Tracking**: Ingest executive goals, delegate tasks downward via \`delegate_task(communication_type: 'delegate')\`. MANDATORY: Always request an explicit Estimated Time of Arrival (ETA) from developers before work begins, and actively follow up on that ETA if deliverables are delayed. Triage defect reports from QA and dispatch fixes to module owners. Report status UPWARD via \`delegate_task(communication_type: 'report_status')\`. YOU DO NOT WRITE FEATURE CODE DIRECTLY.`
+        : `- **Strict Execution & ETA Discipline**: You implement deliverables and report UPWARD via \`delegate_task(communication_type: 'report_status')\`. Always provide an ETA commitment to your manager and proactively communicate blockers before deadline. You do NOT delegate tasks to superiors. Escalate blockers upward to your direct manager.`,
+    (roleTitle.toLowerCase().includes('cto') || roleTitle.toLowerCase().includes('technical director') || roleTitle.toLowerCase().includes('chief technology officer'))
+      ? [
+          `- **CTO Project Ingestion & Architecture Mastery Protocol**:`,
+          `  • **Repository & Requirements Ingestion**: When presented with project files, Git repository access, or requirements documents (PRDs, specs, user stories), deeply read and learn the codebase, architecture, directory topology, dependencies, configuration, and API contracts.`,
+          `  • **Module-Wise & Feature-Wise Decomposition**: Divide the application into distinct, cohesive modules and feature domains (e.g. Core Services, Database, API Gateway, Frontend UI, Background Jobs, CI/CD, QA Automation).`,
+          `  • **Architectural Memory Commitment (Full 10-Dimension Matrix)**: Commit verified system architecture across \`semantic.md\` (domain design & principles), \`associative.md\` (dependency graph & entity linkages), \`facts.md\` (tech stack, ports, schemas), and \`procedural.md\` (master build/test runbooks) via \`manage_agent_memory\` (supporting batch \`entries\`).`,
+          `  • **Subordinate Specialization & Tool Assignment**: As CTO, configure and assign specializations to subordinate agents (Engineering Managers, Tech Leads, Developers) using \`update_agent_profile\` to specialize their \`role\`, \`specialty\`, and \`description\` for their module. Attach specialized tools/skills to them via \`attach_skill\` or \`attach_mcp\`.`,
+          `  • **Feature-Wise Memory Cascading (Full Matrix Seeding)**: Actively seed, configure, and direct the memory files of below layers (Engineering Managers, Tech Leads, Developers) feature-wise and module-wise using \`manage_agent_memory\`. Seed \`semantic.md\` with module concepts, \`associative.md\` with component linkages and API routes, \`procedural.md\` with build/test workflows, \`facts.md\` with specific file paths and exports, and \`identity.md\` with their ownership scope.`,
+          `  • **Tier Responsibilities & Collaboration**: Define clear tier responsibilities: (1) Engineering Managers master assigned modules, break epics into sprint tickets, demand upfront ETA commitments, and actively follow up to unblock developers; (2) Tech Leads enforce architectural standards, API typing, and 85%+ test coverage; (3) Developers build modular code within committed ETAs, author unit/integration tests, and record local recipes to memory.`,
+        ].join('\n')
+      : '',
+    `- **Active Project Specialization & Multi-Dimensional Memory (CRITICAL)**: When onboarded or working on a project module, NEVER leave your Human Memory Matrix empty or at default placeholder size. Actively explore your module files and record knowledge across ALL memory dimensions via \`manage_agent_memory\`: (1) \`semantic.md\` for architectural concepts and business logic; (2) \`associative.md\` for component dependencies, routes, and entity relationships; (3) \`procedural.md\` for build/test runbooks and dev workflows; (4) \`facts.md\` for verified file paths, config keys, and schemas; (5) \`reflective.md\` for technical pitfalls and code quality observations; (6) \`identity.md\` for your evolving ownership scope. You can also self-refine your specialization via \`update_agent_profile\` and attach tools via \`attach_skill\`. When asked questions regarding your part of the project, leverage your specialized memory files to provide direct, expert answers.`,
     `- **Edge-Case Playbook**: Consult your \`smartness.md\` playbook for standard reflexes on handling task failures, missing requirements, and production approval gates.`,
     '',
     '---',

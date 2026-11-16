@@ -22,7 +22,8 @@ import {
   type SharedEnvVar,
   type CommonRegistryPaths,
 } from './agent.manifest.js';
-import { buildSubPrompts, mergeEffectivePolicies, resolveAgentWorkspace } from './agent.prompt.js';
+import { buildSubPrompts, mergeEffectivePolicies, resolveAgentWorkspace, reconcileSystemPromptWithProfile, isSystemPromptStale } from './agent.prompt.js';
+import { ensureAgentWorkspace } from './agent.manifest.js';
 import { parsePolicies } from './agent.types.js';
 import { detectGitRepository, ensureRepoMemory } from './agent.repo-memory.js';
 import { CUSTOM_AGENT_TOOLS } from './agent.custom-tools.js';
@@ -30,6 +31,16 @@ import { checkAgentConfigStatus } from './agent.config-check.js';
 import { SpaceDb } from '../space/space.db.js';
 import { buildAgentTeamWorkflowBlock } from '../space/space.workflow.js';
 import { recordAgentTodoUpdate } from './agent.todos.js';
+
+export interface DelegationClosurePayload {
+  chatId: string;
+  status: 'completed' | 'failed' | 'blocked';
+  summary: string;
+  deliverables?: string[];
+  notes?: string;
+  closedByAgentId: string;
+  closedAt: string;
+}
 
 export interface ActiveRunContext {
   runId: string;
@@ -50,6 +61,7 @@ export interface ActiveRunContext {
   cronSuccessReported?: boolean;
   cronSuccessSummary?: string;
   retryCount?: number;
+  delegationClosure?: DelegationClosurePayload;
 }
 
 export interface ActiveDelegationRecord {
@@ -61,15 +73,46 @@ export interface ActiveDelegationRecord {
   startedAt: string;
 }
 
+function sleepWithAbort(ms: number, isAborted: () => boolean): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const start = Date.now();
+    const interval = setInterval(() => {
+      if (isAborted() || Date.now() - start >= ms) {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 200);
+  });
+}
+
 export class AgentRunner {
   private static instance: AgentRunner | null = null;
   private db: AgentDb;
   private ws: CoreWsServer;
   private activeRuns = new Map<string, ActiveRunContext>();
   private activeDelegations = new Map<string, ActiveDelegationRecord>();
+  private delegationClosures = new Map<string, DelegationClosurePayload>();
   private agentStores = new Map<string, MemoryStore>();
   private runWaiters = new Map<string, Array<(run: RunRecord) => void>>();
   private lastActiveRunsBroadcast = 0;
+
+  /**
+   * Delegation chain tracking for multi-level delegation safety.
+   *
+   * delegationChains: sessionId → ordered array of agentIds in the chain
+   *   e.g. "delegation_a1_a2_123" → ["agent1", "agent2"]
+   *   When agent2 delegates to agent3 on a new sessionId, that new session's
+   *   chain is the parent chain + ["agent3"].
+   *
+   * sessionParent: childSessionId → parentSessionId
+   *   Lets us walk up the tree to cascade closures.
+   *
+   * sessionChildren: parentSessionId → Set<childSessionId>
+   *   Lets us walk down the tree to cascade closures.
+   */
+  private delegationChains = new Map<string, string[]>();
+  private sessionParent = new Map<string, string>();
+  private sessionChildren = new Map<string, Set<string>>();
 
   getDb(): AgentDb {
     return this.db;
@@ -143,6 +186,17 @@ export class AgentRunner {
           this.db.updateAgent(agent.id, { status: nextStatus });
         }
       }
+      const orphanedRuns = this.db.getOrphanedRunningRuns();
+      const now = new Date().toISOString();
+      for (const run of orphanedRuns) {
+        this.db.updateRun(run.id, {
+          status: 'failed',
+          error: 'Execution interrupted: server restarted while run was in progress.',
+          completed_at: now,
+        });
+      }
+      // Clean up orphaned running/pending tool calls in chat messages so UI never spins
+      this.db.cleanupStaleChatMessageTools();
     } catch (err) {
       console.warn('[AgentRunner] Error cleaning up stale agent states:', err);
     }
@@ -232,6 +286,186 @@ export class AgentRunner {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Multi-level delegation chain safety methods
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Returns the ordered chain of agentIds that produced the given session,
+   * e.g. ["agent1", "agent2"] if agent1 delegated to agent2 on this session.
+   */
+  getDelegationChain(sessionId: string): string[] {
+    return this.delegationChains.get(sessionId) || [];
+  }
+
+  /**
+   * Registers a new delegation edge (callerAgentId → targetAgentId) on
+   * `childSessionId`.  The parent chain is inherited from `parentSessionId`
+   * (if provided) and extended with `targetAgentId`.
+   *
+   * Returns `{ allowed: false, reason }` when:
+   *  - callerAgentId === targetAgentId  (self-delegation)
+   *  - targetAgentId is already in the ancestor chain (cycle)
+   *  - childSessionId already has an active delegation in progress
+   *
+   * Returns `{ allowed: true }` otherwise and registers the chain + parent/child links.
+   */
+  registerDelegationChain(
+    callerAgentId: string,
+    targetAgentId: string,
+    childSessionId: string,
+    parentSessionId?: string,
+  ): { allowed: boolean; reason?: string } {
+    // 1. Self-delegation guard
+    if (callerAgentId === targetAgentId) {
+      return {
+        allowed: false,
+        reason: `Self-delegation is not allowed: agent "${callerAgentId}" cannot delegate a task to itself.`,
+      };
+    }
+
+    // 2. Build the ancestor chain from the parent session
+    const ancestorChain: string[] = parentSessionId
+      ? [...(this.delegationChains.get(parentSessionId) || [])]
+      : [];
+
+    // 3. Cycle detection: targetAgentId must not already be in the chain
+    if (ancestorChain.includes(targetAgentId)) {
+      const visual = [...ancestorChain, callerAgentId, targetAgentId].join(' → ');
+      return {
+        allowed: false,
+        reason: `Circular delegation detected: agent "${targetAgentId}" is already in the delegation chain [${visual}]. Circular calls are blocked to prevent infinite loops.`,
+      };
+    }
+
+    // 4. Register the new chain: ancestors + targetAgentId.
+    //    The ancestor chain from the parent session already ends with callerAgentId
+    //    (because it was stored as [...grandAncestors, ..., callerAgentId]).
+    //    We only append targetAgentId to extend the chain correctly.
+    //    If there is no parent session this is a root delegation so we include both.
+    const newChain = parentSessionId
+      ? [...ancestorChain, targetAgentId]
+      : [callerAgentId, targetAgentId];
+    this.delegationChains.set(childSessionId, newChain);
+
+    // 5. Register parent/child session links
+    if (parentSessionId) {
+      this.sessionParent.set(childSessionId, parentSessionId);
+      const siblings = this.sessionChildren.get(parentSessionId) || new Set();
+      siblings.add(childSessionId);
+      this.sessionChildren.set(parentSessionId, siblings);
+    }
+
+    return { allowed: true };
+  }
+
+  /**
+   * Checks whether the given sessionId currently has an active delegation
+   * call running (i.e. some agent is awaiting runAgentAndWait on it).
+   * Used to block a new inbound manual message to a "suspended" chat.
+   */
+  isSessionBusyWithDelegation(sessionId: string): boolean {
+    for (const del of this.activeDelegations.values()) {
+      if (del.sessionId === sessionId) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Cascade-closes all child sessions spawned from `parentSessionId` by
+   * injecting a synthetic `failed` delegation closure into each.
+   *
+   * Called when an agent closes its own delegation task so that any
+   * sub-delegations it opened are also terminated.
+   */
+  propagateSubDelegationClose(parentSessionId: string, closedByAgentId: string): void {
+    const children = this.sessionChildren.get(parentSessionId);
+    if (!children || children.size === 0) return;
+
+    for (const childSessionId of children) {
+      // Only act if the child still has an active (unclosed) run
+      const childRun = this.getActiveRunForSession(childSessionId);
+      if (!childRun) continue;
+
+      // Already has a closure — skip
+      if (this.delegationClosures.has(childSessionId)) continue;
+
+      const cascadeClosure: DelegationClosurePayload = {
+        chatId: childSessionId,
+        status: 'failed',
+        summary: `Parent delegation session "${parentSessionId}" was closed by agent "${closedByAgentId}". This sub-delegation is being terminated automatically.`,
+        deliverables: [],
+        closedByAgentId,
+        closedAt: new Date().toISOString(),
+      };
+
+      console.log(
+        `[AgentRunner] Cascade-closing child session "${childSessionId}" because parent "${parentSessionId}" closed.`,
+      );
+
+      // Record the closure so the waiting runAgentAndWait loop detects it
+      this.recordDelegationClosure(childSessionId, cascadeClosure);
+
+      // Abort the child run's harness if possible
+      try {
+        if (childRun.harness && typeof childRun.harness.abort === 'function') {
+          childRun.harness.abort();
+        }
+      } catch {}
+
+      // Recurse: close grandchildren too
+      this.propagateSubDelegationClose(childSessionId, closedByAgentId);
+    }
+  }
+
+  /**
+   * Cleans up delegation chain metadata once a session is fully done.
+   * Called after runAgentAndWait resolves.
+   */
+  /**
+   * Broadcasts a delegation retry event to the canvas UI so the chat panel
+   * can show a "retrying in Xs" notice — mirrors the cron/manual retry pattern.
+   */
+  broadcastDelegationRetry(
+    agentId: string,
+    sessionId: string,
+    attempt: number,
+    maxRetries: number,
+    delaySeconds: number,
+    reason: string,
+  ): void {
+    try {
+      this.ws.broadcast({
+        type: 'agent_run_retry',
+        agentId,
+        sessionId,
+        data: {
+          attempt,
+          maxRetries,
+          delaySeconds,
+          reason,
+          isDelegation: true,
+        },
+      });
+    } catch {}
+  }
+
+  cleanupDelegationChain(sessionId: string): void {
+    const parentSessionId = this.sessionParent.get(sessionId);
+    if (parentSessionId) {
+      const siblings = this.sessionChildren.get(parentSessionId);
+      if (siblings) {
+        siblings.delete(sessionId);
+        if (siblings.size === 0) {
+          this.sessionChildren.delete(parentSessionId);
+        }
+      }
+      this.sessionParent.delete(sessionId);
+    }
+    this.delegationChains.delete(sessionId);
+    // Note: keep delegationClosures for the session so the caller can still read it
+  }
+
   getActiveDelegations(): ActiveDelegationRecord[] {
     const now = Date.now();
     for (const [id, del] of this.activeDelegations.entries()) {
@@ -288,6 +522,26 @@ export class AgentRunner {
       completed_at: now,
     });
 
+    // Mark any running or pending tool calls as cancelled so the UI never spins indefinitely
+    if (Array.isArray(active.accumulatedParts)) {
+      for (const part of active.accumulatedParts) {
+        if (part && part.type === 'tool' && part.toolCall) {
+          const tc = part.toolCall;
+          if (tc.status === 'running' || tc.status === 'pending' || !tc.status) {
+            tc.status = 'cancelled';
+            tc.completedAt = now;
+            tc.error = {
+              code: 'cancelled',
+              layer: 'tool',
+              severity: 'error',
+              message: 'Execution stopped by user',
+              retryable: false,
+            };
+          }
+        }
+      }
+    }
+
     if (active.assistantMsgId) {
       const cancelContent = active.accumulatedText
         ? `${active.accumulatedText}\n\n*[Execution stopped by user]*`
@@ -331,6 +585,27 @@ export class AgentRunner {
 
     this.activeRuns.delete(runId);
     this.broadcastActiveRuns();
+
+    // CRITICAL: Unblock any callers waiting in waitForRun(runId) so delegating agents don't freeze!
+    const waiters = this.runWaiters.get(runId);
+    if (waiters) {
+      const finalRun = this.db.getRun(runId) || {
+        id: runId,
+        agent_id: active.agentId,
+        trigger_type: active.triggerType,
+        status: 'failed',
+        task_prompt: active.taskPrompt,
+        summary: null,
+        error: 'Execution cancelled by user',
+        started_at: active.startedAt,
+        completed_at: now,
+        session_id: active.sessionId,
+      };
+      for (const resolve of waiters) {
+        resolve(finalRun as any);
+      }
+      this.runWaiters.delete(runId);
+    }
 
     const stillRunning = this.isAgentRunning(active.agentId);
     const agent = this.db.getAgent(active.agentId);
@@ -378,6 +653,49 @@ export class AgentRunner {
     return false;
   }
 
+  clearDelegationClosure(sessionId: string): void {
+    this.delegationClosures.delete(sessionId);
+    const activeRun = this.getActiveRunForSession(sessionId);
+    if (activeRun) activeRun.delegationClosure = undefined;
+  }
+
+  recordDelegationClosure(sessionId: string, closure: DelegationClosurePayload): void {
+    this.delegationClosures.set(sessionId, closure);
+    const activeRun = this.getActiveRunForSession(sessionId);
+    if (activeRun) {
+      activeRun.delegationClosure = closure;
+    }
+    this.ws.broadcast({
+      type: 'delegation_closed',
+      agentId: closure.closedByAgentId,
+      sessionId,
+      data: closure,
+    });
+  }
+
+  getDelegationClosure(sessionId: string): DelegationClosurePayload | undefined {
+    return this.delegationClosures.get(sessionId);
+  }
+
+  hasDelegationClosure(runContext: ActiveRunContext): DelegationClosurePayload | undefined {
+    if (runContext.delegationClosure) return runContext.delegationClosure;
+    for (const [, tc] of runContext.toolMap.entries()) {
+      if ((tc.name === 'close_delegation_task' || tc.name === 'complete_delegated_task') && tc.status === 'success') {
+        const input = tc.input || {};
+        return {
+          chatId: input.chat_id || runContext.sessionId,
+          status: (['completed', 'failed', 'blocked'].includes(input.status) ? input.status : 'completed') as any,
+          summary: input.summary || '',
+          deliverables: Array.isArray(input.deliverables) ? input.deliverables.map(String) : [],
+          notes: input.notes,
+          closedByAgentId: runContext.agentId,
+          closedAt: tc.completedAt || new Date().toISOString(),
+        };
+      }
+    }
+    return undefined;
+  }
+
   async runAgent(
     agentId: string,
     triggerType: 'cron' | 'manual' = 'manual',
@@ -389,6 +707,24 @@ export class AgentRunner {
     const agent = this.db.getAgent(agentId);
     if (!agent) {
       throw new Error(`Agent ${agentId} not found in database.`);
+    }
+
+    // Self-healing guard: Reconcile base system prompt if it contains a stale identity
+    // (e.g. agent was updated/renamed via update_agent_profile but system_prompt remained stale)
+    if (isSystemPromptStale(agent.system_prompt, agent)) {
+      const healedPrompt = reconcileSystemPromptWithProfile(agent.system_prompt, agent);
+      this.db.updateAgent(agentId, { system_prompt: healedPrompt });
+      agent.system_prompt = healedPrompt;
+
+      try {
+        const resolvedWs = resolveAgentWorkspace(agent);
+        const ws = ensureAgentWorkspace(resolvedWs, agentId, agent.name, healedPrompt);
+        if (ws.systemPromptFile) {
+          fs.writeFileSync(ws.systemPromptFile, `${healedPrompt}\n`, 'utf8');
+        }
+      } catch (err) {
+        console.warn(`[agent.runner] Failed to write healed system prompt for ${agentId}:`, err);
+      }
     }
 
     // Honor attachments the agent removed from its own manifest files before
@@ -604,6 +940,20 @@ export class AgentRunner {
 
         // Inject stock API keys if available in settings
         const coreDb = CoreDatabase.getInstance();
+        const spaceDb = new SpaceDb(coreDb);
+        let agentSpaceId = agent.owned_space_id || spaceDb.getAgentSpaceId(agentId);
+        if (!agentSpaceId && config && typeof config === 'object' && (config as any).spaceId) {
+          agentSpaceId = String((config as any).spaceId);
+        }
+        if (!agentSpaceId) {
+          const allSpaces = spaceDb.getWorkspaceSpaces();
+          if (allSpaces.length === 1) agentSpaceId = allSpaces[0].id;
+        }
+        if (agentSpaceId) {
+          env.CANVAS_SPACE_ID = agentSpaceId;
+          env.SPACE_ID = agentSpaceId;
+        }
+
         if (m.mcp_name === 'firecrawl-mcp' && !env.FIRECRAWL_API_KEY) {
           const k = coreDb.getSetting('FIRECRAWL_API_KEY');
           if (k) env.FIRECRAWL_API_KEY = k;
@@ -659,12 +1009,16 @@ export class AgentRunner {
           });
           mcpConfigRecords.push(m);
         } else if (stock) {
+          const stockArgs = [...((config.args as string[]) ?? stock.args ?? ['-y', stock.name])];
+          if (m.mcp_name === 'smoke-monkey-canvas' && agentSpaceId && !stockArgs.includes('--space-id') && !stockArgs.includes('-s')) {
+            stockArgs.push('--space-id', agentSpaceId);
+          }
           mcpConfigs.push({
             id: serverId,
             name: m.mcp_name,
             description: serverDesc,
             command: (config.command as string) ?? stock.command ?? 'npx',
-            args: (config.args as string[]) ?? stock.args ?? ['-y', stock.name],
+            args: stockArgs,
             env,
           });
           mcpConfigRecords.push(m);
@@ -728,7 +1082,7 @@ export class AgentRunner {
       // Safe model fallback if user had the retired llama-3.3-70b-instruct
       let resolvedModel = agent.model;
       if (!resolvedModel || resolvedModel === 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' || resolvedModel === 'meta/llama-3.3-70b-instruct') {
-        resolvedModel = 'nvidia/nemotron-3-super-120b-a12b';
+        resolvedModel = 'nvidia/nemotron-3.5-lightning-30b-a3b';
       }
 
       // 4. Gather policies and disabled tools. DB policies (`canvas`/`user`) are
@@ -902,6 +1256,9 @@ export class AgentRunner {
         };
       });
       const teamWorkflow = buildAgentTeamWorkflowBlock(agentId, this.db, new SpaceDb());
+      const hasCanvasMcp = this.db
+        .getAgentMcps(agentId)
+        .some((m) => Boolean(m.enabled) && m.mcp_name.toLowerCase().includes('canvas'));
       const combinedSubPrompts = buildSubPrompts({
         policyEntries: effectivePolicies,
         disabledTools,
@@ -915,6 +1272,7 @@ export class AgentRunner {
         agentName: agent.name,
         peerAgents,
         teamWorkflow,
+        hasCanvasMcp,
       });
 
       if (isCron) {
@@ -1252,50 +1610,16 @@ export class AgentRunner {
       }
 
       const MAX_CRON_RETRIES = 2;
-      let cronAttempt = 0;
+      const MAX_MANUAL_RETRIES = 10;
+      const maxRetries = isCron ? MAX_CRON_RETRIES : MAX_MANUAL_RETRIES;
+      let attempt = 0;
       let lastAttemptError: Error | null = null;
       let currentPrompt = effectiveInitialPrompt;
       let latestResult: any = null;
 
       while (true) {
-        cronAttempt++;
+        attempt++;
         try {
-          if (isCron && cronAttempt > 1) {
-            const retryNum = cronAttempt - 1; // 1 or 2
-            const retryReason = retryNum === 1
-              ? `Cron job did not call 'mark_cron_job_success'. Starting retry 1 of ${MAX_CRON_RETRIES}...`
-              : `Cron job still not marked as success. Starting final retry 2 of ${MAX_CRON_RETRIES}...`;
-
-            console.log(`[AgentRunner] Agent "${agent.name}" (${agentId}) - ${retryReason}`);
-
-            this.ws.broadcast({
-              type: 'cron_run_retry',
-              agentId,
-              runId,
-              sessionId,
-              data: {
-                attempt: retryNum,
-                maxRetries: MAX_CRON_RETRIES,
-                reason: retryReason,
-              },
-            });
-
-            broadcastAndLog(
-              'cron.retry',
-              {
-                attempt: retryNum,
-                maxRetries: MAX_CRON_RETRIES,
-                reason: retryReason,
-              },
-              {
-                type: 'agent:step',
-                stepId: `retry_${retryNum}`,
-                title: `🔄 Cron Retry ${retryNum}/${MAX_CRON_RETRIES}`,
-                status: 'running',
-              },
-            );
-          }
-
           latestResult = await harnessAgent.run(currentPrompt, {
             sessionId,
             runId,
@@ -1304,68 +1628,229 @@ export class AgentRunner {
           lastAttemptError = null;
         } catch (err: unknown) {
           lastAttemptError = err instanceof Error ? err : new Error(String(err));
-          console.warn(`[AgentRunner] Attempt ${cronAttempt} error for agent "${agent.name}" (${agentId}):`, lastAttemptError.message);
-          if (!isCron) {
-            throw lastAttemptError;
+          console.warn(`[AgentRunner] Attempt ${attempt} error for agent "${agent.name}" (${agentId}):`, lastAttemptError.message);
+        }
+
+        // Check if run was aborted or cancelled by user
+        const isCancelled =
+          !this.activeRuns.has(runId) ||
+          Boolean(lastAttemptError && /abort|cancel|stopped by user/i.test(lastAttemptError.message));
+        if (isCancelled) {
+          console.log(`[AgentRunner] Run ${runId} was cancelled by user. Terminating loop.`);
+          break;
+        }
+
+        // Extract assistant messages & text from this turn
+        const assistantMessages = (latestResult?.messages || []).filter((m: any) => m.role === 'assistant');
+        const lastAssistantText = assistantMessages.length > 0
+          ? assistantMessages[assistantMessages.length - 1].content
+          : '';
+        const currentOutputText = runContext.cronSuccessSummary || runContext.accumulatedText.trim() || lastAssistantText;
+        const hasMeaningfulOutput = Boolean(currentOutputText && currentOutputText.trim().length > 0);
+
+        const isCronSuccess = isCron && this.hasCronSuccess(runContext);
+        const delegationClosure = this.hasDelegationClosure(runContext);
+        const isDelegationSuccess = Boolean(delegationClosure && delegationClosure.status === 'completed');
+        const isDelegationFailure = Boolean(delegationClosure && (delegationClosure.status === 'failed' || delegationClosure.status === 'blocked'));
+
+        const isManualSuccess =
+          !isCron &&
+          !lastAttemptError &&
+          !isDelegationFailure &&
+          (isDelegationSuccess ||
+            latestResult?.status === 'completed' ||
+            (latestResult?.status !== 'failed' &&
+              latestResult?.status !== 'blocked' &&
+              latestResult?.status !== 'cancelled' &&
+              latestResult?.status !== 'aborted' &&
+              hasMeaningfulOutput));
+
+        const isSuccess = isCron ? isCronSuccess : isManualSuccess;
+
+        if (isSuccess) {
+          if (isCron) {
+            console.log(`[AgentRunner] Cron job marked successful by agent "${agent.name}" via mark_cron_job_success tool.`);
           }
-        }
-
-        if (!isCron) {
           break;
         }
 
-        // Check if mark_cron_job_success was called
-        if (this.hasCronSuccess(runContext)) {
-          console.log(`[AgentRunner] Cron job marked successful by agent "${agent.name}" via mark_cron_job_success tool.`);
-          break;
-        }
+        // A delegated task that explicitly closed as failed/blocked is a
+        // business outcome, not a transient error — do not re-run it.
+        if (isDelegationFailure) break;
 
         // If retries not exhausted, prepare next retry prompt
-        if (cronAttempt <= MAX_CRON_RETRIES) {
-          const nextRetryNum = cronAttempt; // 1 or 2
-          runContext.retryCount = nextRetryNum;
-          if (nextRetryNum === 1) {
-            currentPrompt =
-              `[CRON RETRY ATTEMPT 1 of ${MAX_CRON_RETRIES}]:\n` +
-              `Your previous execution stopped without calling the required 'mark_cron_job_success' tool. ` +
-              `Because this tool was not called, the scheduled operation cannot be verified as successful. ` +
-              `All previous conversation turns and workspace state are available in this session. ` +
-              `Please check what tasks remain incomplete, finish all required updates, ` +
-              `and then call 'mark_cron_job_success' with your summary.`;
+        if (attempt <= maxRetries) {
+          const retryNum = attempt; // 1, 2, ... maxRetries
+          runContext.retryCount = retryNum;
+
+          // Backoff calculation:
+          // For manual runs: attempt 1 fail -> 5s, attempt 2 fail -> 10s, attempt 3 fail -> 20s, then 40s, capped at 60s
+          // For cron runs: attempt 1 fail -> 3s, attempt 2 fail -> 5s
+          const delaySec = isCron
+            ? (retryNum === 1 ? 3 : 5)
+            : Math.min(5 * Math.pow(2, retryNum - 1), 60);
+
+          let failureReason = '';
+          if (lastAttemptError?.message) {
+            failureReason = lastAttemptError.message;
+          } else if (latestResult?.status === 'failed') {
+            failureReason = runContext.accumulatedText.trim() || lastAssistantText.trim() || 'Execution loop terminated with error';
+          } else if (isDelegationFailure) {
+            failureReason = delegationClosure?.summary || 'Delegated task failed';
+          } else if (isCron) {
+            failureReason = `Scheduled operation did not invoke 'mark_cron_job_success'`;
+          } else {
+            failureReason = 'Execution loop stopped without completing task';
+          }
+
+          const retryReason = isCron
+            ? (retryNum === 1
+                ? `Cron job did not call 'mark_cron_job_success'. Starting retry 1 of ${MAX_CRON_RETRIES}...`
+                : `Cron job still not marked as success. Starting final retry 2 of ${MAX_CRON_RETRIES}...`)
+            : `Execution stopped or failed (${failureReason}). Waiting ${delaySec}s before retry ${retryNum}/${MAX_MANUAL_RETRIES}...`;
+
+          console.warn(`[AgentRunner] Agent "${agent.name}" (${agentId}) - ${retryReason}`);
+
+          this.ws.broadcast({
+            type: isCron ? 'cron_run_retry' : 'agent_run_retry',
+            agentId,
+            runId,
+            sessionId,
+            data: {
+              attempt: retryNum,
+              maxRetries,
+              delaySeconds: delaySec,
+              reason: failureReason,
+            },
+          });
+
+          broadcastAndLog(
+            isCron ? 'cron.retry' : 'agent.retry',
+            {
+              attempt: retryNum,
+              maxRetries,
+              delaySeconds: delaySec,
+              reason: failureReason,
+            },
+            {
+              type: 'agent:step',
+              stepId: `retry_${retryNum}_${Date.now()}`,
+              title: `🔄 Loop error: Retrying in ${delaySec}s (Attempt ${retryNum}/${maxRetries})`,
+              status: 'running',
+            },
+          );
+
+          if (!isCron && runContext.assistantMsgId) {
+            const retryNotice = `\n\n> ⚠️ **Interrupted**: *${failureReason}*\n> 🔄 *Retrying in ${delaySec}s (Attempt ${retryNum}/${MAX_MANUAL_RETRIES})...*\n\n`;
+            runContext.accumulatedParts.push({
+              type: 'markdown',
+              content: retryNotice,
+            });
+            this.db.updateChatMessage(runContext.assistantMsgId, {
+              content: runContext.accumulatedText,
+              parts_json: JSON.stringify(runContext.accumulatedParts),
+            });
+
+            const noticeEvt = {
+              type: 'text:delta',
+              delta: retryNotice,
+              messageId: runContext.assistantMsgId,
+              conversationId: sessionId,
+            };
+            this.ws.broadcast({
+              type: 'chat_stream_event',
+              agentId,
+              runId,
+              sessionId,
+              triggerType: run.trigger_type,
+              event: noticeEvt,
+              streamEvent: noticeEvt,
+            });
+          }
+
+          // Non-blocking sleep with abort polling
+          await sleepWithAbort(delaySec * 1000, () => !this.activeRuns.has(runId));
+          if (!this.activeRuns.has(runId)) {
+            console.log(`[AgentRunner] Run ${runId} was stopped during retry backoff.`);
+            break;
+          }
+
+          if (isCron) {
+            if (retryNum === 1) {
+              currentPrompt =
+                `[CRON RETRY ATTEMPT 1 of ${MAX_CRON_RETRIES}]:\n` +
+                `Your previous execution stopped without calling the required 'mark_cron_job_success' tool. ` +
+                `Because this tool was not called, the scheduled operation cannot be verified as successful. ` +
+                `All previous conversation turns and workspace state are available in this session. ` +
+                `Please check what tasks remain incomplete, finish all required updates, ` +
+                `and then call 'mark_cron_job_success' with your summary.`;
+            } else {
+              currentPrompt =
+                `[CRON FINAL RETRY ATTEMPT 2 of ${MAX_CRON_RETRIES}]:\n` +
+                `This is your final retry attempt. The scheduled operation is still not verified because 'mark_cron_job_success' has not been called. ` +
+                `Please complete any remaining operations now and invoke 'mark_cron_job_success'. ` +
+                `If you are unable to complete the task due to any error, limitation, or blocker, you MUST explicitly state the failure reason and what failed in your response so it can be recorded.`;
+            }
           } else {
             currentPrompt =
-              `[CRON FINAL RETRY ATTEMPT 2 of ${MAX_CRON_RETRIES}]:\n` +
-              `This is your final retry attempt. The scheduled operation is still not verified because 'mark_cron_job_success' has not been called. ` +
-              `Please complete any remaining operations now and invoke 'mark_cron_job_success'. ` +
-              `If you are unable to complete the task due to any error, limitation, or blocker, you MUST explicitly state the failure reason and what failed in your response so it can be recorded.`;
+              `[AUTOMATIC RETRY ATTEMPT ${retryNum} of ${MAX_MANUAL_RETRIES}]:\n` +
+              `The previous execution turn stopped or encountered an error: ${failureReason}. ` +
+              `All previous conversation history, tool calls, and workspace files are preserved in this session. ` +
+              `Please resume and continue your task from where you were interrupted. Make sure to complete the objective or explain what occurred.`;
           }
         } else {
-          // Both 2 retries exhausted without calling mark_cron_job_success
-          console.warn(`[AgentRunner] Cron job failed for agent "${agent.name}" (${agentId}) after ${MAX_CRON_RETRIES} retries without calling mark_cron_job_success.`);
+          console.warn(`[AgentRunner] Execution failed for agent "${agent.name}" (${agentId}) after ${maxRetries} retries.`);
           break;
         }
       }
-
-      const isCronSuccess = isCron && this.hasCronSuccess(runContext);
-      const isManualSuccess = !isCron && !lastAttemptError && latestResult?.status === 'completed';
-      const isSuccess = isCron ? isCronSuccess : isManualSuccess;
-
-      const resObj = (latestResult || {}) as unknown as { summary?: string; status?: string };
-      const finalSummary =
-        runContext.cronSuccessSummary ||
-        (typeof resObj.summary === 'string'
-          ? resObj.summary
-          : latestResult?.status === 'completed'
-            ? 'Task completed successfully.'
-            : `Execution ended with status: ${latestResult?.status || 'unknown'}`);
 
       // Extract the actual assistant reply text from the harness messages
       const assistantMessages = (latestResult?.messages || []).filter((m: any) => m.role === 'assistant');
       const lastAssistantText = assistantMessages.length > 0
         ? assistantMessages[assistantMessages.length - 1].content
-        : finalSummary;
+        : '';
 
-      const finalText = runContext.cronSuccessSummary || runContext.accumulatedText.trim() || lastAssistantText || finalSummary;
+      const finalText = runContext.cronSuccessSummary || runContext.accumulatedText.trim() || lastAssistantText;
+      const hasMeaningfulOutput = Boolean(finalText && finalText.trim().length > 0);
+
+      const isCronSuccess = isCron && this.hasCronSuccess(runContext);
+      const delegationClosure = this.hasDelegationClosure(runContext);
+      if (delegationClosure) {
+        this.recordDelegationClosure(sessionId, delegationClosure);
+      }
+      const isDelegationSuccess = Boolean(delegationClosure && delegationClosure.status === 'completed');
+      const isDelegationFailure = Boolean(delegationClosure && (delegationClosure.status === 'failed' || delegationClosure.status === 'blocked'));
+
+      const isManualSuccess =
+        !isCron &&
+        !lastAttemptError &&
+        !isDelegationFailure &&
+        (isDelegationSuccess ||
+          latestResult?.status === 'completed' ||
+          (latestResult?.status !== 'failed' &&
+            latestResult?.status !== 'blocked' &&
+            latestResult?.status !== 'cancelled' &&
+            latestResult?.status !== 'aborted' &&
+            hasMeaningfulOutput));
+      const isSuccess = isCron ? isCronSuccess : isManualSuccess;
+
+      // stopRun() already persisted the cancelled state and removed the active
+      // run; never let the finalization path overwrite it.
+      if (!this.activeRuns.has(runId)) {
+        return;
+      }
+
+      const resObj = (latestResult || {}) as unknown as { summary?: string; status?: string };
+      const finalSummary =
+        delegationClosure?.summary ||
+        runContext.cronSuccessSummary ||
+        (typeof resObj.summary === 'string' && resObj.summary.trim()
+          ? resObj.summary
+          : finalText
+            ? finalText
+            : latestResult?.status === 'completed'
+              ? 'Task completed successfully.'
+              : `Execution ended with status: ${latestResult?.status || 'unknown'}`);
 
       // Ensure markdown part exists in accumulatedParts if text wasn't in deltas
       if (finalText && !runContext.accumulatedParts.some((p) => p.type === 'markdown')) {
@@ -1377,20 +1862,15 @@ export class AgentRunner {
       if (!isSuccess) {
         // Extract failure reason / remark
         let failureRemark = '';
-        const allMsgs = store.listMessages(sessionId);
-        const allAssistantMsgs = allMsgs.filter((m: any) => m.role === 'assistant');
-        const lastAsst = allAssistantMsgs.length > 0 ? allAssistantMsgs[allAssistantMsgs.length - 1].content : '';
-
-        if (lastAsst && lastAsst.trim()) {
-          failureRemark = lastAsst.trim();
-        } else if (runContext.accumulatedText && runContext.accumulatedText.trim()) {
-          failureRemark = runContext.accumulatedText.trim();
-        } else if (lastAttemptError?.message) {
+        if (lastAttemptError?.message) {
           failureRemark = lastAttemptError.message;
+        } else if (latestResult?.status === 'failed') {
+          failureRemark = runContext.accumulatedText.trim() || lastAssistantText.trim() || 'Execution failed.';
         } else {
+          const explanation = runContext.accumulatedText.trim() || lastAssistantText.trim();
           failureRemark = isCron
-            ? `Cron job execution stopped without calling 'mark_cron_job_success' after ${MAX_CRON_RETRIES} retries.`
-            : 'Execution failed.';
+            ? (explanation || `Cron job execution stopped without calling 'mark_cron_job_success' after ${MAX_CRON_RETRIES} retries.`)
+            : (explanation || `Execution ended without completion after ${MAX_MANUAL_RETRIES} retries.`);
         }
 
         this.db.updateRun(runId, {
@@ -1410,7 +1890,7 @@ export class AgentRunner {
         if (runContext.assistantMsgId) {
           runContext.accumulatedParts.push({
             type: 'markdown',
-            content: `\n\n**Cron Execution Failed**: ${failureRemark}`,
+            content: `\n\n**${isCron ? 'Cron Execution' : 'Execution'} Failed**: ${failureRemark}`,
           });
           this.db.updateChatMessage(runContext.assistantMsgId, {
             content: failureRemark,
@@ -1423,7 +1903,7 @@ export class AgentRunner {
           messageId: runContext.assistantMsgId || runId,
           conversationId: sessionId,
           error: {
-            code: 'cron_failed',
+            code: isCron ? 'cron_failed' : 'run_failed',
             layer: 'agent',
             severity: 'error',
             message: failureRemark,
@@ -1449,8 +1929,8 @@ export class AgentRunner {
           data: {
             error: failureRemark,
             completedAt,
-            retriesExhausted: isCron,
-            retryCount: isCron ? MAX_CRON_RETRIES : 0,
+            retriesExhausted: true,
+            retryCount: runContext.retryCount ?? 0,
           },
         });
 
@@ -1562,6 +2042,26 @@ export class AgentRunner {
       const failText = runContext.accumulatedText
         ? `${runContext.accumulatedText}\n\n**Execution Error**: ${errorMessage}`
         : `Execution failed: ${errorMessage}`;
+
+      // Mark any tools still in 'running' or 'pending' state as 'error' so chat UI never spins
+      if (Array.isArray(runContext.accumulatedParts)) {
+        for (const part of runContext.accumulatedParts) {
+          if (part && part.type === 'tool' && part.toolCall) {
+            const tc = part.toolCall;
+            if (tc.status === 'running' || tc.status === 'pending' || !tc.status) {
+              tc.status = 'error';
+              tc.completedAt = completedAt;
+              tc.error = {
+                code: 'execution_failed',
+                layer: 'tool',
+                severity: 'error',
+                message: errorMessage,
+                retryable: false,
+              };
+            }
+          }
+        }
+      }
 
       if (runContext.assistantMsgId) {
         runContext.accumulatedParts.push({

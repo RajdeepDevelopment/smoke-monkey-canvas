@@ -1,0 +1,101 @@
+{
+  "id": "company-ai-labs",
+  "name": "Nexus Intelligence Labs",
+  "category": "Artificial Intelligence",
+  "domain": "Foundation Models & Multi-Modal Intelligence",
+  "tagline": "Frontier foundation models, alignment engineering, and enterprise inference infrastructure.",
+  "operatingCadence": "Experimental research epochs paired with continuous model evaluation, automated safety red-teaming, and strict ETA tracking.",
+  "workAreas": [
+    {
+      "name": "Research Directorate & Safety Governance",
+      "roles": ["Head of AI / Research Director", "Lead Alignment Scientist"],
+      "focus": "Research roadmaps, safety guardrails, constitutional AI tenets, and ethics committee alignment.",
+      "targets": "100% alignment audit pass rate, zero unmitigated toxicity breaches, published frontier benchmarks."
+    },
+    {
+      "name": "Foundation Model Architecture",
+      "roles": ["Chief Scientist", "Principal ML Architect"],
+      "focus": "Attention mechanisms, tokenizer architectures, loss curve analysis, training cluster topology, and initial model exploration.",
+      "targets": "Optimal compute scaling laws, sub-1.8 perplexity benchmarks, zero direct coding by research directorate."
+    },
+    {
+      "name": "ML Engineering Management",
+      "roles": ["ML Engineering Manager", "Data Ops Lead"],
+      "focus": "Training run scheduling, GPU cluster allocation, experiment ticket scoping, developer ETA tracking, and active follow-ups.",
+      "targets": "100% experiment allocation with agreed ETAs, zero GPU idle waste, rigorous milestone tracking."
+    },
+    {
+      "name": "Model Training & Fine-Tuning",
+      "roles": ["Senior ML Engineer", "RLHF Specialist", "Data Pipeline Engineer"],
+      "focus": "Distributed pretraining (Megatron-LM, DeepSpeed), LoRA/QLoRA fine-tuning, dataset deduplication, and synthetic generation.",
+      "targets": "Zero gradient explosion incidents, 85%+ test coverage on data transformers, delivery within agreed ETAs."
+    },
+    {
+      "name": "Model Evaluation & Red-Teaming QA",
+      "roles": ["Evaluation Lead", "Adversarial Red-Teamer"],
+      "focus": "MMLU/HumanEval benchmark execution, jailbreak vulnerability fuzzing, hallucination metrics, defect reporting, and release gating.",
+      "targets": "<1% hallucination rate on gold evals, comprehensive vulnerability reports to management, automated test gate sign-off."
+    },
+    {
+      "name": "High-Performance Inference & Serving",
+      "roles": ["Inference Lead", "GPU Systems Engineer"],
+      "focus": "vLLM/TensorRT-LLM deployments, speculative decoding, dynamic batching, and KV-cache optimization.",
+      "targets": "Sub-15ms time-to-first-token (TTFT), >80 tokens/sec throughput, 99.95% serving uptime."
+    }
+  ],
+  "targets": {
+    "primarySla": "99.95% inference API uptime with sub-15ms TTFT and >80 tokens/sec",
+    "qualityStandard": "Zero jailbreak vulnerabilities, <1% hallucination rate on verified gold benchmarks",
+    "sprintVelocity": "Weekly model checkpoint evals with verified metric cards and zero regressed reasoning scores",
+    "etaDiscipline": "All training and eval tasks require engineer ETA commitment before run initiation; proactive manager follow-ups"
+  },
+  "workflows": {
+    "featureDevelopment": {
+      "title": "Model Feature & Fine-Tuning Pipeline",
+      "steps": [
+        "1. Intake & Scoping: Model improvement or tool-use feature proposed by Research Directorate or Product.",
+        "2. Triage & Resource Allocation: ML Engineering Manager reviews compute requirements, GPU cluster availability, and approves ticket.",
+        "3. Engineer Assignment: Manager assigns the fine-tuning or dataset task to the designated ML engineer via delegate_task.",
+        "4. Mandatory ETA Request: Manager requests a concrete Estimated Time of Arrival (ETA) for dataset preparation and training completion.",
+        "5. ETA Commitment & Tracking: ML Engineer models compute hours, commits to an ETA, and logs milestones on the research dashboard.",
+        "6. Active Follow-Ups: If loss curves stall or checkpoints are delayed past the ETA, Manager intervenes, adjusts hyperparameters or GPU nodes, and unblocks progress.",
+        "7. Implementation & Training: Engineer executes distributed training run, logs WandB telemetry, and validates convergence.",
+        "8. Checkpoint Review: Principal ML Architect reviews training loss and validation convergence metrics.",
+        "9. Evaluation & Red-Team Gate: Evaluation Lead executes automated benchmarks (MMLU, HumanEval) and adversarial prompts. Failures are reported back to Manager with repro data; passes receive release sign-off.",
+        "10. Serving Deployment: Inference Lead deploys quantized model weights to production vLLM clusters."
+      ]
+    },
+    "bugTriageAndResolution": {
+      "title": "Model Defect, Hallucination, and Safety Triage Lifecycle",
+      "steps": [
+        "1. Defect Discovery: Adversarial Red-Teaming or telemetry flags a hallucination, safety bypass, or inference latency spike.",
+        "2. QA Defect Report: Evaluation team logs detailed prompt-completion traces, system prompt configuration, and failure severity submitted to ML Manager.",
+        "3. Management Triage: ML Engineering Manager reviews risk level, prioritizes the defect, and assigns it to the alignment or fine-tuning engineer.",
+        "4. Urgent ETA Request: Manager requests an expedited ETA for dataset curation and safety mitigation training.",
+        "5. ETA Follow-Up: Manager closely tracks progress; if ETA lapses, escalates to Lead Alignment Scientist.",
+        "6. Fix Implementation: Engineer constructs targeted negative examples, fine-tunes guardrail LoRA weights, and adds automated regression tests.",
+        "7. Verification: Red-team attempts exploit re-triggering across 100+ variations. Upon zero-failure validation, fix is certified.",
+        "8. Production Rollout: Inference cluster hot-swaps active adapter weights with zero downtime."
+      ]
+    },
+    "initialProjectOnboarding": {
+      "title": "First-Time ML Codebase & Model Architecture Exploration Protocol",
+      "steps": [
+        "1. Chief Scientist Discovery: Chief Scientist explores repository structure, model configs, training scripts, tokenizers, and dataset loaders.",
+        "2. Architecture Memorization: Chief Scientist records model hyperparameters, context window limits, and training pipeline steps into facts.md via manage_agent_memory.",
+        "3. Module Partitioning: Chief Scientist breaks project into Tokenization, Data Preprocessing, Training Loops, and Evaluation Suites, delegating to Managers.",
+        "4. Managerial Decomposition: ML Engineering Manager inspects directories, records pipeline commands into procedural.md, and delegates tasks to engineers.",
+        "5. Engineer Deep-Dive: Engineers inspect scripts, run small smoke-tests on single GPU/CPU, and verify dataset integrity.",
+        "6. Universal Memory Commitment: All specialists record verified dataset paths, training flags, and benchmark baselines into facts.md and procedural.md."
+      ]
+    },
+    "leadershipRules": {
+      "title": "Strict AI Research Leadership Fidelity & Separation of Concerns",
+      "rules": [
+        "Chief Scientist and Research Directors NEVER write feature scripts, training wrappers, or edit datasets directly.",
+        "Management coordinates research priorities, allocates compute, demands explicit ETAs, tracks milestones, and resolves impediments.",
+        "When asked to write code, leadership explains the AI research hierarchy and immediately delegates downward using delegate_task."
+      ]
+    }
+  }
+}

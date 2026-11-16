@@ -271,11 +271,11 @@ export class AgentDb {
 
   deleteAgentMcp(id: string, agentId?: string): boolean {
     if (agentId) {
-      const stmt = this.coreDb.db.prepare(`DELETE FROM agent_mcps WHERE id = ? OR (agent_id = ? AND mcp_name = ?)`);
-      stmt.run(id, agentId, id);
+      const stmt = this.coreDb.db.prepare(`DELETE FROM agent_mcps WHERE agent_id = ? AND (id = ? OR mcp_name = ?)`);
+      stmt.run(agentId, id, id);
     } else {
-      const stmt = this.coreDb.db.prepare(`DELETE FROM agent_mcps WHERE id = ? OR mcp_name = ?`);
-      stmt.run(id, id);
+      const stmt = this.coreDb.db.prepare(`DELETE FROM agent_mcps WHERE id = ?`);
+      stmt.run(id);
     }
     return true;
   }
@@ -328,9 +328,12 @@ export class AgentDb {
     return this.addAgentSkill({ ...skill, source });
   }
 
-  deleteAgentSkill(id: string): boolean {
-    const stmt = this.coreDb.db.prepare(`DELETE FROM agent_skills WHERE id = ?`);
-    stmt.run(id);
+  deleteAgentSkill(id: string, agentId?: string): boolean {
+    const stmt = agentId
+      ? this.coreDb.db.prepare(`DELETE FROM agent_skills WHERE id = ? AND agent_id = ?`)
+      : this.coreDb.db.prepare(`DELETE FROM agent_skills WHERE id = ?`);
+    if (agentId) stmt.run(id, agentId);
+    else stmt.run(id);
     return true;
   }
 
@@ -406,6 +409,11 @@ export class AgentDb {
     const stmt = this.coreDb.db.prepare(`SELECT * FROM runs WHERE id = ?`);
     const row = stmt.get(runId) as unknown as RunRecord | undefined;
     return row ?? null;
+  }
+
+  getOrphanedRunningRuns(): RunRecord[] {
+    const stmt = this.coreDb.db.prepare(`SELECT * FROM runs WHERE status = 'running'`);
+    return stmt.all() as unknown as RunRecord[];
   }
 
   // ── Chat Sessions & Multi-Turn Messages ───────────────────────────────────
@@ -541,19 +549,110 @@ export class AgentDb {
       SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC
     `);
     const rows = stmt.all(sessionId) as unknown as ChatMessageRecord[];
-    // Auto-reconstruct parts_json for assistant messages that lack it if run events exist
+    // Auto-reconstruct parts_json for assistant messages that lack it if run events exist,
+    // and sanitize any orphaned 'running' tool calls if the run is no longer running
     return rows.map((msg) => {
+      let parts: any[] | null = null;
+
       if (msg.role === 'assistant' && (!msg.parts_json || msg.parts_json === '[]') && msg.run_id) {
         const reconstructed = this.reconstructMessagePartsFromRun(msg.run_id);
         if (reconstructed.length > 0) {
-          const partsJson = JSON.stringify(reconstructed);
-          // Persist the repaired parts_json
+          parts = reconstructed;
+        }
+      } else if (msg.parts_json) {
+        try {
+          parts = JSON.parse(msg.parts_json);
+        } catch {
+          parts = null;
+        }
+      }
+
+      // Check if parts contains any toolCall with status === 'running' or 'pending'
+      if (Array.isArray(parts)) {
+        let changed = false;
+        const run = msg.run_id ? this.getRun(msg.run_id) : null;
+        const isRunActive = run && run.status === 'running';
+
+        if (!isRunActive) {
+          for (const part of parts) {
+            if (part && part.type === 'tool' && part.toolCall) {
+              const tc = part.toolCall;
+              if (tc.status === 'running' || tc.status === 'pending' || !tc.status) {
+                tc.status = run?.status === 'failed' ? 'error' : (run?.status === 'completed' ? 'success' : 'error');
+                if (tc.status === 'error') {
+                  tc.error = tc.error || {
+                    code: 'execution_interrupted',
+                    layer: 'tool',
+                    severity: 'error',
+                    message: run?.error || 'Execution was interrupted or stopped.',
+                    retryable: false,
+                  };
+                }
+                changed = true;
+              }
+            }
+          }
+        }
+
+        if (changed || (!msg.parts_json && parts.length > 0)) {
+          const partsJson = JSON.stringify(parts);
           this.updateChatMessage(msg.id, { parts_json: partsJson });
           return { ...msg, parts_json: partsJson };
         }
       }
+
       return msg;
     });
+  }
+
+  cleanupStaleChatMessageTools(): number {
+    try {
+      const stmt = this.coreDb.db.prepare(`
+        SELECT id, run_id, parts_json FROM chat_messages 
+        WHERE parts_json LIKE '%"type":"tool"%'
+      `);
+      const rows = stmt.all() as Array<{ id: string; run_id: string | null; parts_json: string }>;
+      let cleaned = 0;
+
+      for (const row of rows) {
+        if (!row.parts_json) continue;
+        const run = row.run_id ? this.getRun(row.run_id) : null;
+        if (run && run.status === 'running') continue; // Run is still active
+
+        try {
+          const parts = JSON.parse(row.parts_json);
+          let changed = false;
+          if (Array.isArray(parts)) {
+            for (const part of parts) {
+              if (part && part.type === 'tool' && part.toolCall) {
+                const tc = part.toolCall;
+                if (tc.status === 'running' || tc.status === 'pending' || !tc.status) {
+                  tc.status = run?.status === 'failed' ? 'error' : (run?.status === 'completed' ? 'success' : 'error');
+                  if (tc.status === 'error') {
+                    tc.error = tc.error || {
+                      code: 'execution_interrupted',
+                      layer: 'tool',
+                      severity: 'error',
+                      message: run?.error || 'Execution was interrupted or stopped.',
+                      retryable: false,
+                    };
+                  }
+                  changed = true;
+                }
+              }
+            }
+          }
+
+          if (changed) {
+            this.updateChatMessage(row.id, { parts_json: JSON.stringify(parts) });
+            cleaned++;
+          }
+        } catch {}
+      }
+      return cleaned;
+    } catch {
+      return 0;
+    }
   }
 
   reconstructMessagePartsFromRun(runId: string): any[] {
@@ -988,5 +1087,40 @@ export class AgentDb {
       `);
       stmt.run(agentId);
     }
+  }
+
+  // ── Explore / Feature Ownership ───────────────────────────────────────────
+
+  getAgentsBySpace(spaceId: string): AgentRecord[] {
+    const stmt = this.coreDb.db.prepare(`
+      SELECT a.* FROM agents a
+      INNER JOIN space_agent_memberships m ON m.agent_id = a.id
+      WHERE m.space_id = ?
+      ORDER BY a.created_at ASC
+    `);
+    return stmt.all(spaceId) as unknown as AgentRecord[];
+  }
+
+  updateAgentFeatureOwnership(agentId: string, featureOwnership: import('./agent.types.js').FeatureOwnership[]): void {
+    const stmt = this.coreDb.db.prepare(`UPDATE agents SET feature_ownership_json = ? WHERE id = ?`);
+    stmt.run(JSON.stringify(featureOwnership), agentId);
+  }
+
+  updateAgentTier(agentId: string, tier: 'architect' | 'manager' | 'leaf'): void {
+    const stmt = this.coreDb.db.prepare(`UPDATE agents SET agent_tier = ? WHERE id = ?`);
+    stmt.run(tier, agentId);
+  }
+
+  updateAgentLastSync(agentId: string): void {
+    const stmt = this.coreDb.db.prepare(`UPDATE agents SET last_sync_at = ? WHERE id = ?`);
+    stmt.run(new Date().toISOString(), agentId);
+  }
+
+  getAgentFeatureOwnership(agentId: string): import('./agent.types.js').FeatureOwnership[] {
+    const agent = this.getAgent(agentId);
+    if (!agent?.feature_ownership_json) return [];
+    try {
+      return JSON.parse(agent.feature_ownership_json) as import('./agent.types.js').FeatureOwnership[];
+    } catch { return []; }
   }
 }

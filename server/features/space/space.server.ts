@@ -125,9 +125,10 @@ export function createSpaceRouter(): Router {
     }
   });
 
-  router.get('/zones', (_req: Request, res: Response) => {
+  router.get('/zones', (req: Request, res: Response) => {
     try {
-      res.json(spaceDb.getZones());
+      const spaceId = (req.query.spaceId as string)?.trim() || undefined;
+      res.json(spaceDb.getZones(spaceId));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: msg });
@@ -415,7 +416,8 @@ export function createSpaceRouter(): Router {
   router.delete('/spaces/:id', (req: Request, res: Response) => {
     try {
       const id = requestParam(req.params.id);
-      const deleted = spaceDb.deleteWorkspaceSpace(id);
+      const deleteZones = req.query.deleteZones !== 'false';
+      const deleted = spaceDb.deleteWorkspaceSpace(id, { deleteZones });
       if (!deleted) {
         res.status(404).json({ error: 'Workspace space not found' });
         return;

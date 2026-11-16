@@ -174,16 +174,13 @@ const SAMPLE_JSON = `{
   }
 }`;
 
-export const McpModal: React.FC<McpModalProps> = ({
-  isOpen,
+const McpModalInner: React.FC<McpModalProps & { agentId: string }> = ({
   agentId,
   initialMcpName,
   attachedMcpNames = [],
   onAttach,
   onClose,
 }) => {
-  if (!isOpen || !agentId) return null;
-
   const [activeTab, setActiveTab] = useState<TabType>('stock');
   const [stockMcps, setStockMcps] = useState<StockMcp[]>([]);
   const [selectedStock, setSelectedStock] = useState<StockMcp | null>(null);
@@ -1997,4 +1994,9 @@ export const McpModal: React.FC<McpModalProps> = ({
       </div>
     </div>
   );
+};
+
+export const McpModal: React.FC<McpModalProps> = (props) => {
+  if (!props.isOpen || !props.agentId) return null;
+  return <McpModalInner {...props} agentId={props.agentId} />;
 };

@@ -9,7 +9,7 @@ import { STOCK_MCPS } from '../mcp/mcp.stock.js';
 import { authStatus, canonicalRedirectUri } from '../mcp/mcp.oauth.js';
 import { ensureAgentWorkspace, syncAgentDiskManifestFromDb, readAgentMemorySummaries, MANIFEST_DIR } from './agent.manifest.js';
 import type { AgentRecord } from './agent.types.js';
-import { resolveAgentWorkspace } from './agent.prompt.js';
+import { resolveAgentWorkspace, reconcileSystemPromptWithProfile } from './agent.prompt.js';
 import { CoreWsServer } from '../core/ws.server.js';
 import { CoreDatabase } from '../core/database.db.js';
 import { PERSONALITY_PRESETS, OUTPUT_STYLE_PRESETS, resolvePersonalities, resolveOutputStyles, parseIdList } from './agent.presets.js';
@@ -24,6 +24,7 @@ import {
   inferSectionForTodo,
   renderDailyTodoMarkdown,
 } from './agent.todos.js';
+import { CANVAS_TOOL_DEFINITIONS, CanvasMcpServer, setConfiguredSpaceId } from '../mcp-server/canvas-mcp.server.js';
 
 function parseTargetList(inputVal?: string | string[]): string[] {
   if (Array.isArray(inputVal)) {
@@ -205,6 +206,47 @@ export function computeFuzzyScore(query: string, fields: FuzzyFields): number {
   return totalScore;
 }
 
+export function resolveTargetAgent(
+  db: any,
+  rawTarget: string | undefined | null,
+  callerAgentId?: string | null,
+): AgentRecord | null {
+  if (rawTarget && typeof rawTarget === 'string' && rawTarget.trim()) {
+    const q = rawTarget.trim();
+
+    // 1. Direct ID match
+    try {
+      const byId = db.getAgent(q);
+      if (byId) return byId;
+    } catch {}
+
+    // 2. Search all agents
+    const all: AgentRecord[] = typeof db.getAllAgents === 'function'
+      ? db.getAllAgents()
+      : (typeof db.listAgents === 'function' ? db.listAgents() : []);
+    const qLower = q.toLowerCase();
+    const qSlug = slugifyName(q);
+
+    // 2. Strict exact name or exact slug match
+    const exactName = all.find((a) => a.name && a.name.toLowerCase() === qLower);
+    if (exactName) return exactName;
+
+    const slugName = all.find((a) => a.name && slugifyName(a.name) === qSlug);
+    if (slugName) return slugName;
+
+    // Reject all invalid, fuzzy, partial, or hallucinated targets
+    return null;
+  }
+
+  // Fallback to caller
+  if (callerAgentId) {
+    try {
+      return db.getAgent(callerAgentId) || null;
+    } catch {}
+  }
+  return null;
+}
+
 interface SingleDelegationTaskInput {
   target_agent_id: string;
   task_title?: string;
@@ -228,6 +270,9 @@ interface DelegationTaskResult {
   session_id: string;
   response_file_path?: string;
   summary?: string | null;
+  deliverables?: string[] | null;
+  notes?: string | null;
+  closed_via_tool?: boolean;
   error?: string | null;
 }
 
@@ -238,6 +283,7 @@ async function executeSingleDelegatedTask(
     callerName: string;
     callerWorkspace: string;
     callerRunId?: string;
+    callerSessionId?: string;
   },
   runner: AgentRunner,
   db: ReturnType<AgentRunner['getDb']>,
@@ -255,15 +301,7 @@ async function executeSingleDelegatedTask(
   ).trim();
 
   // 1. Resolve target agent by ID or by Name
-  let targetAgent = rawTarget ? db.getAgent(rawTarget) : null;
-  if (!targetAgent && rawTarget) {
-    const allAgents = db.listAgents();
-    targetAgent =
-      allAgents.find((a) => a.id.toLowerCase() === rawTarget.toLowerCase()) ||
-      allAgents.find((a) => a.name.toLowerCase() === rawTarget.toLowerCase()) ||
-      allAgents.find((a) => a.name.toLowerCase().includes(rawTarget.toLowerCase())) ||
-      null;
-  }
+  let targetAgent = resolveTargetAgent(db, rawTarget, null);
 
   const targetAgentId = targetAgent ? targetAgent.id : rawTarget;
   const targetAgentName = targetAgent ? targetAgent.name : (rawTarget || 'Unknown');
@@ -344,9 +382,9 @@ async function executeSingleDelegatedTask(
     };
   }
 
-  // 1. Verify target agent exists
+  // 1. Verify target agent exists (Reject invalid delegations)
   if (!targetAgent) {
-    const available = db.listAgents().map((a) => `"${a.name}" (${a.id})`).join(', ') || 'none';
+    const available = db.listAgents().map((a: any) => `"${a.name}" (ID: \`${a.id}\`)`).join(', ') || 'none';
     return {
       success: false,
       status: 'failed',
@@ -355,12 +393,28 @@ async function executeSingleDelegatedTask(
       task_title: taskTitle,
       chat_id: delegationSessionId,
       session_id: delegationSessionId,
-      error: `Target agent "${rawTarget}" does not exist in database. Available agents: ${available}`,
+      error: `Delegation REJECTED: Target agent "${rawTarget}" is not a valid agent in this space. You must supply a valid exact Agent ID (e.g. \`agent_...\`) from your connected peers list. Available peers: ${available}`,
     };
   }
 
-  // 2. Validate chat_id if provided (Edge case: invalid chat ID returns error immediately)
+  // 2. Validate chat_id if provided
   if (explicitChatId) {
+    // Prevent deadlocks: An agent cannot call delegate_task on its own active chat session
+    if (callerInfo.callerSessionId && explicitChatId === callerInfo.callerSessionId) {
+      return {
+        success: false,
+        status: 'failed',
+        target_agent_id: targetAgentId,
+        target_agent_name: targetAgent.name,
+        task_title: taskTitle,
+        chat_id: explicitChatId,
+        session_id: explicitChatId,
+        error: `Cannot call delegate_task on your current active chat session "${explicitChatId}". ` +
+          `To return deliverables, status reports, or complete your assignment back to the caller, invoke 'close_delegation_task'. ` +
+          `To delegate a new subtask to a downstream peer, omit chat_id so a separate thread is created.`,
+      };
+    }
+
     const existingSession = db.getSession(explicitChatId);
     if (!existingSession) {
       return {
@@ -399,6 +453,20 @@ async function executeSingleDelegatedTask(
     }
   }
 
+  // 3b. Suspended-chat guard
+  if (!isFollowUp && runner.isSessionBusyWithDelegation(delegationSessionId)) {
+    return {
+      success: false,
+      status: 'failed',
+      target_agent_id: targetAgentId,
+      target_agent_name: targetAgent ? targetAgent.name : targetAgentId,
+      task_title: taskTitle,
+      chat_id: delegationSessionId,
+      session_id: delegationSessionId,
+      error: `Session "${delegationSessionId}" already has an active delegation in progress. Wait for it to complete.`,
+    };
+  }
+
   // 4. Verify target agent configuration / eligibility
   const configStatus = checkAgentConfigStatus(targetAgentId, db);
   if (!configStatus.isConfigured) {
@@ -412,6 +480,28 @@ async function executeSingleDelegatedTask(
       session_id: delegationSessionId,
       error: `Agent "${targetAgent.name}" (${targetAgentId}) is NOT fully configured and is not eligible to execute tasks. Missing configuration:\n- ${configStatus.reasons.join('\n- ')}`,
     };
+  }
+
+  // 4b. Multi-level delegation safety checks (self-delegation & cycle detection)
+  if (callerInfo.callerAgentId) {
+    const safetyCheck = runner.registerDelegationChain(
+      callerInfo.callerAgentId,
+      targetAgentId,
+      delegationSessionId,
+      callerInfo.callerSessionId,
+    );
+    if (!safetyCheck.allowed) {
+      return {
+        success: false,
+        status: 'failed',
+        target_agent_id: targetAgentId,
+        target_agent_name: targetAgent ? targetAgent.name : targetAgentId,
+        task_title: taskTitle,
+        chat_id: delegationSessionId,
+        session_id: delegationSessionId,
+        error: safetyCheck.reason || 'Delegation blocked by safety check.',
+      };
+    }
   }
 
   // 5. Verify requirements content / file
@@ -450,7 +540,7 @@ async function executeSingleDelegatedTask(
     : `${commBadge} ${taskTitle} (${callerInfo.callerName})`;
   db.getOrCreateSession(targetAgentId, delegationSessionId, sessionTitle);
 
-  // 6. Build delegated prompt
+  // 6. Build delegated prompt — lean: only immediate sender + task, no chain hierarchy
   const senderTag = `${callerInfo.callerName}${callerInfo.callerAgentId ? ` (${callerInfo.callerAgentId})` : ''}`;
   const header =
     commType === 'report_status'
@@ -472,85 +562,235 @@ async function executeSingleDelegatedTask(
           ? '1. Refine work per the new requirements.'
           : '1. Complete task per requirements.';
 
+  // Lean prompt: target only knows its direct sender + thread chat_id.
+  // Requirements file referenced by path — not dumped inline.
+  const reqRef = requirementsFilePath
+    ? `\nRequirements file: \`${requirementsFilePath}\``
+    : '';
+  const taskBody = instructions
+    ? `\n\n${instructions}`
+    : reqRef
+      ? '\nSee requirements file above.'
+      : `\n${taskTitle}`;
+
   const delegationPrompt = [
-    `${header} | Task: ${taskTitle} | Intent: ${commType.toUpperCase()} | chat_id: ${delegationSessionId}`,
-    isFollowUp ? `*(Continuing in session \`${delegationSessionId}\` with shared context)*` : '',
-    instructions ? `Note: ${instructions}` : '',
-    `### REQUIREMENTS (${requirementsFilePath}):`,
-    requirementsContent,
+    `${header} | chat_id: ${delegationSessionId}`,
+    isFollowUp ? `*(Follow-up in thread \`${delegationSessionId}\`)*` : '',
+    `**Task**: ${taskTitle}${reqRef}${taskBody}`,
     '',
     '---',
-    '### INSTRUCTIONS:',
+    '**Instructions**:',
     guidance,
-    '2. Return summary: actions taken, deliverables with paths, and recommendations.',
-    `3. Doubts: If requirements are unclear, do not guess. Add questions under "### ❓ QUESTIONS / DOUBTS FOR CALLER" for caller reply in this thread (chat_id: ${delegationSessionId}).`,
+    '2. Return a summary: actions taken, deliverables with paths, and recommendations.',
+    '3. If requirements are unclear, state questions under "### ❓ QUESTIONS" in your summary.',
+    `4. **MANDATORY TASK COMPLETION**: When you have completed the work (or are reporting status, or blocked), you MUST invoke \`close_delegation_task\` with:`,
+    `   - "chat_id": "${delegationSessionId}"`,
+    '   - "status": "completed" | "failed" | "blocked"',
+    '   - "summary": "<comprehensive executive summary of work done or status report>"',
+    '   - "deliverables": ["<file_path>", ...]',
+    `5. **NO CIRCULAR DELEGATION**: Do NOT call \`delegate_task\` back to your caller (${senderTag}) in this thread. Calling \`close_delegation_task\` automatically returns your response and deliverables back to your caller. Only invoke \`delegate_task\` if delegating a NEW subtask to a downstream peer.`,
+    '6. Do NOT end your turn without calling `close_delegation_task`.',
   ]
     .filter(Boolean)
     .join('\n');
+
+  // Max retries for transient (technical) failures: 5s → 10s → 20s backoff
+  const MAX_DELEGATION_RETRIES = 3;
+  const DELEGATION_TIMEOUT_MS = 240_000; // 4 minute safety timeout per attempt
 
   const delegationTrackId = callerInfo.callerAgentId
     ? runner.registerActiveDelegation(callerInfo.callerAgentId, targetAgentId, taskTitle, delegationSessionId)
     : null;
 
+  runner.clearDelegationClosure(delegationSessionId);
+
   try {
-    // Edge case: if that session is currently running/looping, wait until it completes before pushing next prompt
-    let activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
-    while (activeSessionRun && activeSessionRun.status === 'running') {
-      if (callerInfo.callerRunId && activeSessionRun.runId === callerInfo.callerRunId) {
-        break;
+    let delegationAttempt = 0;
+    let targetRun: any;
+    let lastTechnicalError = '';
+
+    while (true) {
+      delegationAttempt++;
+
+      // Wait for any existing run on this session to finish first
+      let activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
+      while (activeSessionRun && activeSessionRun.status === 'running') {
+        if (callerInfo.callerRunId && activeSessionRun.runId === callerInfo.callerRunId) break;
+        const busyRunId = activeSessionRun.runId;
+        let busyTimer: NodeJS.Timeout | null = null;
+        const timedOut = await new Promise<boolean>((resolve) => {
+          busyTimer = setTimeout(() => resolve(true), DELEGATION_TIMEOUT_MS);
+          runner.waitForRun(busyRunId).then(
+            () => {
+              if (busyTimer) clearTimeout(busyTimer);
+              resolve(false);
+            },
+            () => {
+              if (busyTimer) clearTimeout(busyTimer);
+              resolve(false);
+            },
+          );
+        });
+        if (timedOut) {
+          runner.stopRun(activeSessionRun.runId);
+          if (runner.getActiveRunForSession(delegationSessionId)) {
+            throw new Error(
+              `Delegation session "${delegationSessionId}" is still busy after ${DELEGATION_TIMEOUT_MS / 1000}s; aborting to avoid an infinite wait.`,
+            );
+          }
+        }
+        activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
       }
-      await runner.waitForRun(activeSessionRun.runId);
-      activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
+
+      // On retry, send a short resume message on the SAME chat thread so the
+      // target agent sees what happened and continues with shared context.
+      const retryPrompt = delegationAttempt === 1
+        ? delegationPrompt
+        : `[DELEGATION RETRY ATTEMPT ${delegationAttempt} of ${MAX_DELEGATION_RETRIES}]\n` +
+          `Your previous execution attempt failed: ${lastTechnicalError}\n` +
+          `All conversation history and workspace files are preserved. ` +
+          `Please resume and call \`close_delegation_task\` when done.`;
+
+      let timeoutHandle: NodeJS.Timeout | null = null;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`Delegation timed out after ${DELEGATION_TIMEOUT_MS / 1000}s. Target agent "${targetAgent.name}" took too long to complete.`));
+          const timedOutRun = runner.getActiveRunForSession(delegationSessionId);
+          if (timedOutRun) runner.stopRun(timedOutRun.runId);
+        }, DELEGATION_TIMEOUT_MS);
+      });
+
+      try {
+        targetRun = await Promise.race([
+          runner.runAgentAndWait(
+            targetAgentId,
+            'manual',
+            retryPrompt,
+            delegationSessionId,
+          ),
+          timeoutPromise,
+        ]);
+        lastTechnicalError = '';
+      } catch (runErr: any) {
+        lastTechnicalError = runErr?.message || String(runErr);
+        if (delegationAttempt >= MAX_DELEGATION_RETRIES) {
+          throw runErr; // re-throw to outer catch after exhausting retries
+        }
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      }
+
+      // If run succeeded or produced output, stop retrying
+      if (!lastTechnicalError && targetRun && targetRun.status !== 'failed') break;
+
+      // Still failing? Check if retries left
+      if (delegationAttempt >= MAX_DELEGATION_RETRIES) break;
+
+      if (!lastTechnicalError && targetRun?.status === 'failed') {
+        lastTechnicalError = targetRun.error || targetRun.summary || 'Run failed without error detail';
+      }
+
+      // Exponential backoff: 5s → 10s → 20s → 40s, capped at 60s
+      const delaySec = Math.min(5 * Math.pow(2, delegationAttempt - 1), 60);
+
+      console.warn(
+        `[AgentRunner] Delegation attempt ${delegationAttempt}/${MAX_DELEGATION_RETRIES} failed for agent ` +
+        `"${targetAgent.name}". Retrying in ${delaySec}s… (${lastTechnicalError})`,
+      );
+
+      // Broadcast retry event (mirrors cron/manual retry UI notification)
+      runner.broadcastDelegationRetry(
+        targetAgentId,
+        delegationSessionId,
+        delegationAttempt,
+        MAX_DELEGATION_RETRIES,
+        delaySec,
+        lastTechnicalError,
+      );
+
+      await new Promise<void>((resolve) => setTimeout(resolve, delaySec * 1000));
     }
 
-    const targetRun = await runner.runAgentAndWait(
-      targetAgentId,
-      'manual',
-      delegationPrompt,
-      delegationSessionId,
-    );
+    // Check if the agent formally closed the task via close_delegation_task
+    const closure = runner.getDelegationClosure(delegationSessionId);
+    const isToolClosed = Boolean(closure);
+    const finalStatus = closure?.status || targetRun?.status || (lastTechnicalError ? 'failed' : 'completed');
+    let finalSummary = closure?.summary || targetRun?.summary || targetRun?.error || lastTechnicalError || '';
+    let deliverables = closure?.deliverables || [];
+    const notes = closure?.notes;
+
+    // Fallback: If target completed but did not formally call close_delegation_task
+    if (!finalSummary || finalSummary === '(No output recorded)') {
+      try {
+        const msgs = typeof db.getSessionMessages === 'function' ? db.getSessionMessages(delegationSessionId) : [];
+        const lastAsst = msgs.slice().reverse().find((m: any) => m.role === 'assistant');
+        if (lastAsst && lastAsst.content) {
+          finalSummary = lastAsst.content.slice(0, 3000);
+        } else if (targetRun?.error) {
+          finalSummary = targetRun.error;
+        } else {
+          finalSummary = `Task completed by ${targetAgent.name}.`;
+        }
+      } catch {
+        finalSummary = targetRun?.error || lastTechnicalError || `Task completed by ${targetAgent.name}.`;
+      }
+    }
+
+    const isFailed = finalStatus === 'failed' || (!isToolClosed && !targetRun);
 
     // Write response markdown file in caller workspace
     const safeTitle = (taskTitle || 'task')
       .toLowerCase()
       .replace(/[^a-z0-9_-]+/g, '_')
       .slice(0, 30);
-    const responseFileName = `response_${safeTitle}_${Date.now()}.md`;
     const reportsDir = join(callerInfo.callerWorkspace, 'reports');
-    if (!existsSync(reportsDir)) {
-      mkdirSync(reportsDir, { recursive: true });
-    }
+    if (!existsSync(reportsDir)) mkdirSync(reportsDir, { recursive: true });
+    const responseFileName = isToolClosed
+      ? `closed_${safeTitle}_${Date.now()}.md`
+      : `response_${safeTitle}_${Date.now()}.md`;
     const responseFullPath = join(reportsDir, responseFileName);
     const responseRelativePath = join('reports', responseFileName);
 
+    const deliverablesSection = deliverables.length > 0
+      ? `\n## 📦 Deliverables:\n${deliverables.map((d: string) => `- \`${d}\``).join('\n')}\n`
+      : '';
+    const notesSection = notes
+      ? `\n### 💡 Handover Notes:\n${notes}\n`
+      : '';
+
     const responseMarkdown = [
-      `# Response: ${taskTitle}`,
+      `# ${isToolClosed ? '🏁 Delegated Task Closed' : (isFailed ? '⚠️ Failed' : '✅ Response')}: ${taskTitle}`,
       `- **Agent**: ${targetAgent.name} (\`${targetAgentId}\`)`,
       `- **Thread**: \`${delegationSessionId}\` (${isFollowUp ? 'Follow-up' : 'Initial'})`,
-      `- **Status**: ${targetRun.status}`,
-      `- **Requirements**: \`${requirementsFilePath}\``,
-      '',
-      `## Output:`,
-      targetRun.summary || targetRun.error || '(No output recorded)',
-      '',
+      `- **Status**: ${finalStatus.toUpperCase()}`,
+      `- **Closed Via Tool**: ${isToolClosed ? 'Yes (`close_delegation_task`)' : 'No'}`,
+      delegationAttempt > 1 ? `- **Attempts**: ${delegationAttempt} of ${MAX_DELEGATION_RETRIES}` : '',
+      requirementsFilePath ? `- **Requirements**: \`${requirementsFilePath}\`` : '',
+      deliverablesSection,
+      '## Output Summary:',
+      finalSummary,
+      notesSection,
       '---',
-      `### 💬 Follow-Up:`,
-      `To reply or discuss in this thread, call \`delegate_task\` with \`"chat_id": "${delegationSessionId}"\`.`,
-    ].join('\n');
+      '### 💬 Follow-Up:',
+      `To reply or continue in this thread, call \`delegate_task\` with \`"chat_id": "${delegationSessionId}"\`.`,
+    ].filter(Boolean).join('\n');
 
     writeFileSync(responseFullPath, responseMarkdown, 'utf-8');
 
     return {
-      success: targetRun.status === 'completed',
-      status: targetRun.status,
+      success: finalStatus === 'completed',
+      status: finalStatus,
       target_agent_id: targetAgentId,
       target_agent_name: targetAgent.name,
       task_title: taskTitle,
       chat_id: delegationSessionId,
       session_id: delegationSessionId,
       response_file_path: responseRelativePath,
-      summary: targetRun.summary,
-      error: targetRun.error,
+      summary: finalSummary,
+      deliverables,
+      notes,
+      closed_via_tool: isToolClosed,
+      error: isFailed ? finalSummary : undefined,
     };
   } catch (err: any) {
     return {
@@ -567,13 +807,15 @@ async function executeSingleDelegatedTask(
     if (delegationTrackId) {
       runner.unregisterActiveDelegation(delegationTrackId);
     }
+    // Clean up the delegation chain metadata for this session
+    runner.cleanupDelegationChain(delegationSessionId);
   }
 }
 
 /**
  * Canvas-owned custom tools.
  */
-export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
+const BASE_CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
   {
     name: 'canvas_ping',
     description:
@@ -857,6 +1099,7 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         callerName,
         callerWorkspace,
         callerRunId: callerRun ? ('id' in callerRun ? callerRun.id : (callerRun as any).runId) : undefined,
+        callerSessionId: ctx.sessionId,
       };
 
       // ── Parallel Multi-Task Delegation Flow ──
@@ -988,6 +1231,175 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: 'close_delegation_task',
+    description:
+      'Formally close a delegated task assigned to you by another agent and return your deliverables, summary, and status back to the caller. ' +
+      'Whenever executing a task assigned to you via delegate_task, you MUST call this tool when your work is finished, blocked, or failed. ' +
+      'Calling this tool seals and returns a structured completion packet with your deliverables and summary directly back to the calling agent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        chat_id: {
+          type: 'string',
+          description: 'Optional delegation chat_id / thread ID. Automatically defaults to your current conversation session if omitted.',
+        },
+        status: {
+          type: 'string',
+          enum: ['completed', 'failed', 'blocked'],
+          description: 'The outcome status of the delegated task.',
+        },
+        summary: {
+          type: 'string',
+          description: 'Comprehensive executive summary of the work completed, findings, decisions, or results.',
+        },
+        deliverables: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of file paths, reports, artifacts, or code files created or modified during this task.',
+        },
+        notes: {
+          type: 'string',
+          description: 'Optional handover notes, recommendations, or instructions for the caller agent.',
+        },
+      },
+      required: ['status', 'summary'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    presentation: { icon: '🏁', label: 'Close Delegated Task', family: 'run', tone: 'primary' },
+    async execute(input, ctx) {
+      const runner = AgentRunner.getInstance();
+      const chatId = String(
+        input.chat_id ||
+        (input as any).sessionId ||
+        (input as any).session_id ||
+        ctx.sessionId ||
+        '',
+      ).trim();
+
+      const rawStatus = String((input as any).status || '').trim();
+      const status = (['completed', 'failed', 'blocked'].includes(rawStatus)
+        ? rawStatus
+        : 'completed') as 'completed' | 'failed' | 'blocked';
+      const summaryText = String(input.summary || 'Delegated task closed.').trim();
+      const deliverables = Array.isArray(input.deliverables)
+        ? input.deliverables.map(String).filter(Boolean)
+        : [];
+      const notes = input.notes ? String(input.notes).trim() : undefined;
+
+      const activeRun =
+        (ctx.runId ? runner.getActiveRun(ctx.runId) : undefined) ||
+        (chatId ? runner.getActiveRunForSession(chatId) : undefined);
+
+      const resolvedChatId = chatId || activeRun?.sessionId || '';
+      if (!resolvedChatId) {
+        return {
+          success: false,
+          summary: 'Cannot close delegated task: no chat_id or active conversation session was provided.',
+          content: [{ type: 'text', text: 'Error: no chat_id or active conversation session was provided.' }],
+          isError: true,
+        };
+      }
+
+      const closingAgentId = String((ctx as any).agentId || activeRun?.agentId || '').trim();
+      const session = runner.getDb().getSession(resolvedChatId);
+      const ownsSession =
+        Boolean(closingAgentId) &&
+        (activeRun?.agentId === closingAgentId || session?.agent_id === closingAgentId);
+      if (!ownsSession) {
+        return {
+          success: false,
+          summary: `Cannot close delegation "${resolvedChatId}": it does not belong to this agent.`,
+          content: [{
+            type: 'text',
+            text: `Error: chat_id "${resolvedChatId}" is not an active delegation session for this agent.`,
+          }],
+          isError: true,
+        };
+      }
+
+      const closurePayload = {
+        chatId: resolvedChatId,
+        status,
+        summary: summaryText,
+        deliverables,
+        notes,
+        closedByAgentId: closingAgentId,
+        closedAt: new Date().toISOString(),
+      };
+
+      runner.recordDelegationClosure(resolvedChatId, closurePayload);
+      runner.propagateSubDelegationClose(resolvedChatId, closurePayload.closedByAgentId);
+      if (activeRun) {
+        activeRun.delegationClosure = closurePayload;
+      }
+
+      try {
+        if (ctx.runId) {
+          const db = runner.getDb();
+          const callerRun = activeRun || db.getRun(ctx.runId);
+          const agentId = callerRun ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId) : undefined;
+          if (agentId) {
+            try {
+              db.updateAgentLastSync(agentId);
+            } catch {}
+            db.addRunEvent({
+              run_id: ctx.runId,
+              agent_id: agentId,
+              event_type: 'delegation.closed',
+              payload_json: JSON.stringify(closurePayload),
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[close_delegation_task] Error logging run event:', err);
+      }
+
+      return {
+        success: true,
+        summary: `Delegated task closed with status "${status}". Deliverables packaged for caller.`,
+        content: [
+          {
+            type: 'text',
+            text: `🏁 **Delegated Task Formally Closed**\n\n` +
+              `- **Status**: ${status.toUpperCase()}\n` +
+              `- **Thread (chat_id)**: \`${resolvedChatId}\`\n` +
+              `- **Summary**: ${summaryText}\n` +
+              (deliverables.length > 0 ? `- **Deliverables (${deliverables.length})**:\n${deliverables.map((d: string) => `  - \`${d}\``).join('\n')}\n` : '') +
+              (notes ? `- **Notes**: ${notes}\n` : '') +
+              `\nYour deliverables and executive summary have been recorded and delivered back to the caller agent.`,
+          },
+        ],
+        data: closurePayload,
+      };
+    },
+  },
+  {
+    name: 'complete_delegated_task',
+    description: 'Alias for close_delegation_task. Formally close a delegated task assigned to you by another agent and return your deliverables, summary, and status back to the caller.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        chat_id: { type: 'string', description: 'The delegation chat_id / thread ID provided in your prompt.' },
+        status: { type: 'string', enum: ['completed', 'failed', 'blocked'], description: 'The outcome status of the delegated task.' },
+        summary: { type: 'string', description: 'Comprehensive executive summary of the work completed.' },
+        deliverables: { type: 'array', items: { type: 'string' }, description: 'List of file paths, reports, or artifacts produced.' },
+        notes: { type: 'string', description: 'Optional handover notes or recommendations.' },
+      },
+      required: ['status', 'summary'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    presentation: { icon: '🏁', label: 'Complete Delegated Task', family: 'run', tone: 'primary' },
+    async execute(input, ctx) {
+      const closeTool = CUSTOM_AGENT_TOOLS.find((t) => t.name === 'close_delegation_task');
+      if (closeTool) {
+        return closeTool.execute(input, ctx);
+      }
+      return { success: false, summary: 'close_delegation_task tool not found' };
+    },
+  },
+  {
     name: 'get_agent_skills',
     description:
       'Inspect and list the skills currently attached to this agent (or a target peer agent). Returns the exact count, names, descriptions, and source of attached skills. Call this whenever the user asks what skills you have attached, how many skills you have, or when verifying your skills configuration.',
@@ -996,7 +1408,11 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       properties: {
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent to inspect. Defaults to the calling agent itself.',
+          description: 'Optional ID, full name, or role of the target agent to inspect. Defaults to the calling agent itself.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
       additionalProperties: false,
@@ -1010,13 +1426,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       const callerAgentId = callerRun
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
@@ -1065,7 +1481,11 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         },
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent to remove skills from. Defaults to the calling agent itself.',
+          description: 'Optional ID, full name, or role of the target agent to remove skills from. Defaults to the calling agent itself.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
       additionalProperties: false,
@@ -1081,13 +1501,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
 
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
@@ -1289,7 +1709,11 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         },
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent to attach the skill to. Defaults to the calling agent itself.',
+          description: 'Optional ID, full name, or role of the target agent to attach the skill to. Defaults to the calling agent itself.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
       additionalProperties: false,
@@ -1305,13 +1729,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
 
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
@@ -1743,7 +2167,11 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         },
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent. Defaults to calling agent.',
+          description: 'Optional ID, full name, or role of the target agent. Defaults to calling agent.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
       additionalProperties: false,
@@ -1759,13 +2187,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
 
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
@@ -1901,7 +2329,11 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         },
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent. Defaults to calling agent.',
+          description: 'Optional ID, full name, or role of the target agent. Defaults to calling agent.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
       additionalProperties: false,
@@ -1917,13 +2349,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
 
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
@@ -2249,9 +2681,27 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
           type: 'string',
           description: 'Agent display name.',
         },
+        system_prompt: {
+          type: 'string',
+          description: 'Optional complete replacement or updated system prompt instructions.',
+        },
+        responsibilities: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional list of core domain responsibilities to set in the agent profile and system prompt.',
+        },
+        duties: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Alias for responsibilities.',
+        },
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent to update. Defaults to the calling agent itself.',
+          description: 'Optional ID, full name, or role of the target agent to update. Defaults to the calling agent itself.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
       additionalProperties: false,
@@ -2267,13 +2717,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
 
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
@@ -2337,7 +2787,68 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       if (typeof input.specialty === 'string') patch.specialty = input.specialty.trim();
       if (typeof input.name === 'string' && input.name.trim()) patch.name = input.name.trim();
 
+      const effectiveRole = patch.role ?? agent.role;
+      const effectiveSpecialty = patch.specialty ?? agent.specialty;
+      const effectiveDesc = patch.description ?? agent.description;
+      const effectiveName = patch.name ?? agent.name;
+
+      if (typeof (input as any).system_prompt === 'string' && (input as any).system_prompt.trim()) {
+        patch.system_prompt = (input as any).system_prompt.trim();
+      } else if (
+        patch.role !== undefined ||
+        patch.name !== undefined ||
+        patch.description !== undefined ||
+        patch.specialty !== undefined ||
+        (input as any).responsibilities !== undefined ||
+        (input as any).duties !== undefined
+      ) {
+        patch.system_prompt = reconcileSystemPromptWithProfile(agent.system_prompt, {
+          name: effectiveName,
+          role: effectiveRole,
+          specialty: effectiveSpecialty,
+          description: effectiveDesc,
+          responsibilities: (input as any).responsibilities ?? (input as any).duties,
+        });
+      }
+
       const updatedAgent = db.updateAgent(agent.id, patch);
+
+      // Update disk workspace: both system_prompt.md AND identity.md to keep prompt & Human Memory Matrix in sync
+      try {
+        const workspace = resolveAgentWorkspace(updatedAgent || agent);
+        const ws = ensureAgentWorkspace(workspace, agent.id, updatedAgent?.name || agent.name, updatedAgent?.system_prompt || agent.system_prompt);
+
+        if (patch.system_prompt && ws.systemPromptFile) {
+          writeFileSync(ws.systemPromptFile, `${patch.system_prompt}\n`, 'utf8');
+        }
+
+        const identityPath = ws.memoryFiles['identity.md'];
+        if (identityPath) {
+          const persNames = resolvePersonalities(currentPers).map((p) => p.name);
+          const outNames = resolveOutputStyles(currentOut).map((o) => o.name);
+
+          const identityContent = `# Identity & Persona Memory — ${effectiveName}
+
+Internalized persona traits, tone nuances, role boundaries, communication philosophy, and ethical stance that evolve over time.
+
+## Core Identity & Role Specialization
+- **Role**: ${effectiveRole || 'Specialist'}
+- **Specialty / Domain Focus**: ${effectiveSpecialty || 'General Engineering'}
+- **Mission & Scope**: ${effectiveDesc || 'High quality technical execution.'}
+- **Personality Voice**: ${persNames.join(', ') || 'Direct, Pragmatic Engineer'}
+- **Output Formats**: ${outNames.join(', ') || 'Markdown, Tables, Code Blocks'}
+
+## Operating Boundaries & Domain Ownership
+- **Primary Ownership**: ${effectiveSpecialty || effectiveRole}
+- **Quality Mandate**: High test coverage, robust error handling, modular architecture, and truthful state updates.
+- **Collaboration Mode**: Active peer and hierarchy member in spatial multi-agent workspace with persistent human memory.
+`;
+          writeFileSync(identityPath, identityContent, 'utf8');
+        }
+        syncAgentDiskManifestFromDb({ agentId: agent.id, ws, db });
+      } catch (err) {
+        console.warn(`[custom-tools] Failed to update workspace files for ${agent.id}:`, err);
+      }
 
       try {
         const wsServer = CoreWsServer.getInstance();
@@ -2349,7 +2860,16 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         wsServer.broadcast({
           type: 'agent_manifest_updated',
           agentId: agent.id,
-          data: { agent_id: agent.id, updated_at: new Date().toISOString() },
+          data: {
+            agent_id: agent.id,
+            system_prompt: patch.system_prompt || updatedAgent?.system_prompt || agent.system_prompt,
+            updated_at: new Date().toISOString(),
+          },
+        });
+        wsServer.broadcast({
+          type: 'agent_files_updated',
+          agentId: agent.id,
+          data: { timestamp: new Date().toISOString() },
         });
       } catch {}
 
@@ -2371,6 +2891,7 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         role: updatedAgent?.role,
         description: updatedAgent?.description,
         specialty: updatedAgent?.specialty,
+        system_prompt: updatedAgent?.system_prompt,
         personalities: resolvedPers,
         output_styles: resolvedOuts,
       };
@@ -2392,7 +2913,11 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       properties: {
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent to inspect. Defaults to calling agent.',
+          description: 'Optional ID, full name, or role of the target agent to inspect. Defaults to calling agent.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
       additionalProperties: false,
@@ -2408,13 +2933,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
 
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
@@ -2495,7 +3020,11 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         },
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent to update. Defaults to the calling agent itself.',
+          description: 'Optional ID, full name, or role of the target agent to update. Defaults to the calling agent itself.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
       required: ['system_prompt'],
@@ -2510,13 +3039,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       const callerAgentId = callerRun
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
@@ -2577,7 +3106,7 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
   {
     name: 'manage_agent_memory',
     description:
-      'Manage this agent\'s (or a peer agent\'s) specialized memory files: facts.md (verified facts & invariants), semantic.md (learned conceptual knowledge), episodic.md (event & run history), procedural.md (step-by-step workflows & runbooks), working.md (active task scratchpad), prospective.md (deferred intentions & triggers), reflective.md (meta-cognition & lessons learned), associative.md (system & entity relationships), preferences.md (user & agent working preferences), identity.md (evolving persona & boundaries). Call this to record learned facts, inspect memories, or rebuild memory files.',
+      'Manage this agent\'s (or a peer agent\'s) specialized memory files: facts.md (verified facts & invariants), semantic.md (learned conceptual knowledge), episodic.md (event & run history), procedural.md (step-by-step workflows & runbooks), working.md (active task scratchpad), prospective.md (deferred intentions & triggers), reflective.md (meta-cognition & lessons learned), associative.md (system & entity relationships), preferences.md (user & agent working preferences), identity.md (evolving persona & boundaries). Call this to record learned facts, inspect memories, or batch-seed memory files via "entries".',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2595,23 +3124,61 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
             'preferences',
             'identity',
           ],
-          description: 'Which memory dimension to operate on (e.g. "facts" for facts.md, "semantic" for semantic.md).',
+          description: 'Which memory dimension to operate on (e.g. "facts" for facts.md, "semantic" for semantic.md). Optional if "entries" array is provided.',
         },
         action: {
           type: 'string',
           enum: ['read', 'write', 'append', 'clear'],
-          description: 'The memory operation: "read" to inspect, "write" to overwrite, "append" to add an entry, "clear" to reset with default seed template.',
+          description: 'The memory operation: "read" to inspect, "write" to overwrite, "append" to add an entry, "clear" to reset with default seed template. Optional if "entries" array is provided.',
         },
         content: {
           type: 'string',
-          description: 'The content to write or append. Required for "write" and "append".',
+          description: 'The content to write or append. Required for single "write" and "append".',
+        },
+        entries: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              memory_type: {
+                type: 'string',
+                enum: [
+                  'facts',
+                  'semantic',
+                  'episodic',
+                  'procedural',
+                  'working',
+                  'prospective',
+                  'reflective',
+                  'associative',
+                  'preferences',
+                  'identity',
+                ],
+                description: 'Which memory dimension to update.',
+              },
+              action: {
+                type: 'string',
+                enum: ['write', 'append', 'clear'],
+                description: 'The memory operation: "write" to overwrite, "append" to add, "clear" to reset. Defaults to "write".',
+              },
+              content: {
+                type: 'string',
+                description: 'The content to write or append for this memory dimension.',
+              },
+            },
+            required: ['memory_type', 'content'],
+          },
+          description: 'Optional batch of memory operations across multiple dimensions (e.g., seeding facts, semantic, procedural, associative, and identity all at once).',
         },
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent. Defaults to the calling agent itself.',
+          description: 'Optional ID, full name, or role of the target agent. Defaults to the calling agent itself.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
-      required: ['memory_type', 'action'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
@@ -2623,19 +3190,78 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       const callerAgentId = callerRun
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
 
       const workspace = resolveAgentWorkspace(agent);
       const ws = ensureAgentWorkspace(workspace, agent.id, agent.name, agent.system_prompt);
+
+      // Handle batch entries if provided
+      if (Array.isArray(input.entries) && input.entries.length > 0) {
+        const results: Array<{ dimension: string; action: string; bytesWritten: number }> = [];
+        for (const item of input.entries) {
+          const mType = String(item.memory_type || '').trim().toLowerCase();
+          const memFileName = `${mType}.md`;
+          const filePath = ws.memoryFiles[memFileName];
+          if (!filePath) continue;
+
+          const act = item.action || 'write';
+          const contentStr = String(item.content || '');
+
+          if (act === 'write') {
+            writeFileSync(filePath, contentStr, 'utf8');
+            results.push({ dimension: mType, action: 'write', bytesWritten: contentStr.length });
+          } else if (act === 'append') {
+            const existing = existsSync(filePath) ? readFileSync(filePath, 'utf8') : '';
+            const next = existing.trim() ? `${existing.trim()}\n\n${contentStr.trim()}\n` : `${contentStr.trim()}\n`;
+            writeFileSync(filePath, next, 'utf8');
+            results.push({ dimension: mType, action: 'append', bytesWritten: contentStr.length });
+          } else if (act === 'clear') {
+            writeFileSync(filePath, `# ${mType.charAt(0).toUpperCase() + mType.slice(1)} Memory — ${agent.name}\n\n`, 'utf8');
+            results.push({ dimension: mType, action: 'clear', bytesWritten: 0 });
+          }
+        }
+
+        try {
+          syncAgentDiskManifestFromDb({ agentId: agent.id, ws, db });
+          const wsServer = CoreWsServer.getInstance();
+          wsServer.broadcast({
+            type: 'agent_files_updated',
+            agentId: agent.id,
+            data: { timestamp: new Date().toISOString() },
+          });
+          wsServer.broadcast({
+            type: 'agent_manifest_updated',
+            agentId: agent.id,
+            data: { agent_id: agent.id, updated_at: new Date().toISOString() },
+          });
+        } catch {}
+
+        const summaryText = `Configured ${results.length} memory dimension(s) for ${agent.name}: ${results.map((r) => `${r.dimension} (${r.action})`).join(', ')}`;
+        return {
+          success: true,
+          summary: summaryText,
+          content: [{ type: 'text', text: `✅ Successfully configured multi-dimensional memory for **${agent.name}**:\n\n${results.map((r) => `- **${r.dimension}.md**: ${r.action} (${r.bytesWritten} bytes)`).join('\n')}` }],
+          data: { agent_id: agent.id, agent_name: agent.name, updated: results },
+        };
+      }
+
+      if (!input.memory_type || !input.action) {
+        return {
+          success: false,
+          summary: 'Missing memory_type or action',
+          content: [{ type: 'text', text: 'Error: Please specify "memory_type" and "action", or provide an "entries" array for batch updates.' }],
+          isError: true,
+        };
+      }
 
       const memFileName = `${String(input.memory_type || '')}.md`;
       const filePath = ws.memoryFiles[memFileName];
@@ -2671,8 +3297,9 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         writeFileSync(filePath, `# ${memoryType.charAt(0).toUpperCase() + memoryType.slice(1)} Memory — ${agent.name}\n\n`, 'utf8');
       }
 
-      // Broadcast live updates
+      // Sync disk manifest & broadcast live updates
       try {
+        syncAgentDiskManifestFromDb({ agentId: agent.id, ws, db });
         const wsServer = CoreWsServer.getInstance();
         wsServer.broadcast({
           type: 'agent_files_updated',
@@ -2703,7 +3330,11 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       properties: {
         target_agent_id: {
           type: 'string',
-          description: 'Optional ID of the target agent to inspect. Defaults to the calling agent itself.',
+          description: 'Optional ID, full name, or role of the target agent to inspect. Defaults to the calling agent itself.',
+        },
+        target_agent_name: {
+          type: 'string',
+          description: 'Optional name of the target agent (alias for target_agent_id).',
         },
       },
       additionalProperties: false,
@@ -2717,13 +3348,13 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       const callerAgentId = callerRun
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
-      const agentId = String(input.target_agent_id || callerAgentId || '').trim();
-      const agent = agentId ? db.getAgent(agentId) : null;
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const agent = resolveTargetAgent(db, rawTarget, callerAgentId);
       if (!agent) {
         return {
           success: false,
-          summary: `Agent "${agentId}" not found`,
-          content: [{ type: 'text', text: `Error: Agent "${agentId}" not found.` }],
+          summary: `Agent "${rawTarget || 'unknown'}" not found`,
+          content: [{ type: 'text', text: `Error: Agent "${rawTarget || 'unknown'}" not found.` }],
           isError: true,
         };
       }
@@ -2812,8 +3443,8 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       const callerAgent = callerId ? db.getAgent(callerId) : null;
 
       // Allow agent to schedule for itself or delegate to a co-worker
-      const requestedTargetId = String(input.target_agent_id || input.agent_id || '').trim();
-      const targetAgent = requestedTargetId ? (db.getAgent(requestedTargetId) || callerAgent) : callerAgent;
+      const requestedTargetId = String(input.target_agent_id || input.agent_id || (input as any).target_agent_name || (input as any).target_agent || '').trim();
+      const targetAgent = resolveTargetAgent(db, requestedTargetId, callerId);
 
       if (!targetAgent) {
         return {
@@ -3062,6 +3693,9 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
           const callerRun = activeRun || db.getRun(ctx.runId);
           const agentId = callerRun ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId) : undefined;
           if (agentId) {
+            try {
+              db.updateAgentLastSync(agentId);
+            } catch {}
             db.addRunEvent({
               run_id: ctx.runId,
               agent_id: agentId,
@@ -3139,17 +3773,8 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
 
-      let targetAgent: AgentRecord | null = null;
-      if (input.target_agent_id) {
-        targetAgent = db.getAgent(String(input.target_agent_id).trim());
-      } else if (input.target_agent_name) {
-        const query = String(input.target_agent_name).toLowerCase().trim();
-        const all = db.getAllAgents();
-        targetAgent = all.find((a) => a.name.toLowerCase() === query) ?? null;
-      }
-      if (!targetAgent && callerAgentId) {
-        targetAgent = db.getAgent(callerAgentId);
-      }
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const targetAgent = resolveTargetAgent(db, rawTarget, callerAgentId);
 
       if (!targetAgent) {
         return {
@@ -3315,17 +3940,8 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
         ? ('agent_id' in callerRun ? callerRun.agent_id : callerRun.agentId)
         : undefined;
 
-      let targetAgent: AgentRecord | null = null;
-      if (input.target_agent_id) {
-        targetAgent = db.getAgent(String(input.target_agent_id).trim());
-      } else if (input.target_agent_name) {
-        const query = String(input.target_agent_name).toLowerCase().trim();
-        const all = db.getAllAgents();
-        targetAgent = all.find((a) => a.name.toLowerCase() === query) ?? null;
-      }
-      if (!targetAgent && callerAgentId) {
-        targetAgent = db.getAgent(callerAgentId);
-      }
+      const rawTarget = input.target_agent_id || (input as any).target_agent_name || (input as any).target_agent;
+      const targetAgent = resolveTargetAgent(db, rawTarget, callerAgentId);
 
       if (!targetAgent) {
         return {
@@ -3387,6 +4003,727 @@ export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
       };
     },
   },
+  {
+    name: 'submit_explore_report',
+    description:
+      'Called ONLY by the Explorer Agent to submit the completed project exploration report. This finalizes Phase 1, saves the structured report to the database, broadcasts explore_complete, and signals the canvas that the report is ready for user review.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        company_name: { type: 'string', description: 'Company or project name' },
+        company_type: {
+          type: 'string',
+          enum: ['software_product', 'agency', 'internal_tooling', 'non_tech'],
+          description: 'Type of company or project',
+        },
+        tech_stack: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of technologies used',
+        },
+        project_summary: { type: 'string', description: '2-3 sentence project overview' },
+        features: {
+          type: 'array',
+          description: 'List of distinct features that each need a dedicated agent',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'Snake_case feature ID, e.g. feat_auth' },
+              name: { type: 'string' },
+              description: { type: 'string' },
+              folders: { type: 'array', items: { type: 'string' }, description: 'Owned folder paths' },
+              key_files: { type: 'array', items: { type: 'string' }, description: 'Most important files' },
+              complexity: { type: 'string', enum: ['high', 'medium', 'low'] },
+              suggested_agent_name: { type: 'string', description: 'Human-readable agent name e.g. Auth Engineer' },
+            },
+            required: ['id', 'name', 'description', 'folders', 'complexity', 'suggested_agent_name'],
+          },
+        },
+        zones_plan: {
+          type: 'array',
+          description: 'Zone hierarchy plan for organizing agents on canvas',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              role_title: { type: 'string' },
+              description: { type: 'string' },
+              color: { type: 'string', description: 'Hex color e.g. #3b82f6' },
+              sub_zones: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    role_title: { type: 'string' },
+                    features: { type: 'array', items: { type: 'string' }, description: 'Feature IDs in this sub-zone' },
+                  },
+                  required: ['name', 'features'],
+                },
+              },
+            },
+            required: ['name', 'role_title'],
+          },
+        },
+        managers_plan: {
+          type: 'array',
+          description: 'Manager agents to create, one per zone/domain',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              zone: { type: 'string', description: 'Zone name this manager belongs to' },
+              manages_features: { type: 'array', items: { type: 'string' }, description: 'Feature IDs managed' },
+              description: { type: 'string' },
+            },
+            required: ['name', 'zone', 'manages_features'],
+          },
+        },
+        required_mcps: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'MCP server names needed (e.g. github, filesystem, web-search)',
+        },
+        agent_count_estimate: { type: 'number', description: 'Estimated total leaf agents needed' },
+        explore_summary: { type: 'string', description: 'Executive summary of explore findings' },
+        session_id: { type: 'string', description: 'The explore session ID (provided in your task prompt)' },
+      },
+      required: ['company_name', 'features', 'zones_plan', 'explore_summary'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    presentation: { icon: '🔭', label: 'Submit Explore Report', family: 'run', tone: 'success' },
+    async execute(input, ctx) {
+      const runner = AgentRunner.getInstance();
+      const db = runner.getDb();
+      const { SpaceDb } = await import('../space/space.db.js');
+      const spaceDb = new SpaceDb();
+
+      // Extract session_id from input or from run context metadata
+      const sessionId = (input as any).session_id as string | undefined;
+      if (!sessionId) {
+        return {
+          success: false,
+          summary: 'No session_id provided',
+          content: [{ type: 'text', text: 'Error: session_id is required. It was provided in your task prompt.' }],
+          isError: true,
+        };
+      }
+
+      const session = spaceDb.getExploreSession(sessionId);
+      if (!session) {
+        return {
+          success: false,
+          summary: 'Explore session not found',
+          content: [{ type: 'text', text: `Error: Explore session "${sessionId}" not found.` }],
+          isError: true,
+        };
+      }
+
+      const report = {
+        company_name: input.company_name,
+        company_type: (input as any).company_type || 'software_product',
+        tech_stack: (input as any).tech_stack || [],
+        project_summary: (input as any).project_summary || '',
+        features: (input as any).features || [],
+        zones_plan: (input as any).zones_plan || [],
+        managers_plan: (input as any).managers_plan || [],
+        required_mcps: (input as any).required_mcps || [],
+        agent_count_estimate: (input as any).agent_count_estimate || 0,
+        explore_summary: input.explore_summary,
+      };
+
+      spaceDb.updateExploreSession(sessionId, {
+        status: 'complete',
+        explore_report_json: JSON.stringify(report),
+        completed_at: new Date().toISOString(),
+      });
+
+      const wsServer = CoreWsServer.getInstance();
+      wsServer.broadcast({
+        type: 'explore_complete',
+        sessionId,
+        spaceId: session.space_id,
+        report,
+      });
+
+      // Mark explorer as idle/completed (do not delete agent record so runs & events persist for inspection and refresh)
+      const callerAgentId = (ctx as any).agentId;
+      if (callerAgentId) {
+        try {
+          db.updateAgent(callerAgentId, { status: 'idle' });
+        } catch {}
+      }
+
+      return {
+        success: true,
+        summary: `Explore report submitted for "${input.company_name}" — ${(report.features as any[]).length} features identified`,
+        content: [{
+          type: 'text',
+          text: `✅ Explore report submitted successfully!\n\nCompany: ${input.company_name}\nFeatures: ${(report.features as any[]).length}\nEstimated agents: ${report.agent_count_estimate}\n\nThe canvas will now display the report for user review. Once accepted, the Architect Agent will build the full team.`,
+        }],
+        data: { sessionId, reportSummary: report.explore_summary },
+      };
+    },
+  },
+  {
+    name: 'get_project_explore',
+    description:
+      'Retrieve details from the project exploration report for the current company space. Use this to look up features, folder ownership, tech stack, or the full explore summary WITHOUT re-exploring. Every agent should call this instead of discovering the project structure manually.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query_type: {
+          type: 'string',
+          enum: ['summary', 'features', 'feature_detail', 'folder_map', 'tech_stack', 'zone_plan', 'full'],
+          description: 'What to retrieve: summary (brief overview), features (list all features), feature_detail (one feature), folder_map (find owner of a path), tech_stack, zone_plan, full (entire report)',
+        },
+        feature_id: { type: 'string', description: 'For feature_detail — the feat_ ID to look up' },
+        feature_name: { type: 'string', description: 'For feature_detail — search by feature name instead of ID' },
+        folder_path: { type: 'string', description: 'For folder_map — find which feature/agent owns this path' },
+        space_id: { type: 'string', description: "Company space ID. Defaults to the calling agent's space." },
+      },
+      required: ['query_type'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    presentation: { icon: '🗺️', label: 'Get Project Explore', family: 'inspect', tone: 'primary' },
+    async execute(input, ctx) {
+      const runner = AgentRunner.getInstance();
+      const db = runner.getDb();
+      const { SpaceDb } = await import('../space/space.db.js');
+      const spaceDb = new SpaceDb();
+
+      // Resolve space_id: from input, or from agent's owned_space_id
+      let spaceId = (input as any).space_id as string | undefined;
+      const callerId = (ctx as any).agentId;
+      if (!spaceId && callerId) {
+        const agent = db.getAgent(callerId);
+        spaceId = (agent as any)?.owned_space_id ?? undefined;
+      }
+
+      if (!spaceId) {
+        // Try to find any session
+        const sessions = spaceDb.listExploreSessions();
+        if (sessions.length > 0) spaceId = sessions[0].space_id;
+      }
+
+      if (!spaceId) {
+        return {
+          success: false,
+          summary: 'No space_id resolved',
+          content: [{ type: 'text', text: 'Error: Could not determine space_id. Pass space_id explicitly.' }],
+          isError: true,
+        };
+      }
+
+      const session = spaceDb.getExploreSessionBySpace(spaceId);
+      if (!session || !session.explore_report_json) {
+        return {
+          success: false,
+          summary: 'No explore report found',
+          content: [{ type: 'text', text: `No explore report found for space ${spaceId}. Run an explore session first.` }],
+          isError: true,
+        };
+      }
+
+      let report: any;
+      try { report = JSON.parse(session.explore_report_json); } catch {
+        return { success: false, summary: 'Invalid report', content: [{ type: 'text', text: 'Explore report JSON is invalid.' }], isError: true };
+      }
+
+      const qt = input.query_type;
+
+      if (qt === 'full') {
+        return {
+          success: true,
+          summary: `Full explore report for ${report.company_name}`,
+          content: [{ type: 'text', text: JSON.stringify(report, null, 2) }],
+          data: report,
+        };
+      }
+
+      if (qt === 'summary') {
+        const summary = {
+          company_name: report.company_name,
+          company_type: report.company_type,
+          tech_stack: report.tech_stack,
+          project_summary: report.project_summary,
+          explore_summary: report.explore_summary,
+          feature_count: report.features?.length ?? 0,
+          agent_count_estimate: report.agent_count_estimate,
+        };
+        return {
+          success: true,
+          summary: `Summary: ${report.company_name} — ${summary.feature_count} features`,
+          content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }],
+          data: summary,
+        };
+      }
+
+      if (qt === 'features') {
+        const features = (report.features || []).map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          description: f.description,
+          folders: f.folders,
+          complexity: f.complexity,
+          suggested_agent_name: f.suggested_agent_name,
+        }));
+        return {
+          success: true,
+          summary: `${features.length} features in explore report`,
+          content: [{ type: 'text', text: JSON.stringify(features, null, 2) }],
+          data: features,
+        };
+      }
+
+      if (qt === 'feature_detail') {
+        const featureId = (input as any).feature_id as string | undefined;
+        const featureName = (input as any).feature_name as string | undefined;
+        const feature = (report.features || []).find((f: any) =>
+          (featureId && f.id === featureId) ||
+          (featureName && f.name.toLowerCase().includes(featureName.toLowerCase()))
+        );
+        if (!feature) {
+          return {
+            success: false,
+            summary: 'Feature not found',
+            content: [{ type: 'text', text: `Feature "${featureId || featureName}" not found in explore report.` }],
+            isError: true,
+          };
+        }
+        return {
+          success: true,
+          summary: `Feature detail: ${feature.name}`,
+          content: [{ type: 'text', text: JSON.stringify(feature, null, 2) }],
+          data: feature,
+        };
+      }
+
+      if (qt === 'folder_map') {
+        const folderPath = (input as any).folder_path as string | undefined;
+        const matches: any[] = [];
+        for (const f of (report.features || [])) {
+          const owns = (f.folders || []).some((fp: string) =>
+            folderPath && (fp === folderPath || folderPath.startsWith(fp) || fp.startsWith(folderPath))
+          );
+          if (owns) matches.push({ feature_id: f.id, feature_name: f.name, suggested_agent_name: f.suggested_agent_name, folders: f.folders });
+        }
+        return {
+          success: true,
+          summary: `${matches.length} feature(s) own path "${folderPath}"`,
+          content: [{ type: 'text', text: JSON.stringify(matches, null, 2) }],
+          data: matches,
+        };
+      }
+
+      if (qt === 'tech_stack') {
+        return {
+          success: true,
+          summary: `Tech stack: ${(report.tech_stack || []).join(', ')}`,
+          content: [{ type: 'text', text: JSON.stringify(report.tech_stack || [], null, 2) }],
+          data: report.tech_stack,
+        };
+      }
+
+      if (qt === 'zone_plan') {
+        return {
+          success: true,
+          summary: `Zone plan: ${(report.zones_plan || []).length} top-level zones`,
+          content: [{ type: 'text', text: JSON.stringify(report.zones_plan || [], null, 2) }],
+          data: report.zones_plan,
+        };
+      }
+
+      return {
+        success: false,
+        summary: 'Unknown query_type',
+        content: [{ type: 'text', text: `Unknown query_type: ${qt}` }],
+        isError: true,
+      };
+    },
+  },
+  {
+    name: 'project_explore',
+    description:
+      'Explore deep project knowledge, modules, features, file/folder locations, tech stack, data models, and team topology for the company space. Feeded by the Explore Phase so agents have instantaneous domain knowledge without re-exploring the codebase. Call with parameter/section or query to get specific feature/folder specs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        parameter: {
+          type: 'string',
+          enum: [
+            'overview',
+            'architecture',
+            'modules',
+            'features',
+            'feature_detail',
+            'file_structure',
+            'folder_map',
+            'api_endpoints',
+            'data_models',
+            'dependencies',
+            'required_mcps',
+            'zones_and_agents_plan',
+            'workflows_and_sop',
+            'testing_and_devops',
+            'summary',
+            'full',
+          ],
+          description: 'The project parameter or architectural dimension to inspect. Defaults to "summary".',
+        },
+        section: {
+          type: 'string',
+          description: 'Alias for parameter (e.g. "features", "modules", "overview", "folder_map").',
+        },
+        query: {
+          type: 'string',
+          description: 'Free-text search query across features, modules, documentation, and folders.',
+        },
+        feature_name: {
+          type: 'string',
+          description: 'Name or ID of the feature to look up (e.g. "auth", "billing", "canvas").',
+        },
+        module_name: {
+          type: 'string',
+          description: 'Name of the module or subsystem to look up.',
+        },
+        folder_path: {
+          type: 'string',
+          description: 'Directory or file path to check which dedicated agent and feature owns it.',
+        },
+        space_id: {
+          type: 'string',
+          description: 'Optional space ID. Defaults to the calling agent\'s home space.',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    presentation: { icon: '🔍', label: 'Project Explore', family: 'inspect', tone: 'primary' },
+    async execute(input, ctx) {
+      const runner = AgentRunner.getInstance();
+      const db = runner.getDb();
+      const { SpaceDb } = await import('../space/space.db.js');
+      const spaceDb = new SpaceDb();
+
+      let spaceId = (input as any).space_id as string | undefined;
+      const callerId = (ctx as any).agentId;
+      if (!spaceId && callerId) {
+        const agent = db.getAgent(callerId);
+        spaceId = (agent as any)?.owned_space_id ?? undefined;
+      }
+
+      if (!spaceId) {
+        const sessions = spaceDb.listExploreSessions();
+        if (sessions.length > 0) spaceId = sessions[0].space_id;
+      }
+
+      if (!spaceId) {
+        return {
+          success: false,
+          summary: 'No space_id resolved',
+          content: [{ type: 'text', text: 'Error: Could not determine company space ID. Pass space_id explicitly.' }],
+          isError: true,
+        };
+      }
+
+      const session = spaceDb.getExploreSessionBySpace(spaceId);
+      if (!session || !session.explore_report_json) {
+        return {
+          success: false,
+          summary: 'No explore report found',
+          content: [{ type: 'text', text: `No explore report found for space "${spaceId}". Run an explore session first.` }],
+          isError: true,
+        };
+      }
+
+      let report: any;
+      try {
+        report = JSON.parse(session.explore_report_json);
+      } catch {
+        return { success: false, summary: 'Invalid report', content: [{ type: 'text', text: 'Explore report JSON is invalid.' }], isError: true };
+      }
+
+      const param = ((input as any).parameter || (input as any).section || 'summary').toLowerCase();
+      const queryStr = typeof (input as any).query === 'string' ? (input as any).query.trim().toLowerCase() : '';
+      const featName = (input as any).feature_name || (input as any).module_name;
+      const folderPath = (input as any).folder_path;
+
+      // Handle free-text query if provided
+      if (queryStr) {
+        const matchingFeatures = (report.features || []).filter((f: any) =>
+          f.name?.toLowerCase().includes(queryStr) ||
+          f.description?.toLowerCase().includes(queryStr) ||
+          f.folders?.some((fo: string) => fo.toLowerCase().includes(queryStr))
+        );
+        const matchingZones = (report.zones_plan || []).filter((z: any) =>
+          z.name?.toLowerCase().includes(queryStr) ||
+          z.description?.toLowerCase().includes(queryStr)
+        );
+
+        return {
+          success: true,
+          summary: `Project search results for "${queryStr}": ${matchingFeatures.length} feature(s), ${matchingZones.length} zone(s)`,
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              query: queryStr,
+              company: report.company_name,
+              matchingFeatures,
+              matchingZones,
+            }, null, 2),
+          }],
+          data: { matchingFeatures, matchingZones },
+        };
+      }
+
+      // Feature specific lookup
+      if (featName || param === 'feature_detail') {
+        const target = (featName || '').toLowerCase();
+        const feature = (report.features || []).find((f: any) =>
+          f.id?.toLowerCase() === target ||
+          f.name?.toLowerCase().includes(target)
+        );
+        if (!feature) {
+          return {
+            success: false,
+            summary: `Feature "${featName}" not found`,
+            content: [{ type: 'text', text: `Feature "${featName}" not found in project report. Available features:\n${(report.features || []).map((f: any) => `- ${f.name} (${f.id})`).join('\n')}` }],
+            isError: true,
+          };
+        }
+        return {
+          success: true,
+          summary: `Feature: ${feature.name} (${feature.suggested_agent_name})`,
+          content: [{ type: 'text', text: JSON.stringify(feature, null, 2) }],
+          data: feature,
+        };
+      }
+
+      // Folder ownership lookup
+      if (folderPath || param === 'folder_map' || param === 'file_structure' || param === 'folders') {
+        const fp = folderPath || '';
+        const matches: any[] = [];
+        for (const f of (report.features || [])) {
+          const owns = (f.folders || []).some((fo: string) =>
+            !fp || fo === fp || fp.startsWith(fo) || fo.startsWith(fp)
+          );
+          if (owns) {
+            matches.push({
+              feature_id: f.id,
+              feature_name: f.name,
+              suggested_agent_name: f.suggested_agent_name,
+              owned_folders: f.folders,
+              key_files: f.key_files || [],
+            });
+          }
+        }
+        return {
+          success: true,
+          summary: `Folder mapping for "${fp || 'all'}": ${matches.length} feature owner(s)`,
+          content: [{ type: 'text', text: JSON.stringify(matches, null, 2) }],
+          data: matches,
+        };
+      }
+
+      if (param === 'modules' || param === 'architecture') {
+        const data = {
+          company_name: report.company_name,
+          company_type: report.company_type,
+          tech_stack: report.tech_stack,
+          zones_plan: report.zones_plan,
+          features_overview: (report.features || []).map((f: any) => ({
+            id: f.id,
+            name: f.name,
+            agent: f.suggested_agent_name,
+            folders: f.folders,
+          })),
+        };
+        return {
+          success: true,
+          summary: `Architecture & Modules for ${report.company_name}`,
+          content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+          data,
+        };
+      }
+
+      if (param === 'features') {
+        return {
+          success: true,
+          summary: `${(report.features || []).length} features cataloged`,
+          content: [{ type: 'text', text: JSON.stringify(report.features || [], null, 2) }],
+          data: report.features,
+        };
+      }
+
+      if (param === 'required_mcps') {
+        return {
+          success: true,
+          summary: `Required MCPs: ${(report.required_mcps || []).join(', ')}`,
+          content: [{ type: 'text', text: JSON.stringify(report.required_mcps || [], null, 2) }],
+          data: report.required_mcps,
+        };
+      }
+
+      if (param === 'zones_and_agents_plan' || param === 'zone_plan') {
+        const data = {
+          zones: report.zones_plan || [],
+          managers: report.managers_plan || [],
+          agent_count_estimate: report.agent_count_estimate,
+        };
+        return {
+          success: true,
+          summary: `Team & Zone Plan for ${report.company_name}`,
+          content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+          data,
+        };
+      }
+
+      if (param === 'full') {
+        return {
+          success: true,
+          summary: `Full project explore document for ${report.company_name}`,
+          content: [{ type: 'text', text: JSON.stringify(report, null, 2) }],
+          data: report,
+        };
+      }
+
+      // Default: overview / summary
+      const overview = {
+        company_name: report.company_name,
+        company_type: report.company_type,
+        tech_stack: report.tech_stack,
+        project_summary: report.project_summary,
+        explore_summary: report.explore_summary,
+        total_features: (report.features || []).length,
+        total_zones: (report.zones_plan || []).length,
+        required_mcps: report.required_mcps,
+      };
+      return {
+        success: true,
+        summary: `Project Overview: ${report.company_name} (${overview.total_features} features, ${overview.total_zones} zones)`,
+        content: [{ type: 'text', text: JSON.stringify(overview, null, 2) }],
+        data: overview,
+      };
+    },
+  },
+  {
+    name: 'submit_build_complete',
+    description:
+      'Called ONLY by the Architect Agent after completing the full team build (all zones, managers, and leaf agents created). This marks the explore session as built, broadcasts build_complete, and self-terminates the Architect Agent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        session_id: { type: 'string', description: 'The explore session ID' },
+        summary: { type: 'string', description: 'Brief summary of everything created' },
+        zones_created: { type: 'number', description: 'Number of zones created' },
+        agents_created: { type: 'number', description: 'Number of agents created' },
+        mcps_attached: { type: 'number', description: 'Number of MCP attachments made' },
+      },
+      required: ['session_id', 'summary'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    presentation: { icon: '🏗️', label: 'Submit Build Complete', family: 'run', tone: 'success' },
+    async execute(input, ctx) {
+      const runner = AgentRunner.getInstance();
+      const db = runner.getDb();
+      const { SpaceDb } = await import('../space/space.db.js');
+      const spaceDb = new SpaceDb();
+
+      const session = spaceDb.getExploreSession((input as any).session_id);
+      if (!session) {
+        return {
+          success: false,
+          summary: 'Session not found',
+          content: [{ type: 'text', text: `Error: Session "${(input as any).session_id}" not found.` }],
+          isError: true,
+        };
+      }
+
+      spaceDb.updateExploreSession(session.id, { status: 'built' });
+
+      const wsServer = CoreWsServer.getInstance();
+      wsServer.broadcast({
+        type: 'build_complete',
+        sessionId: session.id,
+        spaceId: session.space_id,
+        summary: input.summary,
+        stats: {
+          zonesCreated: (input as any).zones_created ?? 0,
+          agentsCreated: (input as any).agents_created ?? 0,
+          mcpsAttached: (input as any).mcps_attached ?? 0,
+        },
+      });
+
+      // Mark architect as idle/completed (do not delete so run history and logs persist)
+      const callerAgentId = (ctx as any).agentId;
+      if (callerAgentId) {
+        try {
+          db.updateAgent(callerAgentId, { status: 'idle' });
+        } catch {}
+      }
+
+      return {
+        success: true,
+        summary: `Build complete for session ${session.id}. ${input.summary}`,
+        content: [{
+          type: 'text',
+          text: `✅ Build complete!\n\n${input.summary}\n\nThe company team is now live on the canvas.`,
+        }],
+        data: { sessionId: session.id, spaceId: session.space_id },
+      };
+    },
+  },
+];
+
+// ── Bridged Canvas MCP Tools ──────────────────────────────────────────────
+// Makes all 39 Canvas MCP tools directly available as first-class Custom Agent Tools
+// so the harness ToolGate exposes them across ALL phases without requiring MCP prefixes.
+const CANVAS_BRIDGED_CUSTOM_TOOLS: ToolDefinition[] = CANVAS_TOOL_DEFINITIONS.map((def) => ({
+  name: def.name,
+  description: def.description,
+  inputSchema: (def.inputSchema as Record<string, unknown>) || { type: 'object', properties: {} },
+  execute: async (args: any, ctx: any) => {
+    const server = CanvasMcpServer.getInstance();
+    const callerId = (ctx as any)?.agentId;
+    let agentSpace: string | null = null;
+    if (callerId) {
+      try {
+        const { SpaceDb } = await import('../space/space.db.js');
+        const sdb = new SpaceDb();
+        agentSpace = sdb.getAgentSpaceId(callerId);
+      } catch {}
+    }
+    const targetSpace = agentSpace || (args as any)?.space_id || (args as any)?.spaceId || (ctx as any)?.spaceId || (ctx as any)?.owned_space_id;
+    if (targetSpace) {
+      setConfiguredSpaceId(targetSpace);
+    }
+    try {
+      const res = await server.executeTool(def.name, (args as Record<string, any>) || {});
+      const textContent = res.content?.map((c: any) => c.text || '').join('\n') || '';
+      return {
+        success: !res.isError,
+        summary: textContent.slice(0, 300),
+        content: res.content || [{ type: 'text', text: textContent }],
+        isError: res.isError,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        summary: err?.message || 'Tool execution failed',
+        content: [{ type: 'text', text: `Tool error in ${def.name}: ${err?.message || String(err)}` }],
+        isError: true,
+      };
+    }
+  },
+}));
+
+export const CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
+  ...BASE_CUSTOM_AGENT_TOOLS,
+  ...CANVAS_BRIDGED_CUSTOM_TOOLS,
 ];
 
 /** Names of the canvas-owned tools, for prompt gating / UI lists. */

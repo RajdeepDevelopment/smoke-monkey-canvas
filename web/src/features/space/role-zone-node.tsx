@@ -74,19 +74,12 @@ export const RoleZoneNode: React.FC<{ data: RoleZoneNodeData; selected?: boolean
           </div>
         </div>
 
-        {data.memberCount === 0 ? (
+        {data.memberCount === 0 && (
           <div className="role-zone-empty-hint">
             <div className="role-zone-avatar-slot">
               <Users size={16} />
             </div>
             <span className="role-zone-slot-text">Drop agent to assign {data.roleTitle}</span>
-          </div>
-        ) : (
-          <div className="role-zone-empty-hint role-zone-assigned-hint">
-            <div className="role-zone-avatar-slot filled">
-              <Users size={16} />
-            </div>
-            <span className="role-zone-slot-text">{data.memberNames?.join(', ') || `${data.memberCount} Agents Assigned`}</span>
           </div>
         )}
 

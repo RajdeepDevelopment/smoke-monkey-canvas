@@ -1,0 +1,101 @@
+{
+  "id": "company-ecommerce-retail",
+  "name": "Omnicart Global Commerce",
+  "category": "E-Commerce & Retail",
+  "domain": "High-Volume Omnichannel Retail & Marketplace",
+  "tagline": "Global e-commerce platform, real-time inventory management, high-conversion checkout, and global fulfillment.",
+  "operatingCadence": "High-throughput retail sprint cadence with Black Friday load resilience, sub-second checkout SLAs, and strict ETA tracking.",
+  "workAreas": [
+    {
+      "name": "Executive & Commercial Strategy",
+      "roles": ["CEO", "Chief Commercial Officer", "VP Merchandising"],
+      "focus": "Gross Merchandise Value (GMV), customer acquisition cost (CAC), return on ad spend (ROAS), supplier relationships, and sales targets.",
+      "targets": "100% quarterly GMV targets, positive unit economics, customer lifetime value (LTV) >3x CAC."
+    },
+    {
+      "name": "E-Commerce Architecture & Payments",
+      "roles": ["CTO", "Principal Commerce Architect"],
+      "focus": "Distributed cart architecture, multi-currency checkout, payment gateway integrations (Stripe, Adyen, Apple Pay), and initial store exploration.",
+      "targets": "Sub-800ms checkout completion, zero payment double-charge incidents, zero direct coding by leadership."
+    },
+    {
+      "name": "Storefront & Fulfillment Management",
+      "roles": ["E-Commerce Operations Manager", "Product Lead"],
+      "focus": "Promotional calendar alignment, backlog ticket decomposition, developer task assignment, mandatory ETA tracking, and active follow-ups.",
+      "targets": "100% ticket allocation with agreed ETAs, zero promotion launch delays, rigorous sprint velocity."
+    },
+    {
+      "name": "Storefront & Inventory Engineering",
+      "roles": ["Senior Fullstack Engineer", "Inventory Microservice Engineer", "Mobile App Developer"],
+      "focus": "Next.js/React storefront, live stock reservation, cart synchronization, recommendation algorithms, and ERP integrations.",
+      "targets": "85%+ unit test coverage, sub-100ms inventory lookup queries, delivery within agreed ETAs."
+    },
+    {
+      "name": "E-Commerce QA & Load Testing",
+      "roles": ["E-Commerce QA Lead", "Performance & Load Tester"],
+      "focus": "Cart-to-checkout E2E automated tests, payment gateway mock testing, flash sale stress testing (k6), defect reporting, and release gating.",
+      "targets": "Zero checkout funnel regressions, 100,000 concurrent user load test sign-off, detailed bug reports to management."
+    },
+    {
+      "name": "Cloud Operations & CDN Infrastructure",
+      "roles": ["Site Reliability Lead", "CDN / Edge Engineer"],
+      "focus": "Global Edge caching (Cloudflare), database read-replica scaling, auto-scaling Kubernetes nodes, and multi-region failover.",
+      "targets": "99.99% storefront uptime during flash sales, sub-50ms edge cache hits, sub-5min failover."
+    }
+  ],
+  "targets": {
+    "primarySla": "99.99% storefront & checkout availability with sub-800ms checkout response times",
+    "qualityStandard": "Zero checkout drop-off bugs, 85%+ test coverage, validated 100k concurrent user peak resilience",
+    "sprintVelocity": "Weekly feature and promotional releases with zero regressions and verified payment logs",
+    "etaDiscipline": "All store features and bug fixes require developer ETA commitment before start; proactive manager follow-ups"
+  },
+  "workflows": {
+    "featureDevelopment": {
+      "title": "E-Commerce Feature & Storefront Release Pipeline",
+      "steps": [
+        "1. Intake & Scoping: Promotional campaign or checkout feature requested by Merchandising or Commercial leadership.",
+        "2. Triage & Technical Review: E-Commerce Operations Manager reviews API specifications, evaluates conversion impact, and approves ticket.",
+        "3. Developer Assignment: Manager assigns the feature ticket to the designated storefront or inventory developer via delegate_task.",
+        "4. Mandatory ETA Request: Manager requests a concrete Estimated Time of Arrival (ETA) before frontend or backend implementation begins.",
+        "5. ETA Commitment & Tracking: Developer calculates scope, commits to an ETA, and logs milestones on the commercial sprint board.",
+        "6. Active Follow-Ups: If deliverables or code reviews stall past the ETA, Manager immediately follows up, removes API blockers, and secures launch date.",
+        "7. Implementation & Testing: Developer writes modular code following Next.js/React best practices, adds unit tests (85%+ coverage), and submits a PR.",
+        "8. Code Review & QA Handoff: Tech Lead checks for edge rendering performance; approved PR transitions to QA.",
+        "9. QA Verification Gate: QA executes automated Playwright checkout tests across mobile and desktop viewports. If payment flow fails, QA files bug report with repro steps; if passed, release sign-off is granted.",
+        "10. Production Deployment: SRE Lead verifies edge cache invalidation rules and deploys to global production clusters."
+      ]
+    },
+    "bugTriageAndResolution": {
+      "title": "E-Commerce Checkout & Inventory Bug Resolution Lifecycle",
+      "steps": [
+        "1. Defect Discovery: Telemetry flags cart abandonment spike, payment gateway error rate, or inventory desync.",
+        "2. QA Defect Report: QA logs an emergency ticket with user session recordings, cart IDs, payload logs, and repro steps submitted to E-Commerce Manager.",
+        "3. Management Triage: Manager declares priority (P0 for broken checkout/payments), freezes non-essential tasks, and dispatches to senior developer.",
+        "4. Urgent ETA Request: Manager demands an immediate fix ETA (sub-30min for checkout incidents).",
+        "5. ETA Follow-Up: Manager monitors progress continuously; if ETA expires, escalates to CTO and invokes emergency rollback if needed.",
+        "6. Fix Implementation: Developer remedies race condition or payment webhook parsing, adding regression tests.",
+        "7. QA Re-Verification: QA executes test purchases with live sandbox cards to confirm flawless checkout completion.",
+        "8. Production Rollout: SRE deploys emergency hotfix and monitors real-time transaction completion metrics."
+      ]
+    },
+    "initialProjectOnboarding": {
+      "title": "First-Time E-Commerce Codebase Exploration & Architecture Protocol",
+      "steps": [
+        "1. CTO Architecture Discovery: CTO explores repository structure, cart schemas, checkout pipelines, payment gateways, and catalog databases.",
+        "2. Architecture Memorization: CTO commits verified store architecture, webhook secrets, and inventory sync endpoints into facts.md via manage_agent_memory.",
+        "3. Module Partitioning: CTO divides codebase into Storefront UI, Cart & Checkout, Inventory ERP, and Fulfillment modules, delegating to Managers.",
+        "4. Managerial Decomposition: E-Commerce Operations Manager inspects module directories, records deployment recipes into procedural.md, and assigns tasks.",
+        "5. Developer Deep-Dive: Developers inspect assigned components, test local payment mock servers, and verify build configurations.",
+        "6. Universal Memory Commitment: All engineers record verified API endpoints, tax calculation rules, and shipping carrier schemas into facts.md and procedural.md."
+      ]
+    },
+    "leadershipRules": {
+      "title": "Strict E-Commerce Leadership Fidelity & Separation of Concerns",
+      "rules": [
+        "CTO and Commercial/Operations Managers NEVER write frontend code, edit database records, or configure gateway keys directly.",
+        "Management coordinates campaign launches, assigns tickets, enforces ETA commitments, and removes technical impediments.",
+        "When asked to write code, leadership explains the enterprise retail hierarchy and immediately delegates downward using delegate_task."
+      ]
+    }
+  }
+}

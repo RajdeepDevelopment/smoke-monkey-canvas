@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Bot, Clock, Maximize2, ShieldCheck, Sun, Moon, Check, LayoutGrid } from 'lucide-react';
+import {
+  Plus, Bot, Clock, Maximize2, ShieldCheck, Sun, Moon, Check, LayoutGrid, Undo2, Redo2,
+  Galaxy, Orbit, ScrollText, Flower2, Square, SquareTerminal,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { SpaceAgentEntity } from '../agent/agent.types.js';
 
 export type ThemeMode =
@@ -15,19 +19,19 @@ export interface ThemeOption {
   id: ThemeMode;
   name: string;
   type: 'light' | 'dark';
-  icon: string;
+  icon: LucideIcon;
 }
 
 export const THEMES: ThemeOption[] = [
   // 3 Light Modes
-  { id: 'theme-light-studio', name: '☀️ Studio White', type: 'light', icon: '☀️' },
-  { id: 'theme-light-paper', name: '📜 Warm Paper', type: 'light', icon: '📜' },
-  { id: 'theme-light-pastel', name: '🌸 Pastel Sky', type: 'light', icon: '🌸' },
+  { id: 'theme-light-studio', name: 'Studio White', type: 'light', icon: Sun },
+  { id: 'theme-light-paper', name: 'Warm Paper', type: 'light', icon: ScrollText },
+  { id: 'theme-light-pastel', name: 'Pastel Sky', type: 'light', icon: Flower2 },
   // 4 Dark Modes
-  { id: 'theme-dark-midnight', name: '🌌 Cyber Midnight', type: 'dark', icon: '🌌' },
-  { id: 'theme-dark-carbon', name: '⬛ Obsidian Carbon', type: 'dark', icon: '⬛' },
-  { id: 'theme-dark-nebula', name: '🔮 Deep Nebula', type: 'dark', icon: '🔮' },
-  { id: 'theme-dark-matrix', name: '📟 Emerald Matrix', type: 'dark', icon: '📟' },
+  { id: 'theme-dark-midnight', name: 'Cyber Midnight', type: 'dark', icon: Galaxy },
+  { id: 'theme-dark-carbon', name: 'Obsidian Carbon', type: 'dark', icon: Square },
+  { id: 'theme-dark-nebula', name: 'Deep Nebula', type: 'dark', icon: Orbit },
+  { id: 'theme-dark-matrix', name: 'Emerald Matrix', type: 'dark', icon: SquareTerminal },
 ];
 
 interface SpaceToolbarProps {
@@ -36,12 +40,21 @@ interface SpaceToolbarProps {
   onSelectTheme: (theme: ThemeMode) => void;
   onOpenSettings: () => void;
   onAddAgent: () => void;
+  onExploreProject?: () => void;
   onFitView: () => void;
   onAutoArrange?: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  undoTooltip?: string;
+  redoTooltip?: string;
 }
 
 function areToolbarPropsEqual(prev: SpaceToolbarProps, next: SpaceToolbarProps) {
   if (prev.currentTheme !== next.currentTheme) return false;
+  if (prev.canUndo !== next.canUndo || prev.canRedo !== next.canRedo) return false;
+  if (prev.undoTooltip !== next.undoTooltip || prev.redoTooltip !== next.redoTooltip) return false;
   if (prev.agents.length !== next.agents.length) return false;
 
   for (let i = 0; i < prev.agents.length; i++) {
@@ -62,6 +75,12 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
   onAddAgent,
   onFitView,
   onAutoArrange,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  undoTooltip,
+  redoTooltip,
 }) => {
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const runningCount = agents.filter((a) => a.status === 'running').length;
@@ -129,6 +148,7 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
         <span className="toolbar-btn-label">Add Agent</span>
       </button>
 
+
       {/* API Keys / Secure Credentials Button */}
       <button
         className="toolbar-icon-btn"
@@ -152,7 +172,7 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
         >
           {currentThemeObj.type === 'light' ? <Sun size={13} color="#f59e0b" /> : <Moon size={13} color="#8b5cf6" />}
           <span className="toolbar-theme-label" style={{ fontSize: 11, fontWeight: 600 }}>
-            {currentThemeObj.name.replace(/^[^\s]+\s*/, '')}
+            {currentThemeObj.name}
           </span>
         </button>
 
@@ -216,8 +236,8 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
                   }}
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <span>{t.icon}</span>
-                    <span>{t.name.replace(/^[^\s]+\s*/, '')}</span>
+                    <t.icon size={13} style={{ flexShrink: 0 }} />
+                    <span>{t.name}</span>
                   </span>
                   {isActive && <Check size={13} color="#3b82f6" />}
                 </button>
@@ -276,8 +296,8 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
                   }}
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <span>{t.icon}</span>
-                    <span>{t.name.replace(/^[^\s]+\s*/, '')}</span>
+                    <t.icon size={13} style={{ flexShrink: 0 }} />
+                    <span>{t.name}</span>
                   </span>
                   {isActive && <Check size={13} color="#06b6d4" />}
                 </button>
@@ -285,6 +305,36 @@ export const SpaceToolbar: React.FC<SpaceToolbarProps> = React.memo(({
             })}
           </div>
         )}
+      </div>
+
+      {/* Undo & Redo History Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        <button
+          type="button"
+          className="toolbar-icon-btn"
+          onClick={onUndo}
+          disabled={!canUndo}
+          data-tooltip={undoTooltip || (canUndo ? 'Undo canvas change' : 'Nothing to undo')}
+          data-tooltip-shortcut="⌘Z"
+          data-tooltip-side="bottom"
+          aria-label="Undo canvas change"
+          style={{ opacity: canUndo ? 1 : 0.38, cursor: canUndo ? 'pointer' : 'default' }}
+        >
+          <Undo2 size={13} />
+        </button>
+        <button
+          type="button"
+          className="toolbar-icon-btn"
+          onClick={onRedo}
+          disabled={!canRedo}
+          data-tooltip={redoTooltip || (canRedo ? 'Redo canvas change' : 'Nothing to redo')}
+          data-tooltip-shortcut="⌘⇧Z"
+          data-tooltip-side="bottom"
+          aria-label="Redo canvas change"
+          style={{ opacity: canRedo ? 1 : 0.38, cursor: canRedo ? 'pointer' : 'default' }}
+        >
+          <Redo2 size={13} />
+        </button>
       </div>
 
       {/* Auto-Arrange / Tidy Canvas Button */}

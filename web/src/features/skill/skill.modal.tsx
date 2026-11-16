@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Upload, FolderUp, Check, Search, BookOpen } from 'lucide-react';
+import { skillCategoryIcon } from '../library/library.icons.js';
 import type { SkillInput } from './skill.types.js';
 
 interface StockSkillItem {
@@ -17,24 +18,7 @@ interface SkillModalProps {
   onClose: () => void;
 }
 
-export const CATEGORY_META: Record<string, { icon: string }> = {
-  All: { icon: '✨' },
-  'Architecture & Planning': { icon: '📐' },
-  'Backend & APIs': { icon: '⚡' },
-  'DevOps & CI/CD': { icon: '🚀' },
-  'Frontend & UI': { icon: '🎨' },
-  'Observability & Debugging': { icon: '🔍' },
-  'Performance & Optimization': { icon: '⚡' },
-  'QA & Testing': { icon: '🧪' },
-  'Review & Code Quality': { icon: '📋' },
-  'Security & Hardening': { icon: '🛡️' },
-  'Marketing & SEO': { icon: '📈' },
-  'Web Scraping & Crawling': { icon: '🕸️' },
-};
-
 export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, agentId, onAttach, onClose }) => {
-  if (!isOpen || !agentId) return null;
-
   const [activeTab, setActiveTab] = useState<'stock' | 'upload'>('stock');
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -50,6 +34,8 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, agentId, onAttac
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isOpen) return;
+
     fetch('/api/skills/categories')
       .then((r) => r.json())
       .then((cats) => {
@@ -128,6 +114,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, agentId, onAttac
   // Submit Uploaded Skill
   const handleSaveAndAttachUpload = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!agentId) return;
     if (!uploadName.trim() || !uploadContent.trim()) {
       alert('Please provide skill name and content.');
       return;
@@ -164,6 +151,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, agentId, onAttac
 
   // Attach from Stock
   const handleAttachStock = async (skill: StockSkillItem) => {
+    if (!agentId) return;
     setLoading(true);
     try {
       await onAttach(agentId, {
@@ -187,6 +175,8 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, agentId, onAttac
       (s.description && s.description.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesCategory && matchesSearch;
   });
+
+  if (!isOpen || !agentId) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -247,13 +237,13 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, agentId, onAttac
                   className={`category-pill-btn ${selectedCategory === 'All' ? 'active' : ''}`}
                   onClick={() => setSelectedCategory('All')}
                 >
-                  <span className="category-pill-icon">{CATEGORY_META['All']?.icon || '✨'}</span>
+                  <span className="category-pill-icon"><Sparkles size={13} /></span>
                   <span className="category-pill-label">All</span>
                   <span className="category-pill-badge">{stockSkills.length}</span>
                 </button>
                 {categories.map((c) => {
                   const count = stockSkills.filter((s) => s.category === c).length;
-                  const icon = CATEGORY_META[c]?.icon || '⚡';
+                  const CategoryIcon = skillCategoryIcon(c);
                   return (
                     <button
                       key={c}
@@ -261,7 +251,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, agentId, onAttac
                       className={`category-pill-btn ${selectedCategory === c ? 'active' : ''}`}
                       onClick={() => setSelectedCategory(c)}
                     >
-                      <span className="category-pill-icon">{icon}</span>
+                      <span className="category-pill-icon"><CategoryIcon size={13} /></span>
                       <span className="category-pill-label">{c}</span>
                       <span className="category-pill-badge">{count}</span>
                     </button>

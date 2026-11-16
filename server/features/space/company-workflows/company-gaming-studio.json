@@ -1,0 +1,101 @@
+{
+  "id": "company-gaming-studio",
+  "name": "PixelForge Interactive",
+  "category": "Gaming & Entertainment",
+  "domain": "Game Development & LiveOps Studio",
+  "tagline": "Cross-platform game engines, multiplayer netcode, immersive level design, and live-service operations.",
+  "operatingCadence": "Milestone-driven game build sprints with continuous physics profiling, 60+ FPS performance targets, and strict ETA tracking.",
+  "workAreas": [
+    {
+      "name": "Studio Direction & Publishing",
+      "roles": ["Studio Head / Executive Producer", "Creative Director", "Publishing Lead"],
+      "focus": "Game IP vision, platform publishing milestones (Steam, PlayStation, Xbox, Mobile), publisher relations, and player retention.",
+      "targets": "100% milestone delivery on schedule, positive Metacritic/Steam rating >85%, zero unapproved budget variances."
+    },
+    {
+      "name": "Engine & Systems Architecture",
+      "roles": ["Technical Director", "Lead Engine Architect"],
+      "focus": "Unreal/Unity custom engine modules, ECS architecture, multiplayer netcode (tick rate, lag compensation), and initial codebase exploration.",
+      "targets": "Locked 60 FPS on baseline target hardware, sub-50ms multiplayer latency, zero direct asset implementation by leadership."
+    },
+    {
+      "name": "Production & Sprint Management",
+      "roles": ["Lead Game Producer", "Associate Producer"],
+      "focus": "Sprint milestone tracking, feature ticket allocation, asset pipeline dependency management, mandatory ETA tracking, and active follow-ups.",
+      "targets": "100% ticket allocation with agreed ETAs, zero milestone release delays, daily blocker unblocking."
+    },
+    {
+      "name": "Gameplay & Systems Engineering",
+      "roles": ["Senior Gameplay Programmer", "AI / Physics Programmer", "UI/UX Developer"],
+      "focus": "Character controllers, combat mechanics, enemy state machines, inventory systems, and HUD animations.",
+      "targets": "85%+ unit test coverage on core math/logic, sub-16.6ms frame budget adherence, delivery within agreed ETAs."
+    },
+    {
+      "name": "Game QA & Automated Playtesting",
+      "roles": ["Game QA Lead", "Automation & Stress Playtester"],
+      "focus": "Collision clipping detection, multiplayer desync fuzzing, memory leak profiling, defect reporting, and build certification.",
+      "targets": "Zero critical progression-blocking bugs, detailed video/log reproduction tickets to management, release sign-off."
+    },
+    {
+      "name": "LiveOps & Backend Infrastructure",
+      "roles": ["LiveOps Lead", "Multiplayer Server Engineer"],
+      "focus": "Dedicated game server orchestration (Agones/Kubernetes), matchmaker scaling, in-game economy balancing, and hot-patching.",
+      "targets": "99.95% matchmaker uptime, sub-3s matchmaking queue time, seamless zero-downtime server migrations."
+    }
+  ],
+  "targets": {
+    "primarySla": "99.95% multiplayer server availability with locked 60 FPS on baseline target devices",
+    "qualityStandard": "Zero progression-blocking defects, sub-50ms multiplayer netcode latency, 85%+ core test coverage",
+    "sprintVelocity": "Bi-weekly playable build milestones with automated performance profiling graphs",
+    "etaDiscipline": "All gameplay mechanics and asset integrations require programmer ETA commitment before start; proactive producer follow-ups"
+  },
+  "workflows": {
+    "featureDevelopment": {
+      "title": "Gameplay Mechanic & Level Release Pipeline",
+      "steps": [
+        "1. Intake & Game Design Document: Feature mechanic or level concept defined by Creative Director and System Designers.",
+        "2. Triage & Technical Scoping: Lead Game Producer reviews performance budget, asset readiness, and approves ticket.",
+        "3. Programmer Assignment: Producer assigns the mechanic ticket to the designated gameplay or systems programmer via delegate_task.",
+        "4. Mandatory ETA Request: Producer requests a concrete Estimated Time of Arrival (ETA) before coding or scene setup begins.",
+        "5. ETA Commitment & Tracking: Programmer commits to an ETA, logged on the studio production schedule.",
+        "6. Active Follow-Ups: If prototype integration or netcode testing lags past the ETA, Producer intervenes, clears 3D asset dependencies, and keeps build milestone on track.",
+        "7. Implementation & Testing: Programmer writes modular code following ECS or Unreal/Unity conventions, runs automated unit and frame-rate tests.",
+        "8. Code Review: Technical Director reviews netcode serialization and memory allocation patterns.",
+        "9. Game QA Verification Gate: QA runs automated bot playtests and manual edge-case testing. If collision or desync is found, QA files defect report with repro coordinates; if passed, sign-off is granted.",
+        "10. Build Integration: LiveOps Lead packages the feature into the nightly staging playtest build."
+      ]
+    },
+    "bugTriageAndResolution": {
+      "title": "Crash, Physics Glitch, and Progression Bug Resolution Lifecycle",
+      "steps": [
+        "1. Defect Discovery: QA playtest, telemetry crash dump, or automated stress tester detects a memory leak, crash, or progression blocker.",
+        "2. QA Defect Report: QA logs an emergency ticket with save-state files, crash stack trace, frame capture, and exact repro steps submitted to Lead Producer.",
+        "3. Management Triage: Lead Producer assesses severity (P0 blocker halts studio build), alerts Creative Director, and dispatches to senior programmer.",
+        "4. Urgent ETA Request: Producer requests an emergency fix ETA (sub-1h target for build-blocking crashes).",
+        "5. Continuous Follow-Up: Producer tracks progress continuously; if ETA slips, mobilizes Technical Director to assist in memory profiling.",
+        "6. Fix Implementation: Programmer remedies memory leak or race condition, adds regression test, and verifies frame stability.",
+        "7. QA Re-Verification: QA loads the exact save-state, verifies zero crash occurrence, and approves the fix.",
+        "8. Build Update: Automated CI pipeline compiles a clean playtest executable."
+      ]
+    },
+    "initialProjectOnboarding": {
+      "title": "First-Time Game Codebase & Engine Pipeline Exploration Protocol",
+      "steps": [
+        "1. Technical Director Discovery: Explores repository structure, engine version, build target scripts, asset pipelines, and netcode protocols.",
+        "2. Architecture Memorization: TD commits verified engine architecture, memory budgets, and server endpoints into facts.md via manage_agent_memory.",
+        "3. Module Partitioning: TD divides game into Core Engine, Gameplay Logic, AI & Physics, UI, and Backend Services, delegating to Producers.",
+        "4. Managerial Decomposition: Lead Producer inspects scene hierarchies, records build procedures in procedural.md, and assigns tasks.",
+        "5. Programmer Deep-Dive: Programmers inspect assigned subsystems, verify local compiler/editor targets, and run automated smoke tests.",
+        "6. Universal Memory Commitment: All programmers record verified input mappings, network RPCs, and collision layer masks into facts.md and procedural.md."
+      ]
+    },
+    "leadershipRules": {
+      "title": "Strict Studio Leadership Fidelity & Separation of Concerns",
+      "rules": [
+        "Studio Heads and Technical Directors NEVER write gameplay code, sculpt 3D models, or edit scene prefabs directly.",
+        "Management coordinates milestone delivery, allocates resource budgets, demands explicit ETAs, tracks deliverables, and unblocks programmers.",
+        "When asked to write code, leadership explains the game studio hierarchy and immediately delegates downward using delegate_task."
+      ]
+    }
+  }
+}

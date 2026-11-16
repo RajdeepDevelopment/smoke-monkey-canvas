@@ -226,7 +226,11 @@ function formatFriendlyCronSchedule(schedule: string, nextRunAt?: string | null)
   return schedule;
 }
 
-export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
+interface AgentDrawerInnerProps extends Omit<AgentDrawerProps, 'agent'> {
+  agent: SpaceAgentEntity;
+}
+
+const AgentDrawerInner: React.FC<AgentDrawerInnerProps> = React.memo(({
   agent,
   liveEvents: liveEventsProp,
   canvasTheme,
@@ -235,8 +239,6 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
   onConfigureMcp,
   onClose,
 }) => {
-  if (!agent) return null;
-
   const storeLiveEvents = useSpaceStore((s) => s.liveEvents);
   const liveEvents = liveEventsProp ?? storeLiveEvents;
 
@@ -960,13 +962,14 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
               parts.push({ type: 'markdown', content: delta });
             }
           }
-        } else if (evt.eventType === 'cron.retry') {
+        } else if (evt.eventType === 'cron.retry' || evt.eventType === 'agent.retry') {
           const attempt = p.attempt ?? 1;
-          const maxRetries = p.maxRetries ?? 2;
-          const reason = p.reason || 'mark_cron_job_success was not called. Retrying task...';
+          const maxRetries = p.maxRetries ?? (evt.eventType === 'agent.retry' ? 10 : 2);
+          const delaySec = p.delaySeconds ? ` in ${p.delaySeconds}s` : '';
+          const reason = p.reason || (evt.eventType === 'cron.retry' ? 'mark_cron_job_success was not called. Retrying task...' : 'Execution interrupted. Retrying task...');
           parts.push({
             type: 'markdown',
-            content: `\n\n🔄 **Autonomous Retry ${attempt}/${maxRetries}**\n> ${reason}\n\n`,
+            content: `\n\n🔄 **Autonomous Retry ${attempt}/${maxRetries}${delaySec}**\n> ${reason}\n\n`,
           });
         } else if (evt.eventType === 'cron.success_marked') {
           parts.push({
@@ -1030,7 +1033,20 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
     const unsubscribe = useSpaceStore.getState().addWsListener((data: any) => {
       if (data?.type === 'active_runs_active' && Array.isArray(data.data)) {
         const runsList = (data.data as ActiveRunRecord[]).filter((r) => r.agentId === agent.id);
-        setActiveRuns(runsList);
+        setActiveRuns((prev) => {
+          if (prev.length !== runsList.length) return runsList;
+          const unchanged = prev.every((pr, i) => {
+            const nr = runsList[i];
+            return (
+              nr &&
+              pr.runId === nr.runId &&
+              pr.status === nr.status &&
+              pr.triggerType === nr.triggerType &&
+              pr.startedAt === nr.startedAt
+            );
+          });
+          return unchanged ? prev : runsList;
+        });
         if (runsList.length > 0) {
           setRunning(true);
         } else {
@@ -5041,3 +5057,8 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = React.memo(({
     </div>
   );
 });
+
+export const AgentDrawer: React.FC<AgentDrawerProps> = (props) => {
+  if (!props.agent) return null;
+  return <AgentDrawerInner {...props} agent={props.agent} />;
+};

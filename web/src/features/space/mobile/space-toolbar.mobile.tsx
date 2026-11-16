@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Maximize2, ShieldCheck, Sun, Moon, Check, Bot, LayoutGrid } from 'lucide-react';
+import { Plus, Maximize2, ShieldCheck, Sun, Moon, Check, Bot, LayoutGrid, Undo2, Redo2 } from 'lucide-react';
 import type { SpaceAgentEntity } from '../../agent/agent.types.js';
 import { type ThemeMode, THEMES } from '../space.toolbar.js';
 
@@ -11,6 +11,10 @@ interface SpaceToolbarMobileProps {
   onAddAgent: () => void;
   onFitView: () => void;
   onAutoArrange?: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 export const SpaceToolbarMobile: React.FC<SpaceToolbarMobileProps> = React.memo(({
@@ -21,6 +25,10 @@ export const SpaceToolbarMobile: React.FC<SpaceToolbarMobileProps> = React.memo(
   onAddAgent,
   onFitView,
   onAutoArrange,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
 }) => {
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const runningCount = agents.filter((a) => a.status === 'running').length;
@@ -98,7 +106,10 @@ export const SpaceToolbarMobile: React.FC<SpaceToolbarMobileProps> = React.memo(
                       setIsThemeMenuOpen(false);
                     }}
                   >
-                    <span>{t.icon} {t.name.replace(/^[^\s]+\s*/, '')}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <t.icon size={12} style={{ flexShrink: 0 }} />
+                      <span>{t.name}</span>
+                    </span>
                     {isActive && <Check size={12} />}
                   </button>
                 );
@@ -106,6 +117,36 @@ export const SpaceToolbarMobile: React.FC<SpaceToolbarMobileProps> = React.memo(
             </div>
           )}
         </div>
+
+        {/* Undo */}
+        {onUndo && (
+          <button
+            type="button"
+            className="mobile-tool-btn"
+            onClick={onUndo}
+            disabled={!canUndo}
+            style={{ opacity: canUndo ? 1 : 0.4, cursor: canUndo ? 'pointer' : 'not-allowed' }}
+            title="Undo (Ctrl+Z / ⌘Z)"
+            aria-label="Undo"
+          >
+            <Undo2 size={14} />
+          </button>
+        )}
+
+        {/* Redo */}
+        {onRedo && (
+          <button
+            type="button"
+            className="mobile-tool-btn"
+            onClick={onRedo}
+            disabled={!canRedo}
+            style={{ opacity: canRedo ? 1 : 0.4, cursor: canRedo ? 'pointer' : 'not-allowed' }}
+            title="Redo (Ctrl+Y / ⌘⇧Z)"
+            aria-label="Redo"
+          >
+            <Redo2 size={14} />
+          </button>
+        )}
 
         {/* Auto-Arrange */}
         {onAutoArrange && (

@@ -14,6 +14,15 @@ export interface StockMcp {
 
 export const STOCK_MCPS: StockMcp[] = [
   {
+    name: 'smoke-monkey-canvas',
+    label: 'Smoke Monkey Canvas Architecture',
+    category: 'Productivity',
+    description: 'Control, query, hire, modify, and architect multi-agent spaces, zones, agents, memories, credentials, and hierarchy in Smoke Monkey Canvas.',
+    command: 'node',
+    args: ['bin/canvas-mcp.js'],
+    envKeys: [],
+  },
+  {
     name: 'firecrawl-mcp',
     label: 'Firecrawl',
     category: 'Web & Scraping',

@@ -1,0 +1,101 @@
+{
+  "id": "company-freight-logistics",
+  "name": "Streamline Global Freight",
+  "category": "Logistics & Supply Chain",
+  "domain": "Freight Forwarding & Autonomous Logistics Dispatch",
+  "tagline": "Real-time container tracking, dynamic route optimization, automated customs brokerage, and fleet telematics.",
+  "operatingCadence": "24/7 continuous freight tracking with strict on-time delivery (OTD) SLAs, EDI compliance, and strict ETA tracking.",
+  "workAreas": [
+    {
+      "name": "Global Command & Carrier Operations",
+      "roles": ["Chief Operating Officer (COO)", "VP Supply Chain Logistics", "Head of Customs Brokerage"],
+      "focus": "Carrier master agreements, global freight corridors, customs tariffs, fuel index pricing, and carrier performance.",
+      "targets": ">98.5% on-time delivery rate, zero port demurrage penalties, 100% regulatory customs compliance."
+    },
+    {
+      "name": "Logistics Architecture & Routing Engines",
+      "roles": ["CTO", "Principal Logistics Architect"],
+      "focus": "Vehicle routing problem (VRP) algorithms, IoT telematics ingestion, EDI 204/214/210 translation pipelines, and initial network exploration.",
+      "targets": "Sub-500ms multi-stop route re-calculation, 99.99% IoT pipeline uptime, zero direct script execution by leadership."
+    },
+    {
+      "name": "Dispatch & Fleet Operations Management",
+      "roles": ["Fleet Dispatch Operations Manager", "Freight Operations Lead"],
+      "focus": "Daily route schedule approvals, driver/carrier allocation, exception triage, mandatory ETA tracking, and active follow-ups.",
+      "targets": "100% load allocation with agreed ETAs, zero stranded cargo incidents, proactive milestone tracking."
+    },
+    {
+      "name": "Telematics & Route Optimization Engineering",
+      "roles": ["Senior Logistics Engineer", "EDI / Integration Specialist", "Mobile Driver App Developer"],
+      "focus": "GPS stream processing, geofencing webhooks, electronic logging device (ELD) integrations, and automated proof-of-delivery.",
+      "targets": "85%+ unit test coverage, sub-2s geofence crossing event latency, delivery within agreed ETAs."
+    },
+    {
+      "name": "Logistics QA & EDI Verification",
+      "roles": ["Logistics QA Lead", "EDI & Telematics Validation Specialist"],
+      "focus": "EDI format compliance testing (ANSI X12), GPS dead-reckoning simulations, defect reporting, and release gating.",
+      "targets": "Zero EDI transaction rejections, 100% passing automated tracking test suites, detailed anomaly reports to management."
+    },
+    {
+      "name": "Edge Fleet Cloud & IoT Infrastructure",
+      "roles": ["IoT Infrastructure Lead", "Site Reliability Engineer"],
+      "focus": "MQTT message brokers, distributed Kafka event streams, vehicle telemetry ingestion, and offline mobile synchronization.",
+      "targets": "99.99% telematics streaming availability, sub-100ms MQTT ingest latency, automated failover."
+    }
+  ],
+  "targets": {
+    "primarySla": "99.99% tracking & EDI gateway availability with sub-500ms route optimization response times",
+    "qualityStandard": "Zero lost telemetry packets, 100% ANSI X12 EDI compliance, >98.5% on-time delivery SLA",
+    "sprintVelocity": "Bi-weekly dispatch platform releases with verified carrier test certificates",
+    "etaDiscipline": "All freight routing, tracking, and carrier integration tasks require engineer ETA commitment before start; proactive manager follow-ups"
+  },
+  "workflows": {
+    "featureDevelopment": {
+      "title": "Logistics Routing & Carrier Integration Pipeline",
+      "steps": [
+        "1. Intake & Corridor Scoping: Carrier integration or route algorithm requirement proposed by Supply Chain Leadership.",
+        "2. Triage & Technical Feasibility: Fleet Operations Manager reviews EDI requirements, verifies carrier API specifications, and approves ticket.",
+        "3. Engineer Assignment: Manager assigns the integration or optimization task to the designated logistics engineer via delegate_task.",
+        "4. Mandatory ETA Request: Manager requests a concrete Estimated Time of Arrival (ETA) before routing or mapping code is drafted.",
+        "5. ETA Commitment & Tracking: Engineer commits to an ETA, logged on the fleet operations dispatch board.",
+        "6. Active Follow-Ups: If carrier sandbox testing or telematics processing stalls past the ETA, Manager intervenes, resolves carrier credentials, and preserves launch timeline.",
+        "7. Implementation & Testing: Engineer writes modular code adhering to EDI/VRP standards, adds unit tests (85%+ coverage), and opens a PR.",
+        "8. Code Review: Principal Logistics Architect verifies algorithmic time-complexity and geofencing calculations.",
+        "9. Logistics QA Verification Gate: QA runs simulated carrier tracking journeys, verifying automated status updates. If EDI errors occur, QA reports to Manager; if verified, sign-off is granted.",
+        "10. Production Deployment: SRE Lead rolls out verified carrier connector to production Kafka streams."
+      ]
+    },
+    "bugTriageAndResolution": {
+      "title": "Freight Exception, Port Delay, and EDI Telematics Bug Resolution Lifecycle",
+      "steps": [
+        "1. Defect Discovery: Telematics alert flags a missing GPS stream, customs EDI transmission failure, or incorrect route calculation.",
+        "2. QA Defect Report: QA logs an emergency ticket with carrier ID, container numbers, raw EDI payload dumps, and error codes submitted to Fleet Manager.",
+        "3. Management Triage: Fleet Operations Manager assesses shipment delay risk, prioritizes defect as P0, and dispatches to senior integration engineer.",
+        "4. Urgent ETA Request: Manager requests an emergency fix ETA (sub-30min to prevent port demurrage fees).",
+        "5. Continuous Follow-Up: Manager monitors progress continuously; if ETA slips, escalates to VP Supply Chain.",
+        "6. Fix Implementation: Engineer resolves EDI parsing anomaly or GPS stream reconnect logic, adding automated regression tests.",
+        "7. QA Re-Verification: QA verifies successful EDI 214 delivery transmission with carrier test endpoints.",
+        "8. Production Patch Release: SRE deploys hotfix and confirms telemetry recovery across active fleet routes."
+      ]
+    },
+    "initialProjectOnboarding": {
+      "title": "First-Time Logistics Codebase & Telematics Network Exploration Protocol",
+      "steps": [
+        "1. CTO Architecture Discovery: Explores repository structure, route solvers, EDI translators, telematics ingest brokers, and carrier API adapters.",
+        "2. Architecture Memorization: CTO commits verified logistics architecture, carrier credentials, and corridor schemas into facts.md via manage_agent_memory.",
+        "3. Module Partitioning: CTO divides system into Route Optimization, Fleet Telematics, Customs Brokerage, and Carrier Integrations, delegating to Managers.",
+        "4. Managerial Decomposition: Fleet Operations Manager inspects module directories, records operational procedures in procedural.md, and assigns tasks.",
+        "5. Engineer Deep-Dive: Engineers inspect assigned subsystems, verify local mock EDI and GPS feeds, and run test suites.",
+        "6. Universal Memory Commitment: All engineers record verified carrier endpoint rules, geofence coordinate schemas, and customs tariff tables into facts.md and procedural.md."
+      ]
+    },
+    "leadershipRules": {
+      "title": "Strict Logistics Leadership Fidelity & Separation of Concerns",
+      "rules": [
+        "COO and CTO NEVER write routing code, edit container manifests, or configure broker keys directly.",
+        "Management coordinates carrier relations, allocates fleet resources, demands explicit ETAs, tracks deliverables, and unblocks engineers.",
+        "When asked to write code, leadership explains the global logistics hierarchy and immediately delegates downward using delegate_task."
+      ]
+    }
+  }
+}

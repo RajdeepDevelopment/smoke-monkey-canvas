@@ -37,6 +37,7 @@ import {
   mergeEffectivePolicies,
   resolveAgentWorkspace,
   commonRegistryPaths,
+  reconcileSystemPromptWithProfile,
 } from './agent.prompt.js';
 import { parsePolicies, type AgentMcpRecord, type AgentSkillRecord } from './agent.types.js';
 import { SpaceDb } from '../space/space.db.js';
@@ -156,7 +157,7 @@ export function createAgentRouter(): Router {
       const body = req.body || {};
       const id = body.id || `agent_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       const name = body.name || 'Specialist Agent';
-      const model = body.model || 'nvidia/nemotron-3-super-120b-a12b';
+      const model = body.model || 'nvidia/nemotron-3.5-lightning-30b-a3b';
       const provider = body.provider || 'nvidia';
       const systemPrompt =
         body.system_prompt ||
@@ -472,6 +473,9 @@ export function createAgentRouter(): Router {
 
     const peerAgents = db.getConnectedPeers(freshAgent.id);
     const teamWorkflow = buildAgentTeamWorkflowBlock(freshAgent.id, db, new SpaceDb());
+    const hasCanvasMcp = db
+      .getAgentMcps(freshAgent.id)
+      .some((m) => Boolean(m.enabled) && m.mcp_name.toLowerCase().includes('canvas'));
     const effectiveSystemPrompt = buildEffectiveSystemPrompt(freshAgent.system_prompt, {
       policyEntries: policies,
       disabledTools,
@@ -485,6 +489,7 @@ export function createAgentRouter(): Router {
       agentName: freshAgent.name,
       peerAgents,
       teamWorkflow,
+      hasCanvasMcp,
     });
 
     const automations = readAgentAutomations(ws);
@@ -942,10 +947,34 @@ export function createAgentRouter(): Router {
     if (body.description !== undefined) patch.description = typeof body.description === 'string' ? body.description : null;
     if (body.specialty !== undefined) patch.specialty = typeof body.specialty === 'string' ? body.specialty : null;
 
+    if (body.system_prompt === undefined && (body.role !== undefined || body.name !== undefined || body.description !== undefined || body.specialty !== undefined)) {
+      const currentAgent = db.getAgent(id);
+      if (currentAgent) {
+        patch.system_prompt = reconcileSystemPromptWithProfile(currentAgent.system_prompt, {
+          name: typeof body.name === 'string' ? body.name : currentAgent.name,
+          role: typeof body.role === 'string' ? body.role : currentAgent.role,
+          description: typeof body.description === 'string' ? body.description : currentAgent.description,
+          specialty: typeof body.specialty === 'string' ? body.specialty : currentAgent.specialty,
+        });
+      }
+    }
+
     const updated = db.updateAgent(id, patch);
     if (!updated) {
       res.status(404).json({ error: 'Agent not found' });
       return;
+    }
+
+    if (patch.system_prompt) {
+      try {
+        const workspace = resolveAgentWorkspace(updated);
+        const ws = ensureAgentWorkspace(workspace, updated.id, updated.name, updated.system_prompt);
+        if (ws.systemPromptFile) {
+          fs.writeFileSync(ws.systemPromptFile, `${patch.system_prompt}\n`, 'utf8');
+        }
+      } catch (e) {
+        console.warn(`[agent.server] Could not write systemPromptFile for ${id}:`, e);
+      }
     }
     CoreWsServer.getInstance().broadcast({
       type: 'agent_updated',
@@ -1184,7 +1213,7 @@ export function createAgentRouter(): Router {
   router.delete('/:id/skills/:skillId', (req: Request, res: Response) => {
     const agentId = getParam(req.params.id);
     const skillId = getParam(req.params.skillId);
-    db.deleteAgentSkill(skillId);
+    db.deleteAgentSkill(skillId, agentId);
     try {
       const agent = db.getAgent(agentId);
       if (agent) {

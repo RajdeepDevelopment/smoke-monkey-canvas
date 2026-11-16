@@ -1,4 +1,5 @@
 import type { CompanyPreset, CompanyScale } from '../library.types.js';
+import { getCompanyWorkflowFields } from './company-workflows/index.js';
 
 export interface PlacedCompanyZone {
   id: string;
@@ -101,8 +102,8 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
             name: 'Engineering Architecture',
             level: 1,
             parentId: 'apex-sm-ceo',
-            responsibilities: 'Core system architecture, tech stack selection, and scalability.',
-            workflowInstructions: 'Review technical designs and unblock developers.',
+            responsibilities: 'Deeply ingest project files & PRDs, partition system module/feature-wise, commit architecture across memory matrix, configure specializations and memory files for lower layers, and govern tech stack standards.',
+            workflowInstructions: '1. Ingest repository code and requirements docs; understand system deeply.\n2. Divide project into modules, commit architecture across memory matrix via manage_agent_memory.\n3. Specialize subordinate profiles (update_agent_profile), attach tools (attach_skill/attach_mcp), and seed their multi-dimensional memory.\n4. Define tier responsibilities and delegate coding downward.',
             color: '#3b82f6',
             width: 280,
             height: 150
@@ -177,8 +178,8 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
             name: 'Technology Office',
             level: 1,
             parentId: 'apex-md-ceo',
-            responsibilities: 'Engineering architecture, tech stack standards, and R&D.',
-            workflowInstructions: 'Oversee Engineering Manager, DevOps Lead, and QA Manager.',
+            responsibilities: 'Deeply ingest repository & PRDs, modular system decomposition, cascading memory configuration, agent specialization, API contracts, and engineering governance.',
+            workflowInstructions: '1. Ingest project files and requirements; learn codebase and tech stack.\n2. Deconstruct into modules/features, commit topology across 10 memory dimensions via manage_agent_memory.\n3. Specialize subordinate profiles (update_agent_profile), attach tools (attach_skill/attach_mcp), and seed feature-wise memory files for Engineering Managers and Developers.\n4. Define clear tier responsibilities (Managers track ETAs; Leads enforce 85%+ tests; Devs build & test) and delegate coding downward.',
             color: '#3b82f6',
             width: 300,
             height: 155
@@ -294,7 +295,7 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
         },
         zones: [
           { id: 'apex-lg-ceo', roleTitle: 'CEO', name: 'Executive Suite', level: 0, parentId: null, color: '#a855f7', width: 320, height: 160, responsibilities: 'Global enterprise direction, investor relations, and capital strategy.' },
-          { id: 'apex-lg-cto', roleTitle: 'CTO', name: 'Chief Technology Office', level: 1, parentId: 'apex-lg-ceo', color: '#3b82f6', width: 300, height: 160, responsibilities: 'Global technology vision, architecture council, and patents.' },
+          { id: 'apex-lg-cto', roleTitle: 'CTO', name: 'Chief Technology Office', level: 1, parentId: 'apex-lg-ceo', color: '#3b82f6', width: 300, height: 160, responsibilities: 'Global architecture, repository & PRD ingestion, modular breakdown, cascading memory configuration, and zero-coding leadership governance.' },
           { id: 'apex-lg-coo', roleTitle: 'COO', name: 'Chief Operating Office', level: 1, parentId: 'apex-lg-ceo', color: '#10b981', width: 300, height: 160, responsibilities: 'Enterprise operations, supply, procurement, and HR.' },
           { id: 'apex-lg-cfo', roleTitle: 'CFO', name: 'Financial Governance', level: 1, parentId: 'apex-lg-ceo', color: '#f59e0b', width: 300, height: 160, responsibilities: 'Runway, cloud cost auditing, and corporate finance.' },
           { id: 'apex-lg-vpeng', roleTitle: 'VP of Engineering', name: 'VP Engineering Division', level: 2, parentId: 'apex-lg-cto', color: '#3b82f6', width: 320, height: 160, responsibilities: 'Global engineering operations, headcount, and squad alignment.' },
@@ -1558,6 +1559,19 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
   }
 ];
 
+// Hydrate all company presets with their dedicated, comprehensive workflow JSONs
+for (const company of COMPANY_PRESETS) {
+  const wf = getCompanyWorkflowFields(company.id);
+  for (const scaleKey of ['small', 'mid', 'large'] as const) {
+    const scale = company.scales[scaleKey];
+    if (scale && scale.space) {
+      scale.space.workflowPrompt = wf.workflowPrompt;
+      scale.space.workflowInstructions = wf.workflowInstructions;
+      scale.space.responsibilities = wf.responsibilities;
+    }
+  }
+}
+
 /**
  * Calculates a structured hierarchical layout for a company preset at the given scale,
  * positioning all zones and placing assigned agents inside their corresponding zones.
@@ -1784,9 +1798,14 @@ export function layoutCompany(
     });
   }
 
+  const companyWf = getCompanyWorkflowFields(company.id);
+
   return {
     space: {
       ...spaceConfig,
+      workflowPrompt: companyWf.workflowPrompt || spaceConfig.workflowPrompt,
+      workflowInstructions: companyWf.workflowInstructions || spaceConfig.workflowInstructions,
+      responsibilities: companyWf.responsibilities || spaceConfig.responsibilities,
       width: requiredWidth,
       height: requiredHeight,
     },

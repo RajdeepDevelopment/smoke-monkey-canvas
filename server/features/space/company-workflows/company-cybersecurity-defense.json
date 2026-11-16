@@ -1,0 +1,101 @@
+{
+  "id": "company-cybersecurity-defense",
+  "name": "Ironclad Cyber Defense",
+  "category": "Cybersecurity",
+  "domain": "SOC Operations & Threat Intelligence",
+  "tagline": "24/7 Security Operations Center, autonomous threat hunting, and Zero Trust infrastructure defense.",
+  "operatingCadence": "24/7 continuous threat monitoring with sub-15 minute incident response SLAs, MITRE ATT&CK coverage, and strict ETA tracking.",
+  "workAreas": [
+    {
+      "name": "Command & Security Strategy",
+      "roles": ["CISO", "Director of Incident Response"],
+      "focus": "Enterprise security postures, compliance mandates (SOC 2, ISO 27001), incident escalations, and executive risk briefings.",
+      "targets": "Zero uncontained enterprise breaches, 100% compliance audit readiness, published executive threat briefs."
+    },
+    {
+      "name": "Security Architecture & Cryptography",
+      "roles": ["Chief Security Architect", "Principal Cryptographer"],
+      "focus": "Zero Trust network architecture, IAM policies, air-gapped PKI, SIEM detection rules, and initial attack surface exploration.",
+      "targets": "100% Zero Trust posture, sub-50ms token verification, zero direct implementation by command leadership."
+    },
+    {
+      "name": "SOC Management & Threat Operations",
+      "roles": ["SOC Operations Manager", "Lead Incident Commander"],
+      "focus": "Shift scheduling, alert triage queues, incident severity classification, analyst task delegation, mandatory ETA tracking, and active follow-ups.",
+      "targets": "Sub-5min Mean Time to Detect (MTTD), 100% containment within SLA, zero unmonitored ticket slippage."
+    },
+    {
+      "name": "Security Engineering & Threat Hunting",
+      "roles": ["Senior Security Engineer", "Threat Hunter", "Malware Reverse Engineer"],
+      "focus": "YARA/Sigma detection rule writing, firewall automation, reverse engineering payloads, and honeytoken deployment.",
+      "targets": "85%+ unit coverage on detection scripts, verified IOC attribution, delivery within agreed ETAs."
+    },
+    {
+      "name": "Red Team & Vulnerability Assessment QA",
+      "roles": ["Red Team Lead", "Penetration Tester"],
+      "focus": "Automated attack simulation, black-box penetration testing, CVE vulnerability discovery, defect reporting, and security release gating.",
+      "targets": "100% critical CVE remediation verification, detailed PoC exploitation reports to management, release sign-off."
+    },
+    {
+      "name": "SecOps & Cloud Hardening",
+      "roles": ["SecOps Lead", "Cloud Hardening Engineer"],
+      "focus": "Kubernetes pod security policies, automated patch management, immutable audit logs, and bastion host governance.",
+      "targets": "Zero misconfigured S3 buckets, automated vulnerability patching within 24h of disclosure, 99.99% SIEM telemetry uptime."
+    }
+  ],
+  "targets": {
+    "primarySla": "Sub-5min MTTD, sub-15min MTTR for critical alerts, 99.99% SIEM pipeline availability",
+    "qualityStandard": "100% of MITRE ATT&CK enterprise techniques covered with verified YARA/Sigma detection rules",
+    "sprintVelocity": "Weekly detection engineering releases with zero false-positive regressions and verified rule tests",
+    "etaDiscipline": "All containment and detection tasks require analyst ETA commitment before initiation; proactive manager follow-ups"
+  },
+  "workflows": {
+    "featureDevelopment": {
+      "title": "Security Tooling & Detection Engineering Pipeline",
+      "steps": [
+        "1. Intake & Threat Modeling: Requirement originates from CISO threat briefings, new CVE disclosures, or MITRE gap analyses.",
+        "2. Triage & Scoping: SOC Operations Manager assesses defensive priority, verifies telemetry sources, and approves ticket.",
+        "3. Analyst Assignment: Manager assigns the detection rule or automation script to the designated security engineer via delegate_task.",
+        "4. Mandatory ETA Request: Manager requests a concrete Estimated Time of Arrival (ETA) before detection scripting begins.",
+        "5. ETA Commitment & Tracking: Security Engineer commits to a specific ETA, logged onto the SOC command board.",
+        "6. Active Follow-Ups: If detection rules or telemetry ingestion lag behind the ETA, Manager intervenes, clears SIEM access barriers, and accelerates completion.",
+        "7. Implementation & Testing: Engineer writes modular Sigma/YARA rules, accompanies changes with synthetic attack tests, and opens a PR.",
+        "8. Peer Review: Lead Security Architect reviews rule syntax and checks for potential false-positive noise.",
+        "9. Red Team QA Verification Gate: Red Team executes atomic tests simulating the adversary technique. If rule fails to fire, Red Team reports back to Manager with PCAP traces; if successful, sign-off is granted.",
+        "10. Production Deployment: SecOps Lead pushes rule to SIEM/EDR endpoints and activates automated containment webhooks."
+      ]
+    },
+    "bugTriageAndResolution": {
+      "title": "Vulnerability Discovery, Incident Triage, and Containment Lifecycle",
+      "steps": [
+        "1. Incident Discovery: Red team audit, internal scanner, or external telemetry flags an active vulnerability or IOC breach.",
+        "2. QA Vulnerability Report: Security analyst files an emergency incident ticket detailing affected host, CVSS score, PoC exploit, and containment recommendations submitted to SOC Manager.",
+        "3. Management Triage: SOC Operations Manager assesses blast radius, declares incident severity, and dispatches to SecOps/Engineering leads.",
+        "4. Urgent ETA Request: Manager demands an immediate containment ETA (sub-15 minute target).",
+        "5. Continuous Follow-Up: Manager monitors containment progress minute-by-minute; if ETA slips, escalates to CISO and deploys emergency isolation.",
+        "6. Remediation Implementation: Engineers revoke compromised credentials, isolate affected containers, and patch root vulnerabilities.",
+        "7. Re-Testing Verification: Red Team re-runs exploit against the patched endpoint to verify complete mitigation.",
+        "8. Post-Mortem Rollout: Manager records lessons learned into facts.md/procedural.md and closes the security incident."
+      ]
+    },
+    "initialProjectOnboarding": {
+      "title": "First-Time Security Codebase & Attack Surface Exploration Protocol",
+      "steps": [
+        "1. CISO Architecture Discovery: CISO explores repository topology, authentication mechanisms, API routes, dependency trees, and network egress rules.",
+        "2. Threat Surface Memorization: CISO records critical attack surfaces, credential locations, and IAM trust boundaries into facts.md via manage_agent_memory.",
+        "3. Module Partitioning: CISO breaks defense into Auth, Network Security, Detection Rules, and CI/CD Security, delegating to Managers.",
+        "4. Managerial Decomposition: SOC Operations Manager inspects firewall configurations and procedures, recording them in procedural.md.",
+        "5. Specialist Deep-Dive: Security engineers inspect assigned scripts, run static analysis (Semgrep, Trivy), and verify log ingestion pipelines.",
+        "6. Universal Memory Commitment: All analysts record verified IOCs, CVE patches, and remediation recipes into facts.md and procedural.md."
+      ]
+    },
+    "leadershipRules": {
+      "title": "Strict Security Command Leadership Fidelity & Separation of Concerns",
+      "rules": [
+        "CISO and SOC Operations Managers NEVER write detection scripts, edit firewall rules, or perform hands-on remediation directly.",
+        "Command leadership orchestrates threat response, enforces containment ETAs, coordinates legal/compliance, and manages team execution.",
+        "When asked to write code, command leadership explains the cybersecurity chain of command and immediately delegates downward using delegate_task."
+      ]
+    }
+  }
+}

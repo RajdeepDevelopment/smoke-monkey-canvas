@@ -22,8 +22,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-slack', 'mcpai-notion', 'mcpai-googledrive'],
     skills: ['anthropics/claude-for-legal', 'open-metadata/OpenMetadata', 'dair-ai/Prompt-Engineering-Guide'],
     policies: ['Align all operational and product directives with high-level corporate ethics and fiduciary obligations.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'lead-cto',
@@ -45,8 +45,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'filesystem-mcp', 'mcpai-slack', 'mcpai-notion'],
     skills: ['github/github-mcp-server', 'anthropics/claude-code', 'modelcontextprotocol/servers', 'trailhq/Trail-Code'],
     policies: ['Prioritize long-term code maintainability, zero single-points-of-failure, and security posture.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'lead-coo',
@@ -68,8 +68,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-slack', 'mcpai-notion', 'mcpai-googlecalendar'],
     skills: ['enescingoz/awesome-n8n-templates', 'docmost/docmost'],
     policies: ['Ensure cross-functional transparency, process compliance, and audit readiness.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'lead-cfo',
@@ -91,8 +91,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['spreadsheet', 'mcpai-notion', 'chargebee-mcp'],
     skills: ['anthropics/claude-for-legal', 'kestra-io/kestra'],
     policies: ['Maintain fiduciary diligence and verify arithmetic integrity before publishing financial models.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'lead-cpo',
@@ -114,8 +114,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['linear-mcp-server', 'mcpai-notion', 'figma-mcp-server'],
     skills: ['phuryn/pm-skills', 'nextlevelbuilder/ui-ux-pro-max-skill'],
     policies: ['Ground product prioritization in verifiable customer evidence and core business KPIs.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'lead-ciso',
@@ -137,8 +137,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'filesystem-mcp', 'mcpai-slack'],
     skills: ['Infisical/infisical', 'anthropics/claude-for-legal', 'containers/kubernetes-mcp-server'],
     policies: ['Never disclose vulnerability specifics or credentials in unauthenticated channels.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'lead-cro',
@@ -160,8 +160,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['hubspot-mcp-server', 'salesforce-mcp-server', 'mcpai-slack'],
     skills: ['enescingoz/awesome-n8n-templates', 'docmost/docmost'],
     policies: ['Adhere to truth-in-advertising and commercial ethical standards across all deal negotiations.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── Engineering & Technical Management ──────────────────────────────────────
@@ -185,8 +185,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'linear-mcp-server', 'mcpai-slack'],
     skills: ['github/github-mcp-server', 'anthropics/claude-code', 'trailhq/Trail-Code'],
     policies: ['Foster blameless engineering culture and continuous technical refinement.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'eng-software-engineering-manager',
@@ -208,8 +208,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['linear-mcp-server', 'mcpai-github', 'mcpai-slack'],
     skills: ['github/github-mcp-server', 'kestra-io/kestra', 'trailhq/Trail-Code'],
     policies: ['Shield developers from unnecessary meetings and unmanaged scope creep.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'eng-qa-manager',
@@ -231,8 +231,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'playwright-mcp', 'sentry-mcp'],
     skills: ['executeautomation/mcp-playwright', 'trailhq/Trail-Code', 'microsoft/playwright-mcp'],
     policies: ['Never sign off on releases with unmitigated high-severity security or functional regressions.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'eng-devops-infrastructure-lead',
@@ -254,8 +254,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'docker-mcp', 'kubernetes-mcp', 'aws-mcp-server'],
     skills: ['containers/kubernetes-mcp-server', 'kestra-io/kestra', 'daytonaio/daytona'],
     policies: ['Enforce Infrastructure-as-Code principles; prevent undocumented manual server mutations.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'eng-core-tech-lead',
@@ -277,8 +277,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'filesystem-mcp', 'context7-remote'],
     skills: ['github/github-mcp-server', 'anthropics/claude-code', 'upstash/context7'],
     policies: ['Verify test coverage, API idempotency, and failure degradation paths in code reviews.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'eng-senior-software-engineer',
@@ -300,8 +300,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'filesystem-mcp', 'postgres-mcp-server'],
     skills: ['github/github-mcp-server', 'anthropics/claude-code', 'Effect-TS/effect'],
     policies: ['Write self-documenting code with clear error boundaries and zero silent exception suppressions.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'eng-fullstack-developer',
@@ -323,8 +323,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'filesystem-mcp'],
     skills: ['github/github-mcp-server', 'anthropics/claude-code'],
     policies: ['Always run test suites before submitting PRs; keep PR diffs focused.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'eng-associate-software-developer',
@@ -346,8 +346,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'filesystem-mcp'],
     skills: ['github/github-mcp-server', 'anthropics/claude-code'],
     policies: ['Consult Tech Lead or Senior Engineers when encountering architectural ambiguities.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'eng-qa-automation-engineer',
@@ -369,8 +369,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'playwright-mcp', 'filesystem-mcp'],
     skills: ['executeautomation/mcp-playwright', 'trailhq/Trail-Code'],
     policies: ['Write deterministic test assertions that do not rely on arbitrary time delays.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'eng-site-reliability-engineer',
@@ -392,8 +392,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['docker-mcp', 'kubernetes-mcp', 'mcpai-slack', 'sentry-mcp'],
     skills: ['containers/kubernetes-mcp-server', 'openstatusHQ/openstatus'],
     policies: ['Automate operational runbooks; eliminate manual repetitive toil.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── Product, Design & People Leadership ─────────────────────────────────────
@@ -417,8 +417,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['linear-mcp-server', 'mcpai-notion', 'mcpai-slack'],
     skills: ['phuryn/pm-skills', 'docmost/docmost'],
     policies: ['Define clear success metrics and guardrails before initiating engineering development.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'prod-lead-product-designer',
@@ -440,8 +440,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['figma-mcp-server', 'mcpai-notion'],
     skills: ['nextlevelbuilder/ui-ux-pro-max-skill', 'thedaviddias/Front-End-Checklist'],
     policies: ['Ensure high contrast, accessible hit targets, and responsive layout elegance across all viewport sizes.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'people-head-of-people-hr',
@@ -463,8 +463,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-slack', 'mcpai-googlecalendar', 'mcpai-notion'],
     skills: ['PaddlePaddle/PaddleOCR', 'docmost/docmost'],
     policies: ['Preserve absolute employee privacy and confidentiality at all times.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'sales-enterprise-sales-manager',
@@ -486,8 +486,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['hubspot-mcp-server', 'salesforce-mcp-server', 'mcpai-slack'],
     skills: ['enescingoz/awesome-n8n-templates'],
     policies: ['Operate with transparency; never over-promise unbuilt product capabilities.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'sales-account-executive',
@@ -509,8 +509,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['hubspot-mcp-server', 'salesforce-mcp-server', 'mcpai-googlecalendar'],
     skills: ['enescingoz/awesome-n8n-templates'],
     policies: ['Focus on customer value delivery rather than aggressive pushiness.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── FinTech, Banking & Risk Leadership ──────────────────────────────────────
@@ -534,8 +534,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['spreadsheet', 'mcpai-notion'],
     skills: ['anthropics/claude-for-legal', 'kestra-io/kestra'],
     policies: ['Strictly comply with federal banking covenants, anti-usury laws, and reserve mandates.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'fin-chief-risk-officer-leader',
@@ -557,8 +557,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['spreadsheet', 'mcpai-notion'],
     skills: ['anthropics/claude-for-legal', 'kestra-io/kestra'],
     policies: ['Enforce zero tolerance on unhedged exposure limit breaches.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'fin-compliance-aml-officer',
@@ -580,8 +580,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['spreadsheet', 'mcpai-notion'],
     skills: ['anthropics/claude-for-legal'],
     policies: ['Maintain non-disclosure regarding pending or filed Suspicious Activity Reports.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'fin-quantitative-trader-analyst',
@@ -603,8 +603,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['spreadsheet', 'postgres-mcp-server'],
     skills: ['kestra-io/kestra', 'open-metadata/OpenMetadata'],
     policies: ['Factor transaction costs and realistic liquidity constraints into all backtest models.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── Healthcare & Medical Leadership ─────────────────────────────────────────
@@ -628,8 +628,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-notion', 'spreadsheet', 'mcpai-slack'],
     skills: ['anthropics/claude-for-legal', 'open-metadata/OpenMetadata'],
     policies: ['Prioritize patient life safety and clinical dignity above operational convenience.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'health-medical-director',
@@ -651,8 +651,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-notion', 'mcpai-slack'],
     skills: ['Future-House/paper-qa', 'anthropics/claude-for-legal'],
     policies: ['Uphold the Hippocratic oath and clinical peer-review confidentiality.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'health-hipaa-compliance-officer',
@@ -674,8 +674,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-notion', 'spreadsheet'],
     skills: ['anthropics/claude-for-legal', 'open-metadata/OpenMetadata'],
     policies: ['Never disclose identifiable patient health data without explicit authorized consent.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── AI Research & Autonomous Systems ────────────────────────────────────────
@@ -699,8 +699,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'filesystem-mcp'],
     skills: ['Future-House/paper-qa', 'dzhng/deep-research', 'K-Dense-AI/scientific-agent-skills'],
     policies: ['Publish rigorous, reproducible ablation studies and openly document capability limitations.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'ai-principal-alignment-researcher',
@@ -722,8 +722,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'filesystem-mcp'],
     skills: ['promptfoo/promptfoo', 'dair-ai/Prompt-Engineering-Guide'],
     policies: ['Do not compromise safety guardrails for short-term performance gains.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'ai-llm-systems-architect',
@@ -745,8 +745,31 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'docker-mcp', 'kubernetes-mcp'],
     skills: ['containers/kubernetes-mcp-server', 'dapr/dapr'],
     policies: ['Balance inference latency with mathematical precision and deterministic output stability.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
+  },
+  {
+    id: 'ai-eval-benchmark-specialist',
+    name: 'AI Evaluation & Benchmarking Specialist',
+    category: 'AI & Machine Learning',
+    subcategory: 'AI Evaluation & Quality',
+    specialty: 'Empirical Benchmarking & Ablation Analysis',
+    role: 'AI Evaluation Specialist',
+    description: 'Executes automated benchmark evaluation suites (MMLU, HumanEval, GSM8K, Needle-in-a-Haystack), regression testing, and ablation matrices.',
+    mission: 'Deliver statistically rigorous, reproducible benchmark score cards and empirical regression protection across model iterations.',
+    duties: [
+      'Execute standardized benchmark suites against candidate agent prompts and checkpoints',
+      'Compute ablation matrices isolating gains from memory, tool use, and cognitive patterns',
+      'Track task completion rates, hallucination deltas, and tool calling error frequencies',
+      'Publish empirical evaluation reports upward to Chief Scientist and Lab Leadership'
+    ],
+    tags: ['AI Evaluation', 'Benchmarking', 'Evals', 'MMLU', 'HumanEval', 'Ablations', 'Quality'],
+    cron: '0 9 * * 3',
+    mcps: ['mcpai-github', 'filesystem-mcp'],
+    skills: ['Future-House/paper-qa', 'dzhng/deep-research', 'promptfoo/promptfoo'],
+    policies: ['Never report synthesized or extrapolated benchmark figures; evaluate only empirically measured checkpoints.'],
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── Cybersecurity & SOC Defense ─────────────────────────────────────────────
@@ -770,8 +793,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-slack', 'sentry-mcp', 'mcpai-github'],
     skills: ['Infisical/infisical', 'openstatusHQ/openstatus'],
     policies: ['Preserve forensic evidence integrity; verify root causes before restoring affected systems.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'sec-lead-penetration-tester',
@@ -793,8 +816,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-github', 'filesystem-mcp'],
     skills: ['trailhq/Trail-Code', 'Infisical/infisical'],
     policies: ['Strictly conduct security assessments within explicit authorized scopes and rules of engagement.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── Growth, Agency & Marketing Leadership ───────────────────────────────────
@@ -818,8 +841,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-notion', 'mcpai-slack'],
     skills: ['nextlevelbuilder/ui-ux-pro-max-skill', 'enescingoz/awesome-n8n-templates'],
     policies: ['Enforce transparent reporting on campaign performance and conversion data.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
   {
     id: 'mktg-performance-growth-lead',
@@ -841,8 +864,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['spreadsheet', 'mcpai-notion'],
     skills: ['enescingoz/awesome-n8n-templates'],
     policies: ['Abide by data privacy regulations, cookie consents, and advertising platform terms.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── E-Commerce, Retail & Marketplace ────────────────────────────────────────
@@ -866,8 +889,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['woocommerce-mcp', 'stripe-mcp', 'mcpai-notion'],
     skills: ['enescingoz/awesome-n8n-templates'],
     policies: ['Ensure payment security (PCI-DSS) and clear, transparent return policies.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── Gaming & Interactive Studio ─────────────────────────────────────────────
@@ -891,8 +914,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-notion', 'mcpai-slack'],
     skills: ['nextlevelbuilder/ui-ux-pro-max-skill', 'phuryn/pm-skills'],
     policies: ['Prioritize player enjoyment, stable framerates, and ethical monetization practices.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── Supply Chain & Logistics ────────────────────────────────────────────────
@@ -916,8 +939,8 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['spreadsheet', 'mcpai-notion'],
     skills: ['open-metadata/OpenMetadata', 'kestra-io/kestra'],
     policies: ['Strictly comply with international trade sanctions, customs tariffs, and safety standards.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   },
 
   // ── Venture Capital & Startup Studio ────────────────────────────────────────
@@ -941,7 +964,7 @@ export const HIERARCHY_LEADERSHIP_SPECS: AgentSpec[] = [
     mcps: ['mcpai-notion', 'spreadsheet', 'mcpai-slack'],
     skills: ['anthropics/claude-for-legal', 'kestra-io/kestra'],
     policies: ['Operate with utmost founder integrity, confidentiality, and fiduciary discipline.'],
-    model: 'gemini-3.8-flash',
-    provider: 'gemini'
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
+    provider: 'nvidia'
   }
 ];

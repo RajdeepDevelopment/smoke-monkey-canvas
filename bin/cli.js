@@ -51,6 +51,21 @@ let isLogs = false;
 let isLogsFollow = false;
 let isOpen = false;
 
+// If invoking MCP server subcommand, immediately forward to canvas-mcp runner
+if (args[0] === 'mcp') {
+  const mcpRunner = join(__dirname, 'canvas-mcp.js');
+  const forwarded = args.slice(1);
+  const child = spawn(process.execPath, [mcpRunner, ...forwarded], {
+    stdio: 'inherit',
+    cwd: rootDir,
+    env: process.env,
+  });
+  child.on('exit', (code) => process.exit(code ?? 0));
+  // Keep alive until child exits
+  process.on('SIGINT', () => { if (!child.killed) child.kill('SIGINT'); });
+  process.on('SIGTERM', () => { if (!child.killed) child.kill('SIGTERM'); });
+} else {
+
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
   if (arg === '--help' || arg === '-h' || arg === 'help') {
@@ -359,6 +374,7 @@ serverProc.on('exit', (code) => {
   releasePidFile(process.pid);
   process.exit(code ?? 0);
 });
+} // end of non-mcp runner block
 
 // ── Help Documentation ───────────────────────────────────────────────────────
 
@@ -379,10 +395,12 @@ Commands:
   status                    Check status, port, PID, and logs
   logs [-f]                 View or follow background daemon logs
   open                      Open the Web UI in your default browser
+  mcp                       Run the Model Context Protocol (MCP) server over stdio
 
 Options:
   -p, --port <number>       Port to run the Canvas server on (default: 3333)
   --db <path>               SQLite database file path (default: ~/.smoke-monkey/canvas.db)
+  --space-id <id>           Default space/company ID for scoped operations in MCP mode
   -d, --daemon              Run server continuously in background (daemon mode)
   -n, --no-open             Do not automatically open the browser on start
   -v, --version             Show version number
@@ -393,6 +411,8 @@ Examples:
   smoke-monkey status                        # Check status & active port/PID
   smoke-monkey logs -f                       # Follow live daemon logs
   smoke-monkey stop                          # Cleanly shut down background daemon
-  npx @smoke-monkey/canvas                   # Instant launch via npx
+  smoke-monkey mcp                           # Run Canvas MCP server in global mode
+  smoke-monkey mcp --space-id <spaceId>      # Run Canvas MCP server scoped to a company
+  npx @smoke-monkey/canvas mcp               # Run Canvas MCP server directly via NPX
 `);
 }
