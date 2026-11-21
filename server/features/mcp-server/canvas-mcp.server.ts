@@ -23,6 +23,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { CoreDatabase } from '../core/database.db.js';
 import { SpaceDb } from '../space/space.db.js';
@@ -64,7 +65,43 @@ export function setConfiguredSpaceId(id: string | null): void {
   configuredSpaceId = id;
 }
 
+/**
+ * Per-call space scope, used when many agents across different spaces share
+ * one long-lived process (the bridged custom-tools path in
+ * agent.custom-tools.ts, where the main HTTP server calls
+ * CanvasMcpServer.getInstance().executeTool() in-process for every agent).
+ *
+ * setConfiguredSpaceId() above is a single module-wide value with none of
+ * AsyncLocalStorage's properties: it's never reset, so a call that resolves
+ * no target space (no membership, no space_id argument) silently inherits
+ * whatever space the previous, unrelated call last set; and executeTool()
+ * awaits network/DB calls partway through, so two concurrent calls for
+ * different spaces can interleave and overwrite each other's scope mid-call.
+ * AsyncLocalStorage's context follows each call's own async execution chain
+ * through every await, isolated from other concurrent calls, and reverts
+ * automatically (to undefined, not to a leftover value) once that call's
+ * run() callback returns. See #13.
+ *
+ * Not used by the standalone stdio JSON-RPC server (the `for await` loop
+ * near the bottom of this file): that path is one process per `--space-id`
+ * launch, so the module-wide configuredSpaceId set once at startup already
+ * has no cross-space sharing to race.
+ */
+const scopedSpaceIdStorage = new AsyncLocalStorage<string | null>();
+
+/**
+ * Runs `fn` with `spaceId` as the effective scope for every
+ * getConfiguredSpaceId() call made during its execution (including in
+ * whatever it awaits), without touching the module-wide configuredSpaceId
+ * other callers may depend on. See scopedSpaceIdStorage above.
+ */
+export function runWithScopedSpaceId<T>(spaceId: string | null, fn: () => Promise<T>): Promise<T> {
+  return scopedSpaceIdStorage.run(spaceId, fn);
+}
+
 export function getConfiguredSpaceId(): string | null {
+  const scoped = scopedSpaceIdStorage.getStore();
+  if (scoped !== undefined) return scoped;
   return configuredSpaceId || process.env.CANVAS_SPACE_ID || process.env.SPACE_ID || null;
 }
 
@@ -1145,16 +1182,16 @@ export class CanvasMcpServer {
             if (uri === 'canvas://spaces') {
               contentsText = JSON.stringify(spaceDb.getWorkspaceSpaces(), null, 2);
             } else if (uri === 'canvas://zones') {
-              contentsText = JSON.stringify(spaceDb.getZones(configuredSpaceId), null, 2);
+              contentsText = JSON.stringify(spaceDb.getZones(getConfiguredSpaceId()), null, 2);
             } else if (uri === 'canvas://agents') {
               contentsText = JSON.stringify(agentDb.getAllAgents(), null, 2);
             } else if (uri === 'canvas://status') {
               const spaces = spaceDb.getWorkspaceSpaces();
-              const zones = spaceDb.getZones(configuredSpaceId);
+              const zones = spaceDb.getZones(getConfiguredSpaceId());
               const agents = agentDb.getAllAgents();
               contentsText = JSON.stringify(
                 {
-                  scopedSpaceId: configuredSpaceId,
+                  scopedSpaceId: getConfiguredSpaceId(),
                   totalSpaces: spaces.length,
                   totalZones: zones.length,
                   totalAgents: agents.length,
@@ -1286,9 +1323,9 @@ export class CanvasMcpServer {
         }
 
         case 'canvas_create_space': {
-          if (configuredSpaceId) {
+          if (getConfiguredSpaceId()) {
             return {
-              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${configuredSpaceId}" cannot create new spaces.` }],
+              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${getConfiguredSpaceId()}" cannot create new spaces.` }],
               isError: true,
             };
           }
@@ -1363,9 +1400,9 @@ export class CanvasMcpServer {
         }
 
         case 'canvas_delete_space': {
-          if (configuredSpaceId) {
+          if (getConfiguredSpaceId()) {
             return {
-              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${configuredSpaceId}" cannot delete spaces.` }],
+              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${getConfiguredSpaceId()}" cannot delete spaces.` }],
               isError: true,
             };
           }
@@ -2643,7 +2680,7 @@ export class CanvasMcpServer {
                 isError: true,
               };
             }
-            if (!explicitSpaceId && !configuredSpaceId) {
+            if (!explicitSpaceId && !getConfiguredSpaceId()) {
               return {
                 content: [{
                   type: 'text',
