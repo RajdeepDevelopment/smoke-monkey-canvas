@@ -161,8 +161,22 @@ export class AgentRunner {
       const store = this.agentStores.get(agentId);
       if (store) {
         try {
-          // Re-create session
-          store.ensureSession(sessionId, { agentId, workspacePath: '' });
+          // store.ensureSession() is a no-op for a session that already
+          // exists — including its cached message history — so calling it
+          // here never actually cleared anything. getOrCreateStore() only
+          // ever ADDS messages found in SQLite beyond what's already cached
+          // in-memory; it never removes extras, so a stale in-memory cache
+          // survives a DB-level session delete on its own. The harness's
+          // MemoryStore exposes no public clear/reset method, so reach past
+          // its `private` TS fields (not truly private at runtime — the
+          // compiled JS has no # private fields) to actually drop the
+          // cached session and its messages. Without this, recreating the
+          // same session id (e.g. the default session, which the UI falls
+          // back to immediately) would still send the "deleted"
+          // conversation back to the model as context. See #6.
+          const rawStore = store as unknown as { sessions: Map<string, unknown>; messages: Map<string, unknown> };
+          rawStore.sessions?.delete(sessionId);
+          rawStore.messages?.delete(sessionId);
         } catch {}
       }
       this.db.deleteSession(sessionId);

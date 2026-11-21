@@ -477,10 +477,29 @@ export class AgentDb {
     stmt.run(new Date().toISOString(), sessionId);
   }
 
+  /**
+   * Deletes a session and every chat_messages row that belongs to it.
+   *
+   * The schema declares chat_messages.session_id with ON DELETE CASCADE, but
+   * no connection enables `PRAGMA foreign_keys = ON` (flipping that on
+   * globally risks surfacing unrelated, currently-silent FK violations
+   * elsewhere in an existing user's database), so SQLite never enforced that
+   * cascade — messages survived a session delete. The UI falls back to a
+   * deterministic default session id, which getOrCreateSession() happily
+   * recreates, so the "deleted" conversation (and its old messages as model
+   * context on the next run) would reappear. See #6.
+   */
   deleteSession(sessionId: string): boolean {
-    const stmt = this.coreDb.db.prepare(`DELETE FROM chat_sessions WHERE id = ?`);
-    const res = stmt.run(sessionId);
-    return res.changes > 0;
+    this.coreDb.db.exec('BEGIN');
+    try {
+      this.coreDb.db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`).run(sessionId);
+      const res = this.coreDb.db.prepare(`DELETE FROM chat_sessions WHERE id = ?`).run(sessionId);
+      this.coreDb.db.exec('COMMIT');
+      return res.changes > 0;
+    } catch (err) {
+      this.coreDb.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   addChatMessage(msg: {
