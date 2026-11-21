@@ -12,16 +12,62 @@ declare global {
 
 /**
  * Per-install bearer token (see server/features/core/auth.server.ts). Cached
- * in memory for the life of the page: either read from the global the server
- * injects into index.html on load, or fetched once from the loopback-gated
- * bootstrap endpoint (needed for the packaged Tauri build, which loads its
- * bundled assets from the framework's own origin rather than the server, so
- * never gets the injected global).
+ * in memory for the life of the page, resolved once at boot from, in order:
+ *   1. the global the server injects into index.html — only for local UI
+ *      requests, never for a publicly reachable deployment;
+ *   2. a `?token=` query param — how remote/self-hosted deployments hand the
+ *      token to a browser once (it is stripped from the URL and persisted);
+ *   3. localStorage — so a reload doesn't need the query param again;
+ *   4. the loopback-gated bootstrap endpoint (needed for the packaged Tauri
+ *      build, which loads its bundled assets from the framework's own origin
+ *      rather than the server, so never gets the injected global).
  */
+const AUTH_TOKEN_STORAGE_KEY = 'smoke-monkey.auth-token';
+
+/**
+ * Header used to send the bearer token. Deliberately not `Authorization`, so a
+ * reverse proxy (e.g. Caddy basic_auth) can use that header for its own auth.
+ */
+const AUTH_TOKEN_HEADER = 'X-Smoke-Monkey-Token';
+
 let cachedAuthToken: string | null = null;
 
 export function getCachedAuthToken(): string | null {
   return cachedAuthToken;
+}
+
+function readStoredAuthToken(): string | null {
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeAuthToken(token: string): void {
+  try {
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Storage can be unavailable (private mode); the in-memory cache still works.
+  }
+}
+
+function readAuthTokenFromUrl(): string | null {
+  let url: URL;
+  try {
+    url = new URL(window.location.href);
+  } catch {
+    return null;
+  }
+  const token = url.searchParams.get('token');
+  if (!token) return null;
+  url.searchParams.delete('token');
+  try {
+    window.history.replaceState({}, '', url.toString());
+  } catch {
+    // Some runtimes don't support history manipulation; the token still works.
+  }
+  return token;
 }
 
 export async function ensureAuthToken(): Promise<string | null> {
@@ -30,12 +76,25 @@ export async function ensureAuthToken(): Promise<string | null> {
     cachedAuthToken = window.__SMOKE_MONKEY_TOKEN__;
     return cachedAuthToken;
   }
+  const urlToken = readAuthTokenFromUrl();
+  if (urlToken) {
+    storeAuthToken(urlToken);
+    cachedAuthToken = urlToken;
+    return cachedAuthToken;
+  }
+  const stored = readStoredAuthToken();
+  if (stored) {
+    cachedAuthToken = stored;
+    return cachedAuthToken;
+  }
   try {
     const base = isTauri() ? `${DESKTOP_API_BASE}/api` : getApiBaseUrl();
     const res = await fetch(`${base}/auth/token`);
     if (res.ok) {
       const data = (await res.json()) as { token: string | null };
       cachedAuthToken = data.token;
+      // Not persisted: this token can rotate (e.g. a reset database), and the
+      // injected global / bootstrap route already cover the next page load.
     }
   } catch (err) {
     console.warn('[DesktopBridge] Failed to bootstrap auth token:', err);
@@ -239,8 +298,8 @@ export function initExternalLinkHandling(): void {
  * Always patches window.fetch (not just inside Tauri) for two reasons:
  *   1. Inside Tauri, it rewrites relative /api and /ws requests to the
  *      bundled backend's own origin (http://localhost:3333), same as before.
- *   2. In every runtime, it attaches `Authorization: Bearer <token>` to
- *      requests targeting our own API — see server/features/core/auth.server.ts.
+ *   2. In every runtime, it attaches the per-install bearer token to requests
+ *      targeting our own API — see server/features/core/auth.server.ts.
  *      Without this, every one of the ~30 call sites across agent.service.ts,
  *      space.service.ts, etc. would need its own change to send the token.
  */
@@ -249,6 +308,16 @@ export function initDesktopBridge(): void {
 
   const originalFetch = window.fetch.bind(window);
   const tauri = isTauri();
+  // Only our own API may receive the token. `getApiBaseUrl()` is absolute for
+  // the Tauri build and the Vite dev server (both talk to :3333 cross-origin)
+  // and relative otherwise, in which case the page origin is the API origin.
+  const apiBaseUrl = tauri ? `${DESKTOP_API_BASE}/api` : getApiBaseUrl();
+  let apiOrigin = window.location.origin;
+  try {
+    apiOrigin = new URL(apiBaseUrl, window.location.origin).origin;
+  } catch {
+    // keep the page origin
+  }
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     let url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -264,14 +333,23 @@ export function initDesktopBridge(): void {
       }
     }
 
-    // The bootstrap endpoint itself must stay unauthenticated (it's how the
-    // token is obtained in the first place).
     if (isApiRequest && cachedAuthToken && typeof url === 'string' && !url.endsWith('/auth/token')) {
-      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-      if (!headers.has('Authorization')) {
-        headers.set('Authorization', `Bearer ${cachedAuthToken}`);
+      // The `/api/` substring also appears in unrelated URLs (e.g. a repo
+      // called `api` on github.com), so check the origin before attaching a
+      // credential. The bootstrap endpoint stays unauthenticated by design.
+      let targetsOwnApi = false;
+      try {
+        targetsOwnApi = new URL(url, window.location.origin).origin === apiOrigin;
+      } catch {
+        targetsOwnApi = false;
       }
-      init = { ...init, headers };
+      if (targetsOwnApi) {
+        const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+        if (!headers.has(AUTH_TOKEN_HEADER)) {
+          headers.set(AUTH_TOKEN_HEADER, cachedAuthToken);
+        }
+        init = { ...init, headers };
+      }
     }
 
     return originalFetch(url, init);

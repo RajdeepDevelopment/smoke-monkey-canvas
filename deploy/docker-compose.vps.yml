@@ -52,6 +52,14 @@ services:
       HOST: 0.0.0.0
       SMOKE_CANVAS_DB: /app/data/canvas.db
       NODE_ENV: production
+      # Bearer token the web UI must send. The server never hands it to a
+      # remote browser, so set a long random value here and open the app once
+      # as https://${SMOKE_DOMAIN}/?token=<value> (the browser keeps it), or
+      # leave it empty and read the generated token with:
+      #   docker compose exec canvas curl -s localhost:3333/api/auth/token
+      SMOKE_MONKEY_AUTH_TOKEN: ${SMOKE_MONKEY_AUTH_TOKEN:-}
+      # Set to 1 only when Caddy basic_auth (or another proxy) is the login.
+      SMOKE_MONKEY_DISABLE_AUTH: ${SMOKE_MONKEY_DISABLE_AUTH:-}
       # Model provider keys are optional here — keys can also be entered in the
       # Canvas UI, where they are encrypted at rest in SQLite.
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}

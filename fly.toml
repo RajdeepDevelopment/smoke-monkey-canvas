@@ -24,6 +24,12 @@ primary_region = "iad"
   HOST = "0.0.0.0"
   SMOKE_CANVAS_DB = "/app/data/canvas.db"
 
+# The web UI authenticates with a bearer token that the server never sends to
+# remote browsers. Set it as a secret, then open the app once as
+#   https://<app>.fly.dev/?token=<value>
+#   fly secrets set SMOKE_MONKEY_AUTH_TOKEN=$(openssl rand -hex 32)
+# See SECURITY.md.
+
 [mounts]
   source = "canvas_data"
   destination = "/app/data"

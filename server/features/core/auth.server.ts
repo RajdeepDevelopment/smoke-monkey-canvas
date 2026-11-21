@@ -11,11 +11,16 @@
  *   - A random token is generated on first boot and persisted (see
  *     CoreDatabase.getOrCreateAuthToken), or supplied explicitly via
  *     SMOKE_MONKEY_AUTH_TOKEN for reverse-proxied/remote deployments.
- *   - All /api/* routes (except the bootstrap endpoint below) and the /ws
- *     upgrade require `Authorization: Bearer <token>` (or a `?token=` query
- *     param, since the browser WebSocket API cannot set headers).
+ *   - All /api/* routes (except the bootstrap endpoint below and the MCP OAuth
+ *     callback) and the /ws upgrade require the token. The bundled web client
+ *     sends it in `X-Smoke-Monkey-Token`, deliberately not `Authorization`, so
+ *     a reverse proxy in front of the server can use `Authorization` for its
+ *     own scheme (e.g. Caddy basic_auth) without the two fighting over the
+ *     same header. `Authorization: Bearer <token>` and `?token=` are still
+ *     accepted for CLI/API clients and for the WebSocket upgrade, which cannot
+ *     set headers from a browser.
  *   - The bootstrap endpoint that hands out the token only answers requests
- *     whose TCP peer is the loopback interface, regardless of what host the
+ *     that arrive from the local machine's own UI, regardless of what host the
  *     server is bound to. This lets the local web UI/CLI/desktop fetch the
  *     token once without any prior credential, while a LAN or internet peer
  *     (even if the operator explicitly opened the server to 0.0.0.0) cannot
@@ -23,10 +28,10 @@
  *
  * Deliberately out of scope: this is not a multi-user login system. An
  * operator who exposes the server on the public internet (the VPS/Render/
- * Fly targets under deploy/) must put a real auth layer in front of it (e.g.
- * Caddy `basic_auth`) — a token embedded in the page HTML (see
- * sendIndexWithToken in app.server.ts) is handed to every visitor and is not
- * a substitute for that. See SECURITY.md.
+ * Fly targets under deploy/) must put a real auth layer in front of it or
+ * distribute the token out-of-band. The token is never embedded in pages
+ * served to remote browsers (see sendIndexWithToken in app.server.ts), but it
+ * still is not a substitute for a real login. See SECURITY.md.
  */
 import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage } from 'node:http';
@@ -34,6 +39,14 @@ import { timingSafeEqual } from 'node:crypto';
 import type { CoreDatabase } from './database.db.js';
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
+/**
+ * Header the bundled web client uses to send the bearer token. Kept separate
+ * from `Authorization` so proxy-level auth (Caddy basic_auth, etc.) can use
+ * that header without breaking API calls.
+ */
+export const AUTH_TOKEN_HEADER = 'x-smoke-monkey-token';
 
 export function isAuthDisabled(): boolean {
   const v = process.env.SMOKE_MONKEY_DISABLE_AUTH;
@@ -53,11 +66,23 @@ function constantTimeEquals(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB);
 }
 
+function headerValue(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | null {
+  const value = headers[name];
+  const first = Array.isArray(value) ? value[0] : value;
+  return first && first.trim() ? first.trim() : null;
+}
+
 function extractToken(req: Request | IncomingMessage): string | null {
-  const authHeader = (req.headers as Record<string, string | string[] | undefined>)?.authorization;
-  const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-  if (headerValue && headerValue.startsWith('Bearer ')) {
-    return headerValue.slice('Bearer '.length).trim();
+  const headers = (req.headers || {}) as Record<string, string | string[] | undefined>;
+  const custom = headerValue(headers, AUTH_TOKEN_HEADER);
+  if (custom) return custom;
+
+  const authHeader = headerValue(headers, 'authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice('Bearer '.length).trim();
   }
   try {
     const url = new URL(req.url || '', 'http://internal');
@@ -69,14 +94,69 @@ function extractToken(req: Request | IncomingMessage): string | null {
   return null;
 }
 
-function isLoopbackRequest(req: Request): boolean {
+/**
+ * Hostname from a Host header, handling `[::1]:3333` as well as `host:port`.
+ */
+function hostnameFromHostHeader(hostHeader: string): string | null {
+  const value = hostHeader.trim().toLowerCase();
+  if (!value) return null;
+  if (value.startsWith('[')) {
+    const end = value.indexOf(']');
+    return end === -1 ? null : value.slice(1, end);
+  }
+  const colon = value.lastIndexOf(':');
+  return colon === -1 ? value : value.slice(0, colon);
+}
+
+/**
+ * Whether the request's Host header names a host we're willing to hand the
+ * token to. Loopback names always qualify; extra hostnames come from
+ * `SMOKE_MONKEY_ALLOWED_ORIGINS` (the same list CORS trusts).
+ *
+ * Without this check, a DNS-rebinding page could resolve its own hostname to
+ * 127.0.0.1, request the page same-origin, and read the injected token even
+ * though the TCP peer is loopback.
+ */
+function hasTrustedHost(req: Request | IncomingMessage): boolean {
+  const hostHeader = (req.headers?.host as string | undefined) || '';
+  const hostname = hostnameFromHostHeader(hostHeader);
+  if (!hostname) return false;
+  if (LOOPBACK_HOSTNAMES.has(hostname)) return true;
+  for (const raw of (process.env.SMOKE_MONKEY_ALLOWED_ORIGINS || '').split(',')) {
+    const value = raw.trim();
+    if (!value) continue;
+    try {
+      if (new URL(value).hostname.toLowerCase() === hostname) return true;
+    } catch {
+      // ignore malformed entries
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether this request came from the machine's own local UI.
+ *
+ * Normally that means a loopback peer with a loopback Host header.
+ * `SMOKE_MONKEY_ASSUME_LOCAL=1` additionally treats any peer as local,
+ * for container deployments that publish the port on the host's loopback only
+ * (Docker's userland proxy makes the browser's peer address the bridge
+ * gateway, not 127.0.0.1). Only enable it when the published port is itself
+ * bound to loopback — see docker-compose.yml. Never enable it on a publicly
+ * reachable server.
+ */
+export function isLocalUiRequest(req: Request | IncomingMessage): boolean {
+  if (!hasTrustedHost(req)) return false;
   const addr = req.socket?.remoteAddress || '';
-  return LOOPBACK_ADDRESSES.has(addr);
+  if (LOOPBACK_ADDRESSES.has(addr)) return true;
+  const v = process.env.SMOKE_MONKEY_ASSUME_LOCAL;
+  return v === '1' || v === 'true';
 }
 
 /**
  * Express middleware enforcing the bearer token on every route it's mounted
- * on. Mount this on `/api` after excluding the bootstrap token route.
+ * on. Mount this on `/api` after excluding the bootstrap token route and the
+ * MCP OAuth callback.
  */
 export function createAuthMiddleware(db: CoreDatabase) {
   if (isAuthDisabled()) {
@@ -104,7 +184,7 @@ export function createAuthBootstrapHandler(db: CoreDatabase) {
       res.json({ token: null, disabled: true });
       return;
     }
-    if (!isLoopbackRequest(req)) {
+    if (!isLocalUiRequest(req)) {
       res.status(403).json({ error: 'Token bootstrap is only available from the local machine.' });
       return;
     }

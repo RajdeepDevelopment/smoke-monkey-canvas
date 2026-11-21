@@ -133,6 +133,61 @@ function isContained(root: string, target: string): boolean {
   return target.startsWith(rootWithSep);
 }
 
+const MAX_SYMLINK_HOPS = 40;
+
+/**
+ * `realpath` for a path whose tail may not exist yet.
+ *
+ * `fs.realpathSync` requires every component to exist, so it also throws for a
+ * *dangling* symlink (e.g. `workspace/link` -> `/outside/new.txt`) even though
+ * the link itself is present. Walking component by component with `lstatSync`
+ * resolves those links — and any existing symlinked parent — while still
+ * returning a usable path for genuinely new files.
+ *
+ * Returns null on a symlink loop or unreadable component.
+ */
+function resolveRealPathLoose(inputPath: string, hops = 0): string | null {
+  if (hops > MAX_SYMLINK_HOPS) return null;
+  const absolute = path.resolve(inputPath);
+  const root = path.parse(absolute).root;
+  const parts = absolute.slice(root.length).split(path.sep).filter(Boolean);
+  let current = root;
+  for (let i = 0; i < parts.length; i++) {
+    current = path.join(current, parts[i]);
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(current);
+    } catch {
+      // Missing component (so it can't be a symlink), and the rest can't
+      // exist either. Canonicalize the existing parent (case, etc.), then
+      // append the literal remainder.
+      let realParent = path.dirname(current);
+      try {
+        realParent = fs.realpathSync(realParent);
+      } catch {
+        // keep the walked path
+      }
+      return path.join(realParent, path.basename(current), ...parts.slice(i + 1));
+    }
+    if (stat.isSymbolicLink()) {
+      let linkTarget: string;
+      try {
+        linkTarget = fs.readlinkSync(current);
+      } catch {
+        return null;
+      }
+      const resolvedTarget = path.resolve(path.dirname(current), linkTarget);
+      return resolveRealPathLoose(path.join(resolvedTarget, ...parts.slice(i + 1)), hops + 1);
+    }
+  }
+  try {
+    // Fully existing path: return the canonical form.
+    return fs.realpathSync(absolute);
+  } catch {
+    return current;
+  }
+}
+
 export function safeResolveWorkspacePath(workspaceRoot: string, relativePath: string): string | null {
   if (!workspaceRoot) return null;
   const normalizedRoot = path.resolve(workspaceRoot);
@@ -148,9 +203,9 @@ export function safeResolveWorkspacePath(workspaceRoot: string, relativePath: st
 
   // Resolve symlinks before the final containment check so a symlink inside
   // the workspace that points outside of it (or a workspace root that is
-  // itself reached via a symlink) can't be used to escape. Fall back to the
-  // lexical path when a segment doesn't exist yet (e.g. a new file about to
-  // be written) — realpath requires the full path to exist.
+  // itself reached via a symlink) can't be used to escape. New-file paths are
+  // resolved component by component so a dangling symlink pointing outside
+  // the workspace is caught too.
   let realRoot: string;
   try {
     realRoot = fs.realpathSync(normalizedRoot);
@@ -158,29 +213,8 @@ export function safeResolveWorkspacePath(workspaceRoot: string, relativePath: st
     return null; // workspace root must exist
   }
 
-  let realTarget: string;
-  try {
-    realTarget = fs.realpathSync(targetPath);
-  } catch {
-    // Target doesn't exist yet (e.g. a new write). Resolve the nearest
-    // existing ancestor and rebuild the path from there so we still catch a
-    // symlinked parent directory pointing outside the workspace.
-    let dir = path.dirname(targetPath);
-    const remainder: string[] = [path.basename(targetPath)];
-    while (true) {
-      try {
-        const realDir = fs.realpathSync(dir);
-        realTarget = path.join(realDir, ...remainder);
-        break;
-      } catch {
-        if (dir === path.dirname(dir)) return null; // reached filesystem root
-        remainder.unshift(path.basename(dir));
-        dir = path.dirname(dir);
-      }
-    }
-  }
-
-  if (!isContained(realRoot, realTarget)) {
+  const realTarget = resolveRealPathLoose(targetPath);
+  if (!realTarget || !isContained(realRoot, realTarget)) {
     return null;
   }
   return targetPath;

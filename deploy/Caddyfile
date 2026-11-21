@@ -4,16 +4,20 @@
 # this server's public IP and Caddy obtains and renews the certificate itself.
 # WebSocket upgrades for /ws are handled natively by Caddy's reverse_proxy.
 #
-# Canvas itself only checks a per-install bearer token (see SECURITY.md), and
-# that token is handed to anyone who loads the page — it is not a login
-# screen. Once SMOKE_DOMAIN is reachable by anyone, add your own login here,
-# e.g.:
+# Canvas requires a per-install bearer token (see SECURITY.md). The bundled web
+# client sends it in an `X-Smoke-Monkey-Token` header rather than
+# `Authorization`, so it can coexist with Caddy basic_auth below — the two do
+# not compete for the same header.
+#
+# Add a login inside the block below, before reverse_proxy, e.g.:
 #
 #   basic_auth {
 #     <username> <bcrypt-hash-from `caddy hash-password`>
 #   }
 #
-# inside the block below, before reverse_proxy.
+# With basic_auth in place you can either set SMOKE_MONKEY_DISABLE_AUTH=1
+# (basic_auth is now the only login) or keep the token layer and open the app
+# once as https://<SMOKE_DOMAIN>/?token=<SMOKE_MONKEY_AUTH_TOKEN>.
 
 {$SMOKE_DOMAIN} {
 	encode zstd gzip

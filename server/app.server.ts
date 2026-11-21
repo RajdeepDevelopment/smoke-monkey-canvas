@@ -17,10 +17,13 @@ import { createSettingsRouter } from './features/settings/settings.server.js';
 import { createSkillRouter } from './features/skill/skill.server.js';
 import { createExploreRouter } from './features/space/explore.server.js';
 import {
+  AUTH_TOKEN_HEADER,
   createAuthMiddleware,
   createAuthBootstrapHandler,
   createWsTokenVerifier,
   isAuthDisabled,
+  isLocalUiRequest,
+  resolveAuthToken,
 } from './features/core/auth.server.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -77,8 +80,11 @@ function buildAllowedOrigins(port: number): Set<string> {
     origins.add(`http://127.0.0.1:${p}`);
   }
   // Packaged Tauri desktop builds load the bundled frontend from the
-  // framework's own origin and call the backend cross-origin.
+  // framework's own origin and call the backend cross-origin. Tauri 2 uses
+  // `http://tauri.localhost` on Windows and `https://tauri.localhost` when
+  // `useHttpsScheme` is enabled (it is not, in this repo), so both are allowed.
   origins.add('tauri://localhost');
+  origins.add('http://tauri.localhost');
   origins.add('https://tauri.localhost');
   const extra = (process.env.SMOKE_MONKEY_ALLOWED_ORIGINS || '')
     .split(',')
@@ -91,17 +97,21 @@ function buildAllowedOrigins(port: number): Set<string> {
 /**
  * Serves index.html with the per-install auth token injected as a global, so
  * the bundled web client can authenticate its first API/WS call without a
- * separate round trip. Safe against the browser cross-origin attack vector
- * this replaces wildcard CORS to close: a page on another origin can't read
- * this response's body (the browser blocks cross-origin reads without a
- * matching CORS header), so it can't extract the token this way either. It is
- * NOT safe against a LAN/internet peer hitting an explicitly opened server —
- * see the AppServerOptions.host doc comment and SECURITY.md.
+ * separate round trip.
+ *
+ * The caller passes a token only for local UI requests (see isLocalUiRequest).
+ * That matters: the catch-all below answers every path, so injecting
+ * unconditionally would hand the bearer token to any unauthenticated visitor
+ * of a publicly reachable deployment (the container/PaaS targets), defeating
+ * the token entirely. Remote clients that legitimately need the token supply
+ * it out-of-band (`?token=` / SMOKE_MONKEY_AUTH_TOKEN) — see SECURITY.md.
  */
 function sendIndexWithToken(res: express.Response, indexPath: string, token: string | null): void {
   try {
     const html = readFileSync(indexPath, 'utf8');
-    const inject = `<script>window.__SMOKE_MONKEY_TOKEN__=${JSON.stringify(token)};</script>`;
+    const inject = token
+      ? `<script>window.__SMOKE_MONKEY_TOKEN__=${JSON.stringify(token)};</script>`
+      : '';
     const withToken = html.includes('<head>') ? html.replace('<head>', `<head>${inject}`) : inject + html;
     res.set('Content-Type', 'text/html; charset=utf-8').send(withToken);
   } catch {
@@ -132,7 +142,7 @@ export function startAppServer(opts: AppServerOptions = {}) {
       res.header('Vary', 'Origin');
     }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Headers', `Content-Type, Authorization, ${AUTH_TOKEN_HEADER}`);
     if (req.method === 'OPTIONS') {
       res.sendStatus(204);
       return;
@@ -161,7 +171,19 @@ export function startAppServer(opts: AppServerOptions = {}) {
   // All other /api/* routes require the bearer token (see auth.server.ts and
   // SMOKE_MONKEY_DISABLE_AUTH / SMOKE_MONKEY_AUTH_TOKEN for operators who
   // front this with their own auth).
-  app.use('/api', createAuthMiddleware(db));
+  //
+  // The MCP OAuth callback is the one exemption: the provider's redirect back
+  // to us carries only `code`/`state` (validated against pending state in the
+  // handler), never a bearer token, so the gate would otherwise 401 before the
+  // callback could run and OAuth connections could never complete.
+  const authMiddleware = createAuthMiddleware(db);
+  app.use('/api', (req, res, next) => {
+    if (req.path.replace(/\/+$/, '') === '/mcp/oauth/callback') {
+      next();
+      return;
+    }
+    authMiddleware(req, res, next);
+  });
   if (isAuthDisabled()) {
     console.warn(
       '[AppServer] SMOKE_MONKEY_DISABLE_AUTH is set — /api and /ws are unauthenticated. ' +
@@ -191,14 +213,17 @@ export function startAppServer(opts: AppServerOptions = {}) {
 
   // 3. Serve Frontend static assets. `index: false` so express.static never
   // auto-serves index.html itself — both the root path and the SPA catch-all
-  // below go through sendIndexWithToken() instead, so every entry point gets
-  // the auth token injected consistently.
+  // below go through sendIndexWithToken() instead, so every local entry point
+  // gets the auth token injected consistently. Remote requests get the page
+  // without the token (see sendIndexWithToken).
   const staticDir = join(__dirname, '..', 'web', 'dist');
   if (existsSync(staticDir)) {
     const indexPath = join(staticDir, 'index.html');
     app.use(express.static(staticDir, { index: false }));
-    app.use((_req, res) => {
-      sendIndexWithToken(res, indexPath, isAuthDisabled() ? null : db.getOrCreateAuthToken());
+    app.use((req, res) => {
+      const token =
+        isAuthDisabled() || !isLocalUiRequest(req) ? null : resolveAuthToken(db);
+      sendIndexWithToken(res, indexPath, token);
     });
   } else {
     app.use((_req, res) => {
@@ -224,7 +249,9 @@ export function startAppServer(opts: AppServerOptions = {}) {
     console.log(`  ▶ http://${host}:${port}`);
     if (host !== DEFAULT_HOST && !isAuthDisabled()) {
       console.log(`  ⚠ Bound to ${host}, not just loopback — reachable beyond this machine.`);
-      console.log(`    Requests still need the bearer token (GET /api/auth/token from this host).`);
+      console.log(`    /api and /ws still require the bearer token, and the web UI only`);
+      console.log(`    receives it on local requests. Remote clients must supply it`);
+      console.log(`    out-of-band (?token= or SMOKE_MONKEY_AUTH_TOKEN). See SECURITY.md.`);
     }
     console.log(`======================================================\n`);
   });

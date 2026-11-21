@@ -27,3 +27,7 @@ spec:
           value: "0.0.0.0"
         - key: SMOKE_CANVAS_DB
           value: /app/data/canvas.db
+        # The web UI authenticates with a bearer token that the server never
+        # sends to remote browsers. Add SMOKE_MONKEY_AUTH_TOKEN as a SECRET env
+        # var with a long random value, then open the app once as
+        # https://<app>.ondigitalocean.app/?token=<value>. See SECURITY.md.
