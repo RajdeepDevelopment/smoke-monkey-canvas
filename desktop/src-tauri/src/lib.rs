@@ -964,7 +964,10 @@ fn api_probe_healthy() -> bool {
         Err(_) => return false,
     };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-    let req = format!("GET /api/space HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n");
+    // /api/space now requires the bearer token (see server/features/core/
+    // auth.server.ts), which this raw probe doesn't have. /api/health is the
+    // unauthenticated liveness endpoint added alongside that change.
+    let req = format!("GET /api/health HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n");
     if stream.write_all(req.as_bytes()).is_ok() {
         let mut buf = [0u8; 1024];
         if let Ok(n) = stream.read(&mut buf) {

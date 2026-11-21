@@ -4,6 +4,176 @@
  * when running inside Smoke Monkey Canvas Desktop.
  */
 
+declare global {
+  interface Window {
+    __SMOKE_MONKEY_TOKEN__?: string | null;
+  }
+}
+
+/**
+ * Per-install bearer token (see server/features/core/auth.server.ts). Cached
+ * in memory for the life of the page, resolved once at boot from, in order:
+ *   1. the global the server injects into index.html — only for local UI
+ *      requests, never for a publicly reachable deployment;
+ *   2. a `#token=` URL fragment — how remote/self-hosted deployments hand the
+ *      token to a browser once (the fragment is never sent to the server, so
+ *      it stays out of proxy access logs; it is stripped and persisted);
+ *   3. a legacy `?token=` query param, same handling;
+ *   4. localStorage — so a reload doesn't need the URL again;
+ *   5. the loopback-gated bootstrap endpoint (needed for the packaged Tauri
+ *      build, which loads its bundled assets from the framework's own origin
+ *      rather than the server, so never gets the injected global).
+ */
+const AUTH_TOKEN_STORAGE_KEY = 'smoke-monkey.auth-token';
+
+/**
+ * Header used to send the bearer token. Deliberately not `Authorization`, so a
+ * reverse proxy (e.g. Caddy basic_auth) can use that header for its own auth.
+ */
+const AUTH_TOKEN_HEADER = 'X-Smoke-Monkey-Token';
+
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+let cachedAuthToken: string | null = null;
+
+export function getCachedAuthToken(): string | null {
+  return cachedAuthToken;
+}
+
+function readStoredAuthToken(): string | null {
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeAuthToken(token: string): void {
+  try {
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Storage can be unavailable (private mode); the in-memory cache still works.
+  }
+}
+
+/**
+ * Read one query-style parameter without `URLSearchParams`' form semantics:
+ * that API turns a literal `+` into a space, which corrupts base64 tokens.
+ * Percent-encoded values (including `%2B`) still decode correctly.
+ */
+function readTokenParam(raw: string): string | null {
+  for (const pair of raw.split('&')) {
+    const eq = pair.indexOf('=');
+    if (eq === -1) continue;
+    let key: string;
+    try {
+      key = decodeURIComponent(pair.slice(0, eq));
+    } catch {
+      continue;
+    }
+    if (key !== 'token') continue;
+    try {
+      return decodeURIComponent(pair.slice(eq + 1)) || null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function readAuthTokenFromUrl(): string | null {
+  // Prefer the fragment: unlike the query string it is never sent to the
+  // server or written to access logs by a proxy.
+  const hash = window.location.hash || '';
+  if (hash.length > 1) {
+    const hashToken = readTokenParam(hash.slice(1));
+    if (hashToken) {
+      stripUrlToken();
+      return hashToken;
+    }
+  }
+  let url: URL;
+  try {
+    url = new URL(window.location.href);
+  } catch {
+    return null;
+  }
+  const token = readTokenParam(url.search.slice(1));
+  if (!token) return null;
+  url.searchParams.delete('token');
+  try {
+    window.history.replaceState({}, '', url.toString());
+  } catch {
+    // Some runtimes don't support history manipulation; the token still works.
+  }
+  return token;
+}
+
+function stripUrlToken(): void {
+  try {
+    window.history.replaceState({}, '', window.location.pathname + window.location.search);
+  } catch {
+    // Some runtimes don't support history manipulation; the token still works.
+  }
+}
+
+/**
+ * Credentials may travel over plain HTTP only to the loopback interface.
+ * Anything else must use HTTPS — otherwise an on-path observer can read the
+ * installation token from a LAN/public HTTP deployment.
+ */
+function isCredentialSafeUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value, window.location.origin);
+  } catch {
+    return false;
+  }
+  if (url.protocol === 'https:' || url.protocol === 'wss:') return true;
+  return (
+    (url.protocol === 'http:' || url.protocol === 'ws:') &&
+    LOOPBACK_HOSTNAMES.has(url.hostname.toLowerCase())
+  );
+}
+
+export async function ensureAuthToken(): Promise<string | null> {
+  if (cachedAuthToken) return cachedAuthToken;
+  if (typeof window !== 'undefined' && window.__SMOKE_MONKEY_TOKEN__) {
+    cachedAuthToken = window.__SMOKE_MONKEY_TOKEN__;
+    return cachedAuthToken;
+  }
+  const urlToken = readAuthTokenFromUrl();
+  if (urlToken) {
+    storeAuthToken(urlToken);
+    cachedAuthToken = urlToken;
+    return cachedAuthToken;
+  }
+  const stored = readStoredAuthToken();
+  if (stored) {
+    cachedAuthToken = stored;
+    return cachedAuthToken;
+  }
+  try {
+    const base = isTauri() ? `${DESKTOP_API_BASE}/api` : getApiBaseUrl();
+    if (!isCredentialSafeUrl(`${base}/auth/token`)) {
+      console.warn(
+        '[DesktopBridge] Not fetching the auth token over non-HTTPS, non-loopback HTTP. Use HTTPS for remote deployments.',
+      );
+      return null;
+    }
+    const res = await fetch(`${base}/auth/token`);
+    if (res.ok) {
+      const data = (await res.json()) as { token: string | null };
+      cachedAuthToken = data.token;
+      // Not persisted: this token can rotate (e.g. a reset database), and the
+      // injected global / bootstrap route already cover the next page load.
+    }
+  } catch (err) {
+    console.warn('[DesktopBridge] Failed to bootstrap auth token:', err);
+  }
+  return cachedAuthToken;
+}
+
 export function isTauri(): boolean {
   if (typeof window === 'undefined') return false;
   return (
@@ -44,18 +214,41 @@ export function getApiBaseUrl(): string {
 }
 
 export function getWsUrl(): string {
+  // The token travels in the WebSocket subprotocols (getWsProtocols), not the
+  // URL: browsers can't set headers on the upgrade request, and a `?token=`
+  // param would be written to proxy access logs.
   if (isTauri()) {
-    return `ws://localhost:3333/ws`;
+    return 'ws://localhost:3333/ws';
   }
   if (
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
     window.location.port !== '3333'
   ) {
-    return `ws://localhost:3333/ws`;
+    return 'ws://localhost:3333/ws';
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws`;
+}
+
+function toBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Subprotocol values for `new WebSocket(getWsUrl(), getWsProtocols())`. The
+ * server reads `smoke-monkey-token.<base64url(token)>` from
+ * Sec-WebSocket-Protocol (see auth.server.ts) and still accepts `?token=` for
+ * CLI clients.
+ */
+export function getWsProtocols(): string[] {
+  if (!cachedAuthToken) return [];
+  // Same transport rule as HTTP: never put the token on a cleartext socket.
+  if (!isCredentialSafeUrl(getWsUrl())) return [];
+  return [`smoke-monkey-token.${toBase64Url(cachedAuthToken)}`];
 }
 
 /**
@@ -192,31 +385,75 @@ export function initExternalLinkHandling(): void {
 }
 
 /**
- * Initialize Desktop Bridge
- * Intercepts relative /api requests inside Tauri webview so all
- * standard fetch() calls seamlessly route to the local Canvas server.
+ * Initialize the API bridge.
+ *
+ * Always patches window.fetch (not just inside Tauri) for two reasons:
+ *   1. Inside Tauri, it rewrites relative /api and /ws requests to the
+ *      bundled backend's own origin (http://localhost:3333), same as before.
+ *   2. In every runtime, it attaches the per-install bearer token to requests
+ *      targeting our own API — see server/features/core/auth.server.ts.
+ *      Without this, every one of the ~30 call sites across agent.service.ts,
+ *      space.service.ts, etc. would need its own change to send the token.
  */
 export function initDesktopBridge(): void {
-  if (typeof window === 'undefined' || !isTauri()) return;
+  if (typeof window === 'undefined') return;
 
   const originalFetch = window.fetch.bind(window);
+  const tauri = isTauri();
+  // Only our own API may receive the token. `getApiBaseUrl()` is absolute for
+  // the Tauri build and the Vite dev server (both talk to :3333 cross-origin)
+  // and relative otherwise, in which case the page origin is the API origin.
+  const apiBaseUrl = tauri ? `${DESKTOP_API_BASE}/api` : getApiBaseUrl();
+  let apiOrigin = window.location.origin;
+  try {
+    apiOrigin = new URL(apiBaseUrl, window.location.origin).origin;
+  } catch {
+    // keep the page origin
+  }
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     let url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    let isApiRequest = false;
 
     if (typeof url === 'string') {
       if (url.startsWith('/api') || url.startsWith('/ws')) {
-        url = `${DESKTOP_API_BASE}${url}`;
+        isApiRequest = true;
+        if (tauri) url = `${DESKTOP_API_BASE}${url}`;
       } else if (url.includes('/api/')) {
-        url = url.replace(/^.*\/api\//, `${DESKTOP_API_BASE}/api/`);
+        isApiRequest = true;
+        if (tauri) url = url.replace(/^.*\/api\//, `${DESKTOP_API_BASE}/api/`);
+      }
+    }
+
+    if (isApiRequest && cachedAuthToken && typeof url === 'string' && !url.endsWith('/auth/token')) {
+      // The `/api/` substring also appears in unrelated URLs (e.g. a repo
+      // called `api` on github.com), so check the origin before attaching a
+      // credential. Plain HTTP is allowed only for loopback; anything else
+      // must be HTTPS or the token would cross the network in cleartext.
+      // The bootstrap endpoint stays unauthenticated by design.
+      let targetsOwnApi = false;
+      try {
+        const target = new URL(url, window.location.origin);
+        targetsOwnApi = target.origin === apiOrigin && isCredentialSafeUrl(target.href);
+      } catch {
+        targetsOwnApi = false;
+      }
+      if (targetsOwnApi) {
+        const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+        if (!headers.has(AUTH_TOKEN_HEADER)) {
+          headers.set(AUTH_TOKEN_HEADER, cachedAuthToken);
+        }
+        init = { ...init, headers };
       }
     }
 
     return originalFetch(url, init);
   };
 
-  initExternalLinkHandling();
-  console.log('[DesktopBridge] Initialized for Tauri desktop runtime');
+  if (tauri) {
+    initExternalLinkHandling();
+    console.log('[DesktopBridge] Initialized for Tauri desktop runtime');
+  }
 }
 
 /**

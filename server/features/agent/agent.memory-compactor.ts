@@ -410,6 +410,21 @@ export const SELF_REFINEMENT_PROMPT =
  * 2. Daily End-of-Day Summary (6:00 PM + staggered slot offset)
  * 3. Daily Self-Refinement & Specialization (8:00 PM + staggered slot offset)
  */
+/**
+ * Recomputes next_run_at only when it's genuinely stale (null, or already in
+ * the past). A sync that unconditionally recomputed this on every run could
+ * push a job that is due *right now* out to the next future slot, silently
+ * skipping an execution that should have fired. If it's still in the future,
+ * leave it alone — it isn't due yet and isn't stale. See #10.
+ */
+function preserveOrRecomputeNextRun(existingNextRun: string | null, schedule: string): string | null {
+  if (existingNextRun) {
+    const t = new Date(existingNextRun).getTime();
+    if (!isNaN(t) && t > Date.now()) return existingNextRun;
+  }
+  return calculateNextCronRun(schedule);
+}
+
 export function ensureDefaultAgentCronJobs(agentId: string, db: AgentDb): void {
   const { compactorSchedule, eodSchedule, refinementSchedule } = calculateStaggeredAgentCronSlots(agentId, db);
   const existingJobs = db.getAgentCronJobs(agentId);
@@ -427,8 +442,8 @@ export function ensureDefaultAgentCronJobs(agentId: string, db: AgentDb): void {
       created_by: 'system',
       next_run_at: nextRun,
     });
-  } else if (compactor.created_by === 'system') {
-    const nextRun = compactor.enabled ? calculateNextCronRun(compactorSchedule) : null;
+  } else if (compactor.created_by === 'system' && !compactor.user_modified) {
+    const nextRun = compactor.enabled ? preserveOrRecomputeNextRun(compactor.next_run_at, compactorSchedule) : null;
     db.updateAgentCronJob(compactor.id, {
       prompt: WORKSPACE_COMPACTOR_PROMPT,
       cron_schedule: compactorSchedule,
@@ -449,8 +464,8 @@ export function ensureDefaultAgentCronJobs(agentId: string, db: AgentDb): void {
       created_by: 'system',
       next_run_at: nextRun,
     });
-  } else if (eod.created_by === 'system') {
-    const nextRun = eod.enabled ? calculateNextCronRun(eodSchedule) : null;
+  } else if (eod.created_by === 'system' && !eod.user_modified) {
+    const nextRun = eod.enabled ? preserveOrRecomputeNextRun(eod.next_run_at, eodSchedule) : null;
     db.updateAgentCronJob(eod.id, {
       prompt: DAILY_EOD_PROMPT,
       cron_schedule: eodSchedule,
@@ -471,8 +486,8 @@ export function ensureDefaultAgentCronJobs(agentId: string, db: AgentDb): void {
       created_by: 'system',
       next_run_at: nextRun,
     });
-  } else if (refine.created_by === 'system') {
-    const nextRun = refine.enabled ? calculateNextCronRun(refinementSchedule) : null;
+  } else if (refine.created_by === 'system' && !refine.user_modified) {
+    const nextRun = refine.enabled ? preserveOrRecomputeNextRun(refine.next_run_at, refinementSchedule) : null;
     db.updateAgentCronJob(refine.id, {
       prompt: SELF_REFINEMENT_PROMPT,
       cron_schedule: refinementSchedule,

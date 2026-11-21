@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server } from 'node:http';
+import type { Server, IncomingMessage } from 'node:http';
 
 export interface WebSocketMessage {
   type: string;
@@ -23,8 +23,27 @@ export class CoreWsServer {
     return CoreWsServer.instance;
   }
 
-  init(server: Server): void {
-    this.wss = new WebSocketServer({ server, path: '/ws' });
+  /**
+   * @param verifyToken Validates the bearer token carried on the upgrade
+   * request (custom header, `Sec-WebSocket-Protocol`, Authorization, or
+   * `?token=` for CLI clients). The /ws endpoint streams every run's
+   * output with no further scoping, so it must not accept unauthenticated
+   * connections. Omit only for tests that construct their own server.
+   */
+  init(server: Server, verifyToken?: (req: IncomingMessage) => boolean): void {
+    this.wss = new WebSocketServer({
+      server,
+      path: '/ws',
+      verifyClient: verifyToken
+        ? (info: { req: IncomingMessage }, callback: (verified: boolean, code?: number, message?: string) => void) => {
+            if (verifyToken(info.req)) {
+              callback(true);
+            } else {
+              callback(false, 401, 'Unauthorized');
+            }
+          }
+        : undefined,
+    });
 
     this.wss.on('connection', (ws) => {
       this.clients.add(ws);

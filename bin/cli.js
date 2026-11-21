@@ -155,6 +155,51 @@ function getRunningPid() {
   return null;
 }
 
+// ── Helper: Wait for Server Readiness ─────────────────────────────────────────
+
+/**
+ * Polls GET /api/health (added alongside the auth work — see
+ * server/app.server.ts — specifically so this never needs a token) until the
+ * server answers or maxWaitMs elapses.
+ *
+ * Opening the browser on a blind setTimeout (the previous behavior: 1000ms
+ * for a fresh foreground start, 1200ms for a fresh daemon start) assumes tsx
+ * transpiles and boots the Express app, runs DB migrations, and starts
+ * listening within that fixed window. On a slow machine, a loaded CI-like
+ * host, or the very first `npx @smoke-monkey/canvas` run (still settling
+ * after its own install), that assumption doesn't hold: the browser opens to
+ * a "can't connect" page before the server is actually listening, which
+ * looks indistinguishable from the auto-open feature not existing at all.
+ */
+async function waitForServerReady(url, maxWaitMs = 20000) {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1000) });
+      if (res.ok) return true;
+    } catch {
+      // Not up yet (ECONNREFUSED while the server is still booting) — retry.
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
+/**
+ * Waits for the server to be ready, then opens the browser. Prints the URL
+ * either way so headless/SSH sessions (where no browser command can
+ * actually open anything) and a readiness timeout both still leave the user
+ * with something to click or copy, instead of silence.
+ */
+async function openWhenReady(url) {
+  const ready = await waitForServerReady(url);
+  if (!ready) {
+    console.warn(`⚠️  Server did not report ready within 20s — opening ${url} anyway.`);
+  }
+  console.log(`🌐 Opening ${url} ...`);
+  launchBrowser(url);
+}
+
 // ── Helper: Open Browser ─────────────────────────────────────────────────────
 
 function launchBrowser(url) {
@@ -313,9 +358,16 @@ if (isDaemon && !process.env.SMOKE_CANVAS_DAEMON_CHILD) {
   console.log(`======================================================\n`);
 
   if (openBrowser) {
-    setTimeout(() => {
-      launchBrowser(`http://localhost:${port}`);
-    }, 1200);
+    // Bug: this used to be a bare setTimeout(..., 1200) immediately followed
+    // by process.exit(0) below with no await in between. process.exit()
+    // terminates the process immediately, including any pending timers —
+    // the scheduled launchBrowser() call never actually ran. `smoke-monkey
+    // start`/`connect`, the headline documented command for this CLI, never
+    // opened the browser at all, regardless of how long the server took to
+    // boot. Awaiting the open (which itself waits for /api/health, not a
+    // blind delay) before exiting fixes both: the open now actually
+    // happens, and it waits for the server to be ready instead of guessing.
+    await openWhenReady(`http://localhost:${port}`);
   }
 
   process.exit(0);
@@ -350,13 +402,22 @@ const serverProc = spawn(process.execPath, [tsxBin, serverEntry], {
     ...process.env,
     PORT: String(port),
     SMOKE_CANVAS_DB: dbPath,
+    // This CLI is the officially-supported local launcher: it's about to
+    // fork the server process itself, so there's no reverse-proxy ambiguity
+    // for the local-UI bootstrap check (isLocalUiRequest in
+    // server/features/core/auth.server.ts) to worry about. A user who runs
+    // the raw server some other way (not through this CLI, the desktop app,
+    // or the mobile build) must opt in explicitly.
+    SMOKE_MONKEY_ASSUME_LOCAL: '1',
   },
 });
 
 if (openBrowser && !process.env.SMOKE_CANVAS_DAEMON_CHILD) {
-  setTimeout(() => {
-    launchBrowser(`http://localhost:${port}`);
-  }, 1000);
+  // Waits for /api/health instead of a blind 1s delay — see openWhenReady().
+  // On a slow machine or a cold first `npx` run, tsx transpiling and booting
+  // the server can take longer than that, and the browser would otherwise
+  // open to a "can't connect" page before the server is actually listening.
+  void openWhenReady(`http://localhost:${port}`);
 }
 
 const cleanup = () => {

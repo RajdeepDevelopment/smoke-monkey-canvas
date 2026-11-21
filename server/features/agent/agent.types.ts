@@ -158,6 +158,13 @@ export interface AgentCronJobRecord {
   last_status?: 'completed' | 'failed' | 'running' | null;
   last_error?: string | null;
   created_by: CronJobSource;
+  /**
+   * Set once a user edits a system-seeded default job via the API (not when
+   * the sync logic itself writes to it). ensureDefaultAgentCronJobs() skips
+   * re-overwriting a job once this is set, instead of silently reverting the
+   * user's edit on every server restart / cron sync. See #10.
+   */
+  user_modified?: number;
   created_at: string;
   updated_at: string;
 }

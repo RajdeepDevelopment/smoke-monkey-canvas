@@ -33,5 +33,12 @@ jobs:
       - name: Check TypeScript Types
         run: npx tsc --noEmit
 
+      - name: Lint Web Application
+        # oxlint exits non-zero only on error-severity findings (warnings,
+        # e.g. exhaustive-deps, don't fail the build). react-hooks(rules-of-hooks)
+        # is error-severity by default — see #7, where this was missing and a
+        # hooks-order regression shipped undetected.
+        run: npm --prefix web run lint
+
       - name: Verify CLI Executable
         run: node ./bin/cli.js --help

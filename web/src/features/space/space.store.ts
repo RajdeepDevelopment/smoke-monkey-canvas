@@ -357,7 +357,42 @@ let activeDraggedMemberIds = new Set<string>();
 let activeDraggedRoleZoneIds = new Set<string>();
 let activeDraggedRoleZonesMoved = false;
 
-// Shallow equality check to avoid recreating agents state and thrashing canvas re-renders
+/**
+ * Compares MCP/skill attachments by identity + enabled flag, not just count.
+ * Swapping one attachment for another, or toggling `enabled`, keeps the
+ * array the same length — a length-only check (the previous behavior)
+ * treats both as "no change" and the canvas never re-renders them. See #19.
+ */
+function attachmentsEqual(
+  prev: Array<{ id: string; enabled: number }> | undefined,
+  next: Array<{ id: string; enabled: number }> | undefined,
+): boolean {
+  const a = prev || [];
+  const b = next || [];
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id || a[i].enabled !== b[i].enabled) return false;
+  }
+  return true;
+}
+
+function latestRunEqual(prev: SpaceAgentEntity['latestRun'], next: SpaceAgentEntity['latestRun']): boolean {
+  if (prev === next) return true;
+  if (!prev || !next) return prev === next;
+  return prev.id === next.id && prev.status === next.status && prev.completed_at === next.completed_at;
+}
+
+// Equality check to avoid recreating agents state and thrashing canvas
+// re-renders. Must cover every field the canvas actually renders — a field
+// missing here is a change the canvas silently never shows. This previously
+// missed: MCP/skill identity and enabled state (only array length was
+// compared, so swapping or toggling one was invisible); latestRun (not
+// compared at all); and description/specialty/agent_tier/feature_ownership
+// (also not compared — and the server helpers that set them,
+// updateAgentTier/updateAgentFeatureOwnership/updateAgentLastSync, don't
+// bump an `updated_at` column, which doesn't exist on the agents table at
+// all, so that wasn't a usable signal here either; comparing these fields
+// directly makes a timestamp proxy unnecessary). See #19.
 function agentsEqual(prev: SpaceAgentEntity[], next: SpaceAgentEntity[]): boolean {
   if (prev === next) return true;
   if (!prev || !next) return false;
@@ -370,6 +405,11 @@ function agentsEqual(prev: SpaceAgentEntity[], next: SpaceAgentEntity[]): boolea
       a.status !== b.status ||
       a.name !== b.name ||
       a.role !== b.role ||
+      a.description !== b.description ||
+      a.specialty !== b.specialty ||
+      a.agent_tier !== b.agent_tier ||
+      a.feature_ownership_json !== b.feature_ownership_json ||
+      a.last_sync_at !== b.last_sync_at ||
       a.model !== b.model ||
       a.provider !== b.provider ||
       a.pos_x !== b.pos_x ||
@@ -377,8 +417,9 @@ function agentsEqual(prev: SpaceAgentEntity[], next: SpaceAgentEntity[]): boolea
       a.cron_enabled !== b.cron_enabled ||
       a.cron_expression !== b.cron_expression ||
       a.updated_at !== b.updated_at ||
-      a.skills?.length !== b.skills?.length ||
-      a.mcps?.length !== b.mcps?.length
+      !latestRunEqual(a.latestRun, b.latestRun) ||
+      !attachmentsEqual(a.skills, b.skills) ||
+      !attachmentsEqual(a.mcps, b.mcps)
     ) {
       return false;
     }

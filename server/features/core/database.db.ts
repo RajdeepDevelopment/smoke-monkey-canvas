@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { randomBytes } from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -408,6 +409,15 @@ export class CoreDatabase {
     } catch {
       // already exists
     }
+    try {
+      // Marks a system-seeded default cron job the user has since edited via
+      // the API, so ensureDefaultAgentCronJobs() can skip overwriting it on
+      // the next sync (server start, or any cron create/update/delete for
+      // the same agent). See #10.
+      this.db.exec("ALTER TABLE agent_cron_jobs ADD COLUMN user_modified INTEGER NOT NULL DEFAULT 0");
+    } catch {
+      // already exists
+    }
   }
 
   private backfillAgentExploreColumns(): void {
@@ -587,7 +597,40 @@ export class CoreDatabase {
     return row?.value ?? null;
   }
 
+  /**
+   * OS/runtime-level variable names that must never be set from a stored
+   * setting, regardless of caller. MCP servers and other child processes are
+   * spawned with a copy of process.env, so writing one of these here would
+   * let a crafted key name (from POST /api/settings/keys, the canvas_set_api_key
+   * agent tool, or any future caller) redirect module resolution, inject a
+   * preload library, or otherwise run attacker-controlled code the next time
+   * a child process is spawned (see #3).
+   */
+  private static readonly DANGEROUS_ENV_KEYS = new Set([
+    'PATH',
+    'NODE_OPTIONS',
+    'NODE_PATH',
+    'LD_PRELOAD',
+    'LD_LIBRARY_PATH',
+    'DYLD_INSERT_LIBRARIES',
+    'DYLD_LIBRARY_PATH',
+    'DYLD_FRAMEWORK_PATH',
+    'HOME',
+    'USERPROFILE',
+    'SHELL',
+    'PYTHONPATH',
+    'PERL5LIB',
+    'RUBYOPT',
+    'BASH_ENV',
+    'ENV',
+    'IFS',
+  ]);
+
   setSetting(key: string, value: string): void {
+    if (CoreDatabase.DANGEROUS_ENV_KEYS.has(key.toUpperCase())) {
+      console.warn(`[CoreDatabase] Refusing to store reserved environment variable name as a setting: ${key}`);
+      return;
+    }
     const stmt = this.db.prepare(`
       INSERT INTO settings (key, value) VALUES (?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -601,9 +644,35 @@ export class CoreDatabase {
     const rows = stmt.all() as unknown as Array<{ key: string; value: string }>;
     const result: Record<string, string> = {};
     for (const r of rows) {
+      // Internal keys (e.g. the per-install auth token) are never surfaced
+      // through getAllSettings() or getSetting()'s callers that enumerate
+      // "known" keys — see GET /api/settings/keys, which otherwise includes
+      // every persisted key, even masked, in its response.
+      if (r.key.startsWith(CoreDatabase.INTERNAL_KEY_PREFIX)) continue;
       result[r.key] = r.value;
     }
     return result;
+  }
+
+  private static readonly INTERNAL_KEY_PREFIX = '__internal_';
+  private static readonly AUTH_TOKEN_KEY = `${CoreDatabase.INTERNAL_KEY_PREFIX}auth_token`;
+
+  /**
+   * Returns the per-install bearer token used to authenticate /api and /ws
+   * traffic, generating and persisting one on first use. Writes directly to
+   * the settings table (bypassing setSetting()) so the token never touches
+   * process.env and never leaks through getAllSettings()/GET /api/settings/keys.
+   */
+  getOrCreateAuthToken(): string {
+    const existing = this.getSetting(CoreDatabase.AUTH_TOKEN_KEY);
+    if (existing) return existing;
+    const token = randomBytes(32).toString('hex');
+    const stmt = this.db.prepare(`
+      INSERT INTO settings (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `);
+    stmt.run(CoreDatabase.AUTH_TOKEN_KEY, token);
+    return token;
   }
 
   // ── Stock Skills & 10 Categories ───────────────────────────────────────────

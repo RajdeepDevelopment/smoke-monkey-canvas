@@ -35,6 +35,7 @@ import type { CompanyPreset, CompanyScale } from '../../../web/src/features/libr
 import { ENTERPRISE_AGENT_TEMPLATES, type AgentTemplate } from '../../../web/src/features/agent/agent.templates.js';
 import { STOCK_MCPS } from '../mcp/mcp.stock.manual.js';
 import { SKILL_CATEGORIES } from '../core/database.db.js';
+import { buildKnownCredentialKeys } from '../settings/settings.server.js';
 import { calculateNextRun } from '../../cron.js';
 
 // ── Diagnostic Logging (STDERR ONLY to keep STDOUT 100% pure JSON-RPC) ──────
@@ -44,6 +45,20 @@ const logErr = (...args: unknown[]) => {
 
 // ── Command-Line & Environment Configuration ────────────────────────────────
 const argv = process.argv.slice(2);
+/**
+ * Per-call space scope for the bridged custom-tools path (the main HTTP
+ * server calls CanvasMcpServer.getInstance().executeTool() in-process for
+ * every agent, across every space, on one shared long-lived process).
+ * configuredSpaceId below is a plain module-wide value with none of
+ * AsyncLocalStorage's properties: a call that resolved no target space used
+ * to silently inherit whatever space a previous, unrelated call last set via
+ * setConfiguredSpaceId(), and executeTool() awaits network/DB calls partway
+ * through, so two concurrent calls for different spaces could interleave and
+ * overwrite each other's scope mid-call. AsyncLocalStorage's context follows
+ * each call's own async execution chain through every await, isolated from
+ * other concurrent calls, and reverts automatically once that call's run()
+ * callback returns — see executeTool()'s scopedSpaceId parameter. See #13.
+ */
 const callSpaceScope = new AsyncLocalStorage<string>();
 let configuredSpaceId: string | null = process.env.CANVAS_SPACE_ID || process.env.SPACE_ID || null;
 let configuredPort = Number(process.env.PORT || 3333);
@@ -1148,16 +1163,16 @@ export class CanvasMcpServer {
             if (uri === 'canvas://spaces') {
               contentsText = JSON.stringify(spaceDb.getWorkspaceSpaces(), null, 2);
             } else if (uri === 'canvas://zones') {
-              contentsText = JSON.stringify(spaceDb.getZones(configuredSpaceId), null, 2);
+              contentsText = JSON.stringify(spaceDb.getZones(getConfiguredSpaceId()), null, 2);
             } else if (uri === 'canvas://agents') {
               contentsText = JSON.stringify(agentDb.getAllAgents(), null, 2);
             } else if (uri === 'canvas://status') {
               const spaces = spaceDb.getWorkspaceSpaces();
-              const zones = spaceDb.getZones(configuredSpaceId);
+              const zones = spaceDb.getZones(getConfiguredSpaceId());
               const agents = agentDb.getAllAgents();
               contentsText = JSON.stringify(
                 {
-                  scopedSpaceId: configuredSpaceId,
+                  scopedSpaceId: getConfiguredSpaceId(),
                   totalSpaces: spaces.length,
                   totalZones: zones.length,
                   totalAgents: agents.length,
@@ -2457,29 +2472,25 @@ export class CanvasMcpServer {
             };
           }
 
-          coreDb.setSetting(keyName, keyValue);
+          // Validate BEFORE writing anything. coreDb.setSetting() itself
+          // writes every key it's given into process.env, so checking the
+          // allowlist only afterward (the previous shape of this handler)
+          // never actually gated the process.env write at all — an agent
+          // could set PATH, NODE_OPTIONS, LD_PRELOAD, etc. through here, and
+          // MCP child processes inherit process.env (see #3). Shares the
+          // same list POST /api/settings/keys validates against.
+          const knownEnvKeys = buildKnownCredentialKeys();
+          if (!knownEnvKeys.has(keyName)) {
+            return {
+              content: [{
+                type: 'text',
+                text: `Error: "${keyName}" is not a recognized provider/MCP credential key. Not saved. Recognized keys come from the standard LLM providers and each attached MCP's declared envKeys.`,
+              }],
+              isError: true,
+            };
+          }
 
-          const knownEnvKeys = new Set<string>([
-            'NVIDIA_API_KEY',
-            'ANTHROPIC_API_KEY',
-            'OPENAI_API_KEY',
-            'GEMINI_API_KEY',
-            'GROQ_API_KEY',
-            'OPENROUTER_API_KEY',
-            'MISTRAL_API_KEY',
-            'PERPLEXITY_API_KEY',
-            'TOGETHER_API_KEY',
-            'DEEPSEEK_API_KEY',
-            'GITHUB_TOKEN',
-            'SLACK_BOT_TOKEN',
-          ]);
-          for (const mcp of STOCK_MCPS) {
-            for (const envKey of mcp.envKeys ?? []) knownEnvKeys.add(envKey);
-          }
-          const envPropagated = knownEnvKeys.has(keyName);
-          if (envPropagated) {
-            process.env[keyName] = keyValue;
-          }
+          coreDb.setSetting(keyName, keyValue);
 
           const masked = keyValue.length > 12
             ? `${keyValue.slice(0, 4)}...${keyValue.slice(-4)}`
@@ -2487,7 +2498,7 @@ export class CanvasMcpServer {
           return {
             content: [{
               type: 'text',
-              text: `Saved credential for ${keyName} (${masked}) into database settings${envPropagated ? ' and environment' : ' (unrecognized env key; environment propagation skipped)'} successfully.`,
+              text: `Saved credential for ${keyName} (${masked}) into database settings and environment successfully.`,
             }],
           };
         }

@@ -12,6 +12,7 @@ import {
   unwatchAgentWorkspace,
   setupAgentWorkspaceWatcher,
   initAllAgentWatchers,
+  isContained,
 } from './agent.files.js';
 import { AgentDb } from './agent.db.js';
 import { AgentRunner } from './agent.runner.js';
@@ -31,6 +32,7 @@ import {
   syncAgentDiskManifestFromDb,
   readAgentAutomations,
   readAgentMemorySummaries,
+  SMOKE_AGENTS_ROOT,
 } from './agent.manifest.js';
 import {
   buildEffectiveSystemPrompt,
@@ -991,8 +993,22 @@ export function createAgentRouter(): Router {
     if (agent && deleteFiles) {
       try {
         const ws = resolveAgentWorkspace(agent);
-        if (ws && fs.existsSync(ws)) {
+        // resolveAgentWorkspace() returns the agent's explicit working_dir
+        // verbatim when one is set, which could be the user's project, home
+        // directory, or any other path — never something this app created.
+        // Only ever recursively delete a workspace this app itself manages
+        // (under ~/.smoke-agents/), regardless of the deleteFiles flag: a
+        // user-chosen working_dir is never removed this way, full stop. See
+        // #4 — the "delete workspace folders" checkbox used to default to
+        // checked, so deleting a space could silently rm -rf a real project.
+        const managedRoot = path.join(homedir(), SMOKE_AGENTS_ROOT);
+        const isManaged = ws === managedRoot || isContained(managedRoot, path.resolve(ws));
+        if (ws && isManaged && fs.existsSync(ws)) {
           fs.rmSync(ws, { recursive: true, force: true });
+        } else if (ws && !isManaged) {
+          console.warn(
+            `[AgentServer] Refusing to delete workspace for agent ${id}: "${ws}" is a custom working_dir, not an app-managed workspace.`,
+          );
         }
       } catch (err) {
         console.warn(`[AgentServer] Failed to delete workspace folder for agent ${id}:`, err);
@@ -1504,6 +1520,17 @@ export function createAgentRouter(): Router {
       }
     }
 
+    // A genuine user edit via this route, however small, means
+    // ensureDefaultAgentCronJobs() must never silently revert it again — the
+    // syncAllAgentSchedules() call right below this would otherwise do
+    // exactly that for one of the three system-seeded default jobs, before
+    // this response even returns. Not set for the sync logic's own internal
+    // updateAgentCronJob() calls (agent.memory-compactor.ts), only here and
+    // anywhere else a human-initiated change is applied. See #10.
+    if (Object.keys(updates).length > 0 && existing.created_by === 'system') {
+      updates.user_modified = 1;
+    }
+
     const updated = db.updateAgentCronJob(jobId, updates);
     try {
       AgentCronScheduler.getInstance().syncAllAgentSchedules();
@@ -1558,8 +1585,14 @@ export function createAgentRouter(): Router {
     const body = req.body || {};
     const sessionId = body.id || `session_${id}_${Date.now()}`;
     const title = body.title || 'New Chat';
-    const session = db.getOrCreateSession(id, sessionId, title);
-    res.status(201).json(session);
+    try {
+      // If the caller-supplied id already belongs to another agent,
+      // getOrCreateSession() throws rather than handing it back. See #8.
+      const session = db.getOrCreateSession(id, sessionId, title);
+      res.status(201).json(session);
+    } catch (err: unknown) {
+      res.status(409).json({ error: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   router.get('/:id/active-runs', (req: Request, res: Response) => {
@@ -1569,7 +1602,14 @@ export function createAgentRouter(): Router {
   });
 
   router.get('/:id/sessions/:sessionId/messages', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
     const sessionId = getParam(req.params.sessionId);
+    // Without this, agent B could request agent A's session id here and
+    // read A's conversation. See #8.
+    if (!db.getOwnedSession(id, sessionId)) {
+      res.status(404).json({ error: 'Session not found for this agent' });
+      return;
+    }
     const messages = db.getSessionMessages(sessionId);
     const activeRun = runner.getActiveRunForSession(sessionId);
     if (activeRun && messages.length > 0) {
@@ -1585,6 +1625,11 @@ export function createAgentRouter(): Router {
   router.delete('/:id/sessions/:sessionId', (req: Request, res: Response) => {
     const id = getParam(req.params.id);
     const sessionId = getParam(req.params.sessionId);
+    // Without this, agent B could delete agent A's session by id. See #8.
+    if (!db.getOwnedSession(id, sessionId)) {
+      res.status(404).json({ error: 'Session not found for this agent' });
+      return;
+    }
     runner.clearAgentMemory(id, sessionId);
     db.deleteSession(sessionId);
     res.json({ success: true, id: sessionId });

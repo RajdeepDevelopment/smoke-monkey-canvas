@@ -127,13 +127,127 @@ export function getFileMimeType(ext: string): string {
   return MIME_TYPES[cleanExt] || 'application/octet-stream';
 }
 
+export function isContained(root: string, target: string): boolean {
+  if (target === root) return true;
+  const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+  return target.startsWith(rootWithSep);
+}
+
+const MAX_SYMLINK_HOPS = 40;
+
+/**
+ * `realpath` for a path whose tail may not exist yet.
+ *
+ * `fs.realpathSync` requires every component to exist, so it also throws for a
+ * *dangling* symlink (e.g. `workspace/link` -> `/outside/new.txt`) even though
+ * the link itself is present. Walking component by component with `lstatSync`
+ * resolves those links — and any existing symlinked parent — while still
+ * returning a usable path for genuinely new files.
+ *
+ * Link targets are expanded in filesystem order rather than through
+ * `path.resolve`/`path.join`, which collapse `..` lexically. Collapsing before
+ * the kernel does resolves the wrong file when a `..` follows a symlinked
+ * component: with `link` -> `pivot/../victim.txt` and `pivot` -> `/outside/sub`,
+ * the kernel reads `/outside/victim.txt`, not `workspace/victim.txt`.
+ *
+ * Returns null on a symlink loop, an unreadable component, or a `..` left
+ * after a component that does not exist (the kernel would fail there too).
+ */
+function resolveRealPathLoose(inputPath: string, hops = 0): string | null {
+  if (hops > MAX_SYMLINK_HOPS) return null;
+  const absolute = path.resolve(inputPath);
+  let root = path.parse(absolute).root;
+  const queue = absolute.slice(root.length).split(path.sep).filter(Boolean);
+  const resolved: string[] = [];
+
+  while (queue.length > 0) {
+    const part = queue.shift() as string;
+    if (part === '.') continue;
+    if (part === '..') {
+      // Every symlink before this point has already been expanded, so popping
+      // matches the order in which the kernel applies `..`.
+      resolved.pop();
+      continue;
+    }
+
+    const candidate = path.join(root, ...resolved, part);
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(candidate);
+    } catch {
+      // Missing component (so it can't be a symlink). The rest can't exist
+      // either, and a later `..` would only resolve correctly by following a
+      // symlink we can't inspect — reject instead of guessing.
+      if (queue.includes('..')) return null;
+      let realParent = path.join(root, ...resolved);
+      try {
+        realParent = fs.realpathSync(realParent);
+      } catch {
+        // keep the walked path
+      }
+      return path.join(realParent, part, ...queue);
+    }
+
+    if (stat.isSymbolicLink()) {
+      if (hops >= MAX_SYMLINK_HOPS) return null;
+      let linkTarget: string;
+      try {
+        linkTarget = fs.readlinkSync(candidate);
+      } catch {
+        return null;
+      }
+      hops += 1;
+      const isAbsoluteTarget = path.isAbsolute(linkTarget);
+      if (isAbsoluteTarget) {
+        root = path.parse(linkTarget).root;
+        resolved.length = 0;
+      }
+      const targetParts = linkTarget
+        .slice(isAbsoluteTarget ? root.length : 0)
+        .split(path.sep)
+        .filter(Boolean);
+      queue.unshift(...targetParts);
+      continue;
+    }
+
+    resolved.push(part);
+  }
+
+  try {
+    // Fully existing path: return the canonical form.
+    return fs.realpathSync(absolute);
+  } catch {
+    return path.join(root, ...resolved);
+  }
+}
+
 export function safeResolveWorkspacePath(workspaceRoot: string, relativePath: string): string | null {
   if (!workspaceRoot) return null;
   const normalizedRoot = path.resolve(workspaceRoot);
   const targetPath = path.resolve(normalizedRoot, relativePath || '.');
 
-  // Guard against path traversal outside workspace
-  if (!targetPath.startsWith(normalizedRoot)) {
+  // Guard against path traversal outside workspace. A separator-bounded
+  // comparison (not a bare startsWith) so a sibling directory whose name is
+  // merely prefixed by the root's name (e.g. /tmp/agent-1234-backup vs
+  // /tmp/agent-1234) is correctly rejected.
+  if (!isContained(normalizedRoot, targetPath)) {
+    return null;
+  }
+
+  // Resolve symlinks before the final containment check so a symlink inside
+  // the workspace that points outside of it (or a workspace root that is
+  // itself reached via a symlink) can't be used to escape. New-file paths are
+  // resolved component by component so a dangling symlink pointing outside
+  // the workspace is caught too.
+  let realRoot: string;
+  try {
+    realRoot = fs.realpathSync(normalizedRoot);
+  } catch {
+    return null; // workspace root must exist
+  }
+
+  const realTarget = resolveRealPathLoose(targetPath);
+  if (!realTarget || !isContained(realRoot, realTarget)) {
     return null;
   }
   return targetPath;

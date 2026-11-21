@@ -11,15 +11,23 @@ services:
     container_name: smoke-monkey-canvas
     restart: unless-stopped
     ports:
-      - "${PORT:-3333}:3333"
+      # Publish on host loopback only. The web UI receives the per-install
+      # bearer token, so the port must not be reachable from the LAN.
+      - "127.0.0.1:${PORT:-3333}:3333"
     environment:
       - PORT=3333
+      # Required inside the container so Docker can forward traffic to it.
+      - HOST=0.0.0.0
+      # Docker's userland proxy makes the browser's peer address the bridge
+      # gateway, not 127.0.0.1, so the local UI could not bootstrap the token
+      # without this. Safe only because the published port above is loopback.
+      - SMOKE_MONKEY_ASSUME_LOCAL=1
       - SMOKE_CANVAS_DB=/app/data/canvas.db
       - NODE_ENV=production
     volumes:
       - canvas-data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3333/api/space"]
+      test: ["CMD", "curl", "-f", "http://localhost:3333/api/health"]
       interval: 20s
       timeout: 5s
       retries: 3

@@ -10,8 +10,12 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onKeysSaved }) => {
-  if (!isOpen) return null;
-
+  // Hooks must run unconditionally on every render: LazyMount (see
+  // web/src/features/common/lazy-mount.tsx) keeps this component mounted
+  // after its first open, so closing it (isOpen=false) re-renders rather
+  // than unmounting. An early return before hooks changed the hook count
+  // between renders and crashed with a "Rendered fewer/more hooks than
+  // expected" error. The guard now runs after every hook below. See #7.
   const [keys, setKeys] = useState<Record<string, { masked: string; isSet: boolean }>>({});
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -23,6 +27,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       .then(setKeys)
       .catch((err) => console.error('Failed to load settings keys:', err));
   }, []);
+
+  if (!isOpen) return null;
 
   const handleChange = (key: string, val: string) => {
     setFormData((prev) => ({ ...prev, [key]: val }));

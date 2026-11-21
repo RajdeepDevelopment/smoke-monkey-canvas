@@ -26,6 +26,13 @@ import {
 } from './agent.todos.js';
 import { CANVAS_TOOL_DEFINITIONS, CanvasMcpServer } from '../mcp-server/canvas-mcp.server.js';
 
+/**
+ * Splits the DB-synced header from the agent's own notes in identity.md
+ * across regenerations by update_agent_profile. See that handler and #14.
+ */
+const IDENTITY_AUTO_SECTION_MARKER =
+  '<!-- Auto-synced from agent profile above this line. Notes below are preserved across profile updates. -->';
+
 function parseTargetList(inputVal?: string | string[]): string[] {
   if (Array.isArray(inputVal)) {
     return inputVal.map((s) => String(s).trim()).filter(Boolean);
@@ -596,7 +603,22 @@ async function executeSingleDelegatedTask(
 
   // Max retries for transient (technical) failures: 5s → 10s → 20s backoff
   const MAX_DELEGATION_RETRIES = 3;
-  const DELEGATION_TIMEOUT_MS = 240_000; // 4 minute safety timeout per attempt
+
+  // A flat per-attempt timeout doesn't account for nested delegation: if B is
+  // itself waiting on C (its own delegate_task call, which won't resolve
+  // until B's run finishes), A's wait time is really "B's own work" PLUS
+  // "however long B waits on C" — so a shallower (closer to the original
+  // caller) hop genuinely needs MORE slack than a deeper one, not the same
+  // fixed budget. Scale down as the chain gets deeper: a root delegation
+  // (chain length 2: [caller, target]) gets the largest multiplier, each
+  // added level of nesting gets progressively less extra slack, floored at
+  // 1x the base. Configurable via env since "realistic task duration" varies
+  // by deployment. See #16.
+  const BASE_DELEGATION_TIMEOUT_MS = Number(process.env.SMOKE_MONKEY_DELEGATION_TIMEOUT_MS) || 300_000; // 5 min
+  const MAX_SCALED_DELEGATION_DEPTH = 5;
+  const chainDepth = runner.getDelegationChain(delegationSessionId).length || 2;
+  const depthMultiplier = Math.max(1, MAX_SCALED_DELEGATION_DEPTH - chainDepth + 2);
+  const DELEGATION_TIMEOUT_MS = BASE_DELEGATION_TIMEOUT_MS * depthMultiplier;
 
   const delegationTrackId = callerInfo.callerAgentId
     ? runner.registerActiveDelegation(callerInfo.callerAgentId, targetAgentId, taskTitle, delegationSessionId)
@@ -612,7 +634,13 @@ async function executeSingleDelegatedTask(
     while (true) {
       delegationAttempt++;
 
-      // Wait for any existing run on this session to finish first
+      // Wait for any existing run on this session to finish first. This run
+      // wasn't started by this delegation attempt — it could be the target
+      // agent's own nested delegation to someone else, or a user manually
+      // chatting with it — so on timeout, fail the attempt without stopping
+      // it. Forcibly stopping a run this call didn't start (the previous
+      // behavior) could kill legitimate in-progress work, including a human
+      // user's own conversation. See #16.
       let activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
       while (activeSessionRun && activeSessionRun.status === 'running') {
         if (callerInfo.callerRunId && activeSessionRun.runId === callerInfo.callerRunId) break;
@@ -632,12 +660,10 @@ async function executeSingleDelegatedTask(
           );
         });
         if (timedOut) {
-          runner.stopRun(activeSessionRun.runId);
-          if (runner.getActiveRunForSession(delegationSessionId)) {
-            throw new Error(
-              `Delegation session "${delegationSessionId}" is still busy after ${DELEGATION_TIMEOUT_MS / 1000}s; aborting to avoid an infinite wait.`,
-            );
-          }
+          throw new Error(
+            `Delegation session "${delegationSessionId}" is still busy with another run after ${DELEGATION_TIMEOUT_MS / 1000}s; ` +
+              `not aborting it since this delegation didn't start it. Try again once it's free.`,
+          );
         }
         activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
       }
@@ -2827,7 +2853,7 @@ const BASE_CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
           const persNames = resolvePersonalities(currentPers).map((p) => p.name);
           const outNames = resolveOutputStyles(currentOut).map((o) => o.name);
 
-          const identityContent = `# Identity & Persona Memory — ${effectiveName}
+          const identityHeader = `# Identity & Persona Memory — ${effectiveName}
 
 Internalized persona traits, tone nuances, role boundaries, communication philosophy, and ethical stance that evolve over time.
 
@@ -2843,6 +2869,33 @@ Internalized persona traits, tone nuances, role boundaries, communication philos
 - **Quality Mandate**: High test coverage, robust error handling, modular architecture, and truthful state updates.
 - **Collaboration Mode**: Active peer and hierarchy member in spatial multi-agent workspace with persistent human memory.
 `;
+          // This header must stay in sync with the DB fields on every
+          // profile update, but the file is also where the agent records its
+          // own evolving identity notes (via update_agent_memory / the
+          // specialization-refinement cron job appending below). An
+          // unconditional overwrite here used to destroy all of that. See #14.
+          //
+          // Preserve anything after IDENTITY_AUTO_SECTION_MARKER across
+          // regenerations. A file with no marker yet (pre-fix, or purely
+          // hand/agent-authored with no template at all) has its entire
+          // existing content kept as the preserved tail rather than guessed
+          // at or discarded — the one-time cost is the new header appearing
+          // above the old one once; every write after that cleanly splits on
+          // the marker and only the true custom tail survives.
+          let preservedTail = '';
+          try {
+            if (existsSync(identityPath)) {
+              const existing = readFileSync(identityPath, 'utf8');
+              const markerIndex = existing.indexOf(IDENTITY_AUTO_SECTION_MARKER);
+              preservedTail =
+                markerIndex === -1
+                  ? existing.trim()
+                  : existing.slice(markerIndex + IDENTITY_AUTO_SECTION_MARKER.length).trim();
+            }
+          } catch {}
+          const identityContent = preservedTail
+            ? `${identityHeader}\n${IDENTITY_AUTO_SECTION_MARKER}\n\n${preservedTail}\n`
+            : `${identityHeader}\n${IDENTITY_AUTO_SECTION_MARKER}\n`;
           writeFileSync(identityPath, identityContent, 'utf8');
         }
         syncAgentDiskManifestFromDb({ agentId: agent.id, ws, db });
@@ -4697,6 +4750,14 @@ const CANVAS_BRIDGED_CUSTOM_TOOLS: ToolDefinition[] = CANVAS_TOOL_DEFINITIONS.ma
         agentSpace = sdb.getAgentSpaceId(callerId);
       } catch {}
     }
+    // Scoped via AsyncLocalStorage (CanvasMcpServer.executeTool's scopedSpaceId
+    // param), not a shared module-wide variable: the old
+    // setConfiguredSpaceId(targetSpace) was never reset, so a call that
+    // resolved no target space (no membership, no space_id argument) silently
+    // inherited whatever space a PREVIOUS, unrelated agent's call had last
+    // set — and since executeTool() awaits network/DB calls partway through,
+    // two agents in different spaces running tools concurrently could
+    // overwrite each other's scope mid-call. See #13.
     const targetSpace = agentSpace || (args as any)?.space_id || (args as any)?.spaceId || (ctx as any)?.spaceId || (ctx as any)?.owned_space_id;
     try {
       const res = await server.executeTool(def.name, (args as Record<string, any>) || {}, targetSpace || undefined);

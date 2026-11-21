@@ -3,6 +3,22 @@
 # Automatic TLS via Let's Encrypt: point an A/AAAA record for SMOKE_DOMAIN at
 # this server's public IP and Caddy obtains and renews the certificate itself.
 # WebSocket upgrades for /ws are handled natively by Caddy's reverse_proxy.
+#
+# Canvas requires a per-install bearer token (see SECURITY.md). The bundled web
+# client sends it in an `X-Smoke-Monkey-Token` header rather than
+# `Authorization`, so it can coexist with Caddy basic_auth below — the two do
+# not compete for the same header.
+#
+# Add a login inside the block below, before reverse_proxy, e.g.:
+#
+#   basic_auth {
+#     <username> <bcrypt-hash-from `caddy hash-password`>
+#   }
+#
+# With basic_auth in place you can either set SMOKE_MONKEY_DISABLE_AUTH=1
+# (basic_auth is now the only login) or keep the token layer and open the app
+# once as https://<SMOKE_DOMAIN>/#token=<SMOKE_MONKEY_AUTH_TOKEN>. The fragment
+# is never sent to the server, so the token stays out of access logs.
 
 {$SMOKE_DOMAIN} {
 	encode zstd gzip
@@ -26,6 +42,24 @@
 
 	log {
 		output stdout
-		format console
+		# Access logs record request URIs and headers. A legacy ?token= link or
+		# a WebSocket upgrade would put the installation token in the log, so
+		# strip both places. (The UI uses #token= and sends the WebSocket token
+		# in Sec-WebSocket-Protocol; Go logs that header key as
+		# "Sec-Websocket-Protocol".)
+		format filter {
+			wrap console
+			fields {
+				request>uri query {
+					delete token
+				}
+				request>headers>X-Smoke-Monkey-Token delete
+				request>headers>Sec-Websocket-Protocol delete
+				resp_headers>Sec-Websocket-Protocol delete
+				# A legacy ?token= page load sends the query in Referer for
+				# same-origin assets; redact just the token value.
+				request>headers>Referer regexp `([?&])token=[^&]*` `${1}token=REDACTED`
+			}
+		}
 	}
 }

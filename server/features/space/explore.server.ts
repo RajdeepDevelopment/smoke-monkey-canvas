@@ -10,6 +10,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ExploreReport, RunEventRecord } from '../agent/agent.types.js';
+import { isContained } from '../agent/agent.files.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -99,12 +100,31 @@ export async function prepareGitWorkspace(gitUrl?: string | null, localPath?: st
     return localPath || null;
   }
   try {
-    const repoName = gitUrl.replace(/\.git$/, '').split('/').pop() || 'repo';
+    const rawRepoName = gitUrl.replace(/\.git$/, '').split('/').pop() || 'repo';
+    // The URL's last path segment becomes a directory name joined onto
+    // .smoke-repos below. A URL ending in e.g. `/..` makes that segment
+    // literally "..", resolving targetDir to .smoke-repos's PARENT —
+    // process.cwd(), which has its own .git when running from a checkout —
+    // so the "pull latest" branch below would run `git pull` against the
+    // server's own repository. Reject anything that isn't a plain,
+    // single-segment name: no empty/dot/dot-dot, no path separators, no
+    // leading dot (hidden-dir names), no null bytes. See #20.
+    if (!rawRepoName || /^\.{1,2}$/.test(rawRepoName) || /[/\\\0]/.test(rawRepoName) || rawRepoName.startsWith('.')) {
+      console.warn(`[Git] Rejecting unsafe repo name derived from URL "${gitUrl}": "${rawRepoName}"`);
+      return null;
+    }
+    const repoName = rawRepoName;
     const reposDir = path.resolve(process.cwd(), '.smoke-repos');
     if (!fs.existsSync(reposDir)) {
       fs.mkdirSync(reposDir, { recursive: true });
     }
     const targetDir = path.join(reposDir, repoName);
+    // Defense in depth: even with the name validated above, confirm the
+    // resolved path never escapes .smoke-repos before touching it with git.
+    if (!isContained(reposDir, targetDir)) {
+      console.warn(`[Git] Rejecting resolved path outside .smoke-repos for URL "${gitUrl}": "${targetDir}"`);
+      return null;
+    }
     if (fs.existsSync(path.join(targetDir, '.git'))) {
       console.log(`[Git] Pulling latest changes in ${targetDir}...`);
       await execFileAsync('git', ['-C', targetDir, 'pull', '--depth=1']).catch(() => {});
@@ -703,6 +723,22 @@ export function createExploreRouter(): Router {
       if (!session) return res.status(404).json({ error: 'Session not found' });
       if (!session.explore_report_json) return res.status(400).json({ error: 'No report to accept' });
 
+      // A double-click, or a resubmit after the first request hasn't
+      // visibly completed yet (the real-world trigger — the architect build
+      // this route kicks off isn't instant), used to create a second
+      // Architect agent that built the whole company again: nothing here
+      // checked whether a build was already underway or done, and the
+      // status write happened only after creating the (first) agent. Reject
+      // outright once a build has started, and do it before any of the
+      // agent-creation work below. See #18.
+      if (session.status === 'building' || session.status === 'built') {
+        return res.status(409).json({
+          error: `Explore session is already ${session.status}.`,
+          status: session.status,
+          architectAgentId: session.architect_agent_id || null,
+        });
+      }
+
       const report: ExploreReport = JSON.parse(session.explore_report_json);
 
       const { provider: resolvedProvider, model: resolvedModel } = resolveDefaultProviderAndModel(
@@ -712,6 +748,16 @@ export function createExploreRouter(): Router {
 
       // Create Architect Agent
       const architectAgentId = `architect_${Date.now()}_${randomUUID().slice(0, 6)}`;
+
+      // Flip the status to 'building' before any agent-creation work starts,
+      // not after — the narrowest possible window between the check above
+      // and this write is the only thing a race could still slip through,
+      // and this closes it as tightly as the synchronous DB layer allows.
+      spaceDb.updateExploreSession(sessionId, {
+        status: 'building',
+        architect_agent_id: architectAgentId,
+      });
+
       agentDb.createAgent({
         id: architectAgentId,
         name: `Architect — ${report.company_name}`,
@@ -732,11 +778,7 @@ export function createExploreRouter(): Router {
       // Bind architect agent to space
       spaceDb.setAgentSpace(architectAgentId, session.space_id);
 
-      // Update session status and record architectAgentId
-      spaceDb.updateExploreSession(sessionId, {
-        status: 'building',
-        architect_agent_id: architectAgentId,
-      });
+      // (status + architect_agent_id already written above, before agent creation)
 
       // Attach Canvas MCP strictly scoped to this space
       const mcpId = `mcp_${Date.now()}_${randomUUID().slice(0, 6)}`;

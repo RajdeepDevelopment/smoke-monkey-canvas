@@ -417,11 +417,37 @@ export class AgentDb {
   }
 
   // ── Chat Sessions & Multi-Turn Messages ───────────────────────────────────
+  /**
+   * Returns the session only if it exists AND belongs to the given agent.
+   * Session ids are not secrets (they're echoed back to clients, passed in
+   * POST /run bodies, etc.), so without this check, agent B could pass
+   * agent A's session id and read, append to, or delete A's conversation.
+   * Used everywhere a caller supplies a session id for an operation scoped
+   * to one agent. See #8.
+   */
+  getOwnedSession(agentId: string, sessionId: string): ChatSessionRecord | null {
+    const session = this.getSession(sessionId);
+    if (!session || session.agent_id !== agentId) return null;
+    return session;
+  }
+
   getOrCreateSession(agentId: string, sessionId?: string, title?: string): ChatSessionRecord {
     const id = sessionId || `session_${agentId}_default`;
     const stmtGet = this.coreDb.db.prepare(`SELECT * FROM chat_sessions WHERE id = ?`);
     const existing = stmtGet.get(id) as unknown as ChatSessionRecord | undefined;
-    if (existing) return existing;
+    if (existing) {
+      if (existing.agent_id !== agentId) {
+        // The id exists but belongs to a different agent. Silently handing
+        // back someone else's session was the bug; silently creating a
+        // second session under a colliding id isn't possible either (id is
+        // the primary key) and would be confusing if it were. Callers (every
+        // route below, and AgentRunner.runAgent) must handle this rejection
+        // — HTTP routes turn it into 404/400, never into "use agent A's data
+        // anyway". See #8.
+        throw new Error(`Session ${id} does not belong to agent ${agentId}`);
+      }
+      return existing;
+    }
 
     const now = new Date().toISOString();
     const sessionTitle = title || 'General Discussion';
@@ -477,10 +503,29 @@ export class AgentDb {
     stmt.run(new Date().toISOString(), sessionId);
   }
 
+  /**
+   * Deletes a session and every chat_messages row that belongs to it.
+   *
+   * The schema declares chat_messages.session_id with ON DELETE CASCADE, but
+   * no connection enables `PRAGMA foreign_keys = ON` (flipping that on
+   * globally risks surfacing unrelated, currently-silent FK violations
+   * elsewhere in an existing user's database), so SQLite never enforced that
+   * cascade — messages survived a session delete. The UI falls back to a
+   * deterministic default session id, which getOrCreateSession() happily
+   * recreates, so the "deleted" conversation (and its old messages as model
+   * context on the next run) would reappear. See #6.
+   */
   deleteSession(sessionId: string): boolean {
-    const stmt = this.coreDb.db.prepare(`DELETE FROM chat_sessions WHERE id = ?`);
-    const res = stmt.run(sessionId);
-    return res.changes > 0;
+    this.coreDb.db.exec('BEGIN');
+    try {
+      this.coreDb.db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`).run(sessionId);
+      const res = this.coreDb.db.prepare(`DELETE FROM chat_sessions WHERE id = ?`).run(sessionId);
+      this.coreDb.db.exec('COMMIT');
+      return res.changes > 0;
+    } catch (err) {
+      this.coreDb.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   addChatMessage(msg: {
@@ -594,7 +639,15 @@ export class AgentDb {
           }
         }
 
-        if (changed || (!msg.parts_json && parts.length > 0)) {
+        // msg.parts_json === '[]' must be treated the same as missing: it's a
+        // non-empty, truthy string, so `!msg.parts_json` alone misses it.
+        // Reconstruction above (msg.role === 'assistant' && (!msg.parts_json
+        // || msg.parts_json === '[]') ...) already rebuilds `parts` for both
+        // cases, but this save/return condition previously only covered the
+        // null/undefined case, so a reconstructed-but-unchanged (no running
+        // tool calls to finalize) interrupted run was discarded here and the
+        // stale empty '[]' was returned instead. See #11.
+        if (changed || ((!msg.parts_json || msg.parts_json === '[]') && parts.length > 0)) {
           const partsJson = JSON.stringify(parts);
           this.updateChatMessage(msg.id, { parts_json: partsJson });
           return { ...msg, parts_json: partsJson };
@@ -869,6 +922,10 @@ export class AgentDb {
       sets.push('last_error = ?');
       values.push(updates.last_error);
     }
+    if (updates.user_modified !== undefined) {
+      sets.push('user_modified = ?');
+      values.push(updates.user_modified ? 1 : 0);
+    }
 
     if (sets.length === 0) return existing;
 
@@ -964,6 +1021,35 @@ export class AgentDb {
     `);
     const row = stmt.get(agentId, taskDate, content) as unknown as AgentTodoRecord | undefined;
     return row ?? null;
+  }
+
+  /**
+   * Deletes todo rows for this agent/date/run whose content is not present
+   * in the current full list. The harness's todo_write tool is documented
+   * as a full-list replacement ("Send the ENTIRE list every call - it
+   * REPLACES the previous list"), but the upsert loop that calls this only
+   * ever added/updated rows matching the current payload — nothing deleted
+   * or marked a row stale when a task was removed or renamed, so removed
+   * tasks became permanent phantom rows and renames produced duplicates.
+   * Scoped to run_id (not just agent_id + task_date) so an earlier run's
+   * todos from the same day are never touched by a later run's first
+   * todo_write call. See #9.
+   */
+  reconcileAgentTodosForRun(agentId: string, taskDate: string, runId: string, currentContents: string[]): void {
+    if (currentContents.length === 0) {
+      // An empty list is still a valid full replacement: this run has no
+      // to-dos left for this date.
+      this.coreDb.db
+        .prepare(`DELETE FROM agent_todo_history WHERE agent_id = ? AND task_date = ? AND run_id = ?`)
+        .run(agentId, taskDate, runId);
+      return;
+    }
+    const placeholders = currentContents.map(() => '?').join(',');
+    this.coreDb.db
+      .prepare(
+        `DELETE FROM agent_todo_history WHERE agent_id = ? AND task_date = ? AND run_id = ? AND content NOT IN (${placeholders})`,
+      )
+      .run(agentId, taskDate, runId, ...currentContents);
   }
 
   upsertAgentTodoItem(record: AgentTodoRecord): AgentTodoRecord {

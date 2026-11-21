@@ -342,12 +342,41 @@ export function syncAgentTodoDiskLedger(
 
     const dateSet = new Set(indexData.dates || []);
     dateSet.add(summary.date);
-    indexData.dates = [...dateSet].sort().reverse();
-    indexData.lastUpdated = new Date().toISOString();
+    const dates = [...dateSet].sort().reverse();
 
-    for (const spec of summary.specializations) {
-      indexData.specializationCounts[spec] = (indexData.specializationCounts[spec] || 0) + 1;
+    // Rebuild specializationCounts and totalRecords from the daily ledger
+    // files instead of incrementing on every write. The old code added to
+    // specializationCounts[spec] every time this ran — once per todo_write
+    // call, not once per day — so counts inflated throughout a single day's
+    // work, and totalRecords was declared but never assigned at all. This
+    // rebuild is idempotent: syncing the same date any number of times
+    // produces the same counters, and it self-heals once deployed (the next
+    // write replaces the old inflated indexData.specializationCounts
+    // wholesale rather than building on top of it). See #9.
+    const specializationCounts: Record<string, number> = {};
+    let totalRecords = 0;
+    for (const date of dates) {
+      const daySummary: AgentTodoDaySummary | null =
+        date === summary.date
+          ? summary
+          : (() => {
+              try {
+                return JSON.parse(fs.readFileSync(path.join(todosDir, `${date}.json`), 'utf8'));
+              } catch {
+                return null; // file missing/unreadable — skip rather than fail the whole sync
+              }
+            })();
+      if (!daySummary) continue;
+      totalRecords += daySummary.total ?? 0;
+      for (const spec of daySummary.specializations ?? []) {
+        specializationCounts[spec] = (specializationCounts[spec] || 0) + 1;
+      }
     }
+
+    indexData.dates = dates;
+    indexData.totalRecords = totalRecords;
+    indexData.specializationCounts = specializationCounts;
+    indexData.lastUpdated = new Date().toISOString();
 
     fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), 'utf8');
   } catch (err) {
@@ -387,9 +416,11 @@ export async function recordAgentTodoUpdate(
   const taskDate = dateResult.taskDate;
 
   // 2. Upsert each to-do item into database
+  const currentContents: string[] = [];
   for (const raw of todos) {
     const content = String(raw.content ?? '').trim();
     if (!content) continue;
+    currentContents.push(content);
 
     const status = (['pending', 'in_progress', 'completed', 'cancelled'].includes(String(raw.status))
       ? String(raw.status)
@@ -424,6 +455,17 @@ export async function recordAgentTodoUpdate(
     };
 
     db.upsertAgentTodoItem(record);
+  }
+
+  // todo_write is a full-list replacement: anything not in this call's
+  // payload has been removed or renamed by the agent, not merely omitted
+  // this time. Reconcile so those items don't linger as phantom rows (or,
+  // on rename, as a duplicate alongside the new content). Scoped to runId
+  // so this never touches an earlier run's todos from the same day; skipped
+  // entirely if runId is somehow absent, since there'd be no safe scope to
+  // delete within. See #9.
+  if (runId) {
+    db.reconcileAgentTodosForRun(agentId, taskDate, runId, currentContents);
   }
 
   // 3. Query all to-dos for this agent on this effective date to produce the day summary

@@ -32,7 +32,7 @@ services:
     autoDeployTrigger: 'off'
 
     # Must answer 2xx within 5s or Render restarts the instance. Keep this route cheap.
-    healthCheckPath: /api/space
+    healthCheckPath: /api/health
 
     # SQLite lives here. Losing this disk loses agents, chat history and API keys.
     disk:
@@ -43,8 +43,18 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: HOST
+        value: 0.0.0.0
       - key: SMOKE_CANVAS_DB
         value: /app/data/canvas.db
+
+      # The web UI authenticates with a bearer token that the server never
+      # sends to remote browsers. Enter a long random value here (Render
+      # prompts for it), then open the app once as
+      #   https://<service>.onrender.com/#token=<value>
+      # See SECURITY.md.
+      - key: SMOKE_MONKEY_AUTH_TOKEN
+        sync: false
 
       # Render injects PORT automatically and the server honours it
       # (`process.env.PORT || 3333`), so PORT is intentionally not set here.

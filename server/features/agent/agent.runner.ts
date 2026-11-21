@@ -85,6 +85,40 @@ function sleepWithAbort(ms: number, isAborted: () => boolean): Promise<void> {
   });
 }
 
+/**
+ * Matches smoke-monkey-harness's own RETRYABLE_LLM_ERROR pattern
+ * (services/llm-client.js) so this outer retry loop and the harness's
+ * internal one agree on what counts as transient.
+ */
+const RETRYABLE_RUN_ERROR =
+  /timeout|etimedout|econnreset|econnrefused|socket hang up|rate.?limit|too many requests|bad gateway|service unavailable|internal server error|overloaded|server error|\b5\d\d\b/i;
+
+/** Matches the harness's own fatalAuth check — never worth retrying. */
+const FATAL_AUTH_ERROR = /unauthorized|invalid api key|forbidden|\b401\b|\b403\b/i;
+
+/**
+ * Whether a run failure is worth retrying.
+ *
+ * Before e7cb805, any error failed a manual run immediately — no retries at
+ * all. The retry loop added there retries on ANY exception, including
+ * permanent ones (an invalid API key, an unknown/misconfigured model name):
+ * those don't become valid by waiting and trying again, so a user watched up
+ * to 10 retries (~7 minutes, each one a real model call) before seeing a
+ * failure that was knowable on attempt 1. See #17.
+ *
+ * Classify instead: retry only errors that plausibly resolve on their own
+ * (network blips, rate limiting, upstream 5xx) — anything else, including an
+ * error we don't recognize at all, fails fast rather than being retried on
+ * the assumption it might clear up.
+ */
+function isTransientRunError(err: Error & { status?: number }): boolean {
+  const status = Number(err.status ?? (err as any).response?.status ?? 0);
+  const msg = err.message || '';
+  if (FATAL_AUTH_ERROR.test(msg) || status === 401 || status === 403) return false;
+  if ([408, 429, 500, 502, 503, 504].includes(status)) return true;
+  return RETRYABLE_RUN_ERROR.test(msg);
+}
+
 export class AgentRunner {
   private static instance: AgentRunner | null = null;
   private db: AgentDb;
@@ -161,8 +195,22 @@ export class AgentRunner {
       const store = this.agentStores.get(agentId);
       if (store) {
         try {
-          // Re-create session
-          store.ensureSession(sessionId, { agentId, workspacePath: '' });
+          // store.ensureSession() is a no-op for a session that already
+          // exists — including its cached message history — so calling it
+          // here never actually cleared anything. getOrCreateStore() only
+          // ever ADDS messages found in SQLite beyond what's already cached
+          // in-memory; it never removes extras, so a stale in-memory cache
+          // survives a DB-level session delete on its own. The harness's
+          // MemoryStore exposes no public clear/reset method, so reach past
+          // its `private` TS fields (not truly private at runtime — the
+          // compiled JS has no # private fields) to actually drop the
+          // cached session and its messages. Without this, recreating the
+          // same session id (e.g. the default session, which the UI falls
+          // back to immediately) would still send the "deleted"
+          // conversation back to the model as context. See #6.
+          const rawStore = store as unknown as { sessions: Map<string, unknown>; messages: Map<string, unknown> };
+          rawStore.sessions?.delete(sessionId);
+          rawStore.messages?.delete(sessionId);
         } catch {}
       }
       this.db.deleteSession(sessionId);
@@ -324,28 +372,41 @@ export class AgentRunner {
       };
     }
 
-    // 2. Build the ancestor chain from the parent session
-    const ancestorChain: string[] = parentSessionId
-      ? [...(this.delegationChains.get(parentSessionId) || [])]
-      : [];
+    // 2. Build the ancestor chain from the parent session.
+    //
+    // delegationChains only has an entry for a session that was ITSELF
+    // previously registered as the child of a delegation — never for a
+    // plain user-facing chat session. A top-level delegation from a user
+    // chat passes that chat's sessionId as parentSessionId (it's truthy),
+    // but delegationChains.get(parentSessionId) correctly returns undefined
+    // for it, since it's not a delegation chain at all. The old code treated
+    // "parentSessionId is truthy" as "a real ancestor chain exists and
+    // already ends with callerAgentId", so this case silently produced []
+    // instead — the resulting chain was [targetAgentId] with no caller in
+    // it. So when B later delegated back to A, A wasn't in the chain and
+    // the cycle went undetected, allowing A→B→A→B→... indefinitely.
+    //
+    // Fix: when there's no existing registered chain for parentSessionId
+    // (whichever reason), this delegation is the root of a new chain, so
+    // seed it with callerAgentId — exactly like the undefined-parentSessionId
+    // case already did. See #12.
+    const existingParentChain = parentSessionId ? this.delegationChains.get(parentSessionId) : undefined;
+    const ancestorChain: string[] = existingParentChain ? [...existingParentChain] : [callerAgentId];
 
     // 3. Cycle detection: targetAgentId must not already be in the chain
     if (ancestorChain.includes(targetAgentId)) {
-      const visual = [...ancestorChain, callerAgentId, targetAgentId].join(' → ');
+      const visual = [...ancestorChain, targetAgentId].join(' → ');
       return {
         allowed: false,
         reason: `Circular delegation detected: agent "${targetAgentId}" is already in the delegation chain [${visual}]. Circular calls are blocked to prevent infinite loops.`,
       };
     }
 
-    // 4. Register the new chain: ancestors + targetAgentId.
-    //    The ancestor chain from the parent session already ends with callerAgentId
-    //    (because it was stored as [...grandAncestors, ..., callerAgentId]).
-    //    We only append targetAgentId to extend the chain correctly.
-    //    If there is no parent session this is a root delegation so we include both.
-    const newChain = parentSessionId
-      ? [...ancestorChain, targetAgentId]
-      : [callerAgentId, targetAgentId];
+    // 4. Register the new chain: ancestorChain already ends with
+    //    callerAgentId in every case now (either from a real parent chain,
+    //    or freshly seeded above), so appending targetAgentId is always
+    //    correct — no more branching on parentSessionId here.
+    const newChain = [...ancestorChain, targetAgentId];
     this.delegationChains.set(childSessionId, newChain);
 
     // 5. Register parent/child session links
@@ -1677,6 +1738,18 @@ export class AgentRunner {
         // A delegated task that explicitly closed as failed/blocked is a
         // business outcome, not a transient error — do not re-run it.
         if (isDelegationFailure) break;
+
+        // A permanent error (invalid API key, unknown model, etc.) won't
+        // resolve itself by retrying — fail now instead of burning through
+        // up to maxRetries real model-call attempts first. Errors with no
+        // recognizable transient signature are treated as permanent too
+        // (fail fast by default, not retry-by-default). Doesn't apply when
+        // there's no exception at all (e.g. a cron job that simply didn't
+        // call mark_cron_job_success) — that retry reason is unrelated to
+        // error classification. See #17.
+        if (lastAttemptError && !isTransientRunError(lastAttemptError)) {
+          break;
+        }
 
         // If retries not exhausted, prepare next retry prompt
         if (attempt <= maxRetries) {
