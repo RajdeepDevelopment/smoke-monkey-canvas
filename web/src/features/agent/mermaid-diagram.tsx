@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useState } from 'react';
 import mermaid from 'mermaid';
+import DOMPurify from 'dompurify';
 
 let isInitialized = false;
 
@@ -9,7 +10,13 @@ function initMermaid() {
     mermaid.initialize({
       startOnLoad: false,
       theme: 'dark',
-      securityLevel: 'loose',
+      // 'loose' explicitly skips Mermaid's own DOMPurify pass (see
+      // isLooseSecurityLevel in Mermaid's serializeSvg). Diagram code is
+      // model output an agent can be influenced to emit from untrusted
+      // content it reads, so 'strict' (the Mermaid default) is required
+      // here — see #5. A second, independent DOMPurify pass below sanitizes
+      // the returned SVG again before it's injected, as defense in depth.
+      securityLevel: 'strict',
       themeVariables: {
         darkMode: true,
         background: '#0d1322',
@@ -52,7 +59,16 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ code }) => {
       .render(diagramId, cleanCode)
       .then((res) => {
         if (isMounted) {
-          setSvg(res.svg);
+          // Defense in depth on top of securityLevel: 'strict' above: sanitize
+          // the rendered SVG independently before it ever reaches
+          // dangerouslySetInnerHTML. svg/svgFilters keep the diagram markup;
+          // html stays enabled so foreignObject-based text labels (Mermaid's
+          // usual way of rendering label text) still render, while <script>,
+          // event handler attributes, and javascript: URLs are stripped.
+          const sanitized = DOMPurify.sanitize(res.svg, {
+            USE_PROFILES: { svg: true, svgFilters: true, html: true },
+          });
+          setSvg(sanitized);
           setError(null);
         }
       })
