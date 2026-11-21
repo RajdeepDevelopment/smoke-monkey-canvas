@@ -19,6 +19,7 @@
  */
 
 import * as readline from 'node:readline';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -43,6 +44,7 @@ const logErr = (...args: unknown[]) => {
 
 // ── Command-Line & Environment Configuration ────────────────────────────────
 const argv = process.argv.slice(2);
+const callSpaceScope = new AsyncLocalStorage<string>();
 let configuredSpaceId: string | null = process.env.CANVAS_SPACE_ID || process.env.SPACE_ID || null;
 let configuredPort = Number(process.env.PORT || 3333);
 let customDbPath: string | undefined = process.env.SMOKE_CANVAS_DB || undefined;
@@ -64,6 +66,8 @@ export function setConfiguredSpaceId(id: string | null): void {
 }
 
 export function getConfiguredSpaceId(): string | null {
+  const callScopedId = callSpaceScope.getStore();
+  if (callScopedId !== undefined) return callScopedId;
   return configuredSpaceId || process.env.CANVAS_SPACE_ID || process.env.SPACE_ID || null;
 }
 
@@ -1200,7 +1204,11 @@ export class CanvasMcpServer {
     });
   }
 
-  public async executeTool(name: string, args: Record<string, any>): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+  public async executeTool(name: string, args: Record<string, any>, scopedSpaceId?: string): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+    if (scopedSpaceId !== undefined) {
+      return callSpaceScope.run(scopedSpaceId, () => this.executeTool(name, args));
+    }
+
     try {
       switch (name) {
         // ── Category 1: Spaces & Companies ────────────────────────────────
@@ -1285,9 +1293,10 @@ export class CanvasMcpServer {
         }
 
         case 'canvas_create_space': {
-          if (configuredSpaceId) {
+          const activeScopeId = getConfiguredSpaceId();
+          if (activeScopeId) {
             return {
-              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${configuredSpaceId}" cannot create new spaces.` }],
+              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${activeScopeId}" cannot create new spaces.` }],
               isError: true,
             };
           }
@@ -1362,9 +1371,10 @@ export class CanvasMcpServer {
         }
 
         case 'canvas_delete_space': {
-          if (configuredSpaceId) {
+          const activeScopeId = getConfiguredSpaceId();
+          if (activeScopeId) {
             return {
-              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${configuredSpaceId}" cannot delete spaces.` }],
+              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${activeScopeId}" cannot delete spaces.` }],
               isError: true,
             };
           }
@@ -2646,7 +2656,7 @@ export class CanvasMcpServer {
                 isError: true,
               };
             }
-            if (!explicitSpaceId && !configuredSpaceId) {
+            if (!explicitSpaceId && !getConfiguredSpaceId()) {
               return {
                 content: [{
                   type: 'text',
