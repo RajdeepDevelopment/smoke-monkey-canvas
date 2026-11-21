@@ -338,28 +338,41 @@ export class AgentRunner {
       };
     }
 
-    // 2. Build the ancestor chain from the parent session
-    const ancestorChain: string[] = parentSessionId
-      ? [...(this.delegationChains.get(parentSessionId) || [])]
-      : [];
+    // 2. Build the ancestor chain from the parent session.
+    //
+    // delegationChains only has an entry for a session that was ITSELF
+    // previously registered as the child of a delegation — never for a
+    // plain user-facing chat session. A top-level delegation from a user
+    // chat passes that chat's sessionId as parentSessionId (it's truthy),
+    // but delegationChains.get(parentSessionId) correctly returns undefined
+    // for it, since it's not a delegation chain at all. The old code treated
+    // "parentSessionId is truthy" as "a real ancestor chain exists and
+    // already ends with callerAgentId", so this case silently produced []
+    // instead — the resulting chain was [targetAgentId] with no caller in
+    // it. So when B later delegated back to A, A wasn't in the chain and
+    // the cycle went undetected, allowing A→B→A→B→... indefinitely.
+    //
+    // Fix: when there's no existing registered chain for parentSessionId
+    // (whichever reason), this delegation is the root of a new chain, so
+    // seed it with callerAgentId — exactly like the undefined-parentSessionId
+    // case already did. See #12.
+    const existingParentChain = parentSessionId ? this.delegationChains.get(parentSessionId) : undefined;
+    const ancestorChain: string[] = existingParentChain ? [...existingParentChain] : [callerAgentId];
 
     // 3. Cycle detection: targetAgentId must not already be in the chain
     if (ancestorChain.includes(targetAgentId)) {
-      const visual = [...ancestorChain, callerAgentId, targetAgentId].join(' → ');
+      const visual = [...ancestorChain, targetAgentId].join(' → ');
       return {
         allowed: false,
         reason: `Circular delegation detected: agent "${targetAgentId}" is already in the delegation chain [${visual}]. Circular calls are blocked to prevent infinite loops.`,
       };
     }
 
-    // 4. Register the new chain: ancestors + targetAgentId.
-    //    The ancestor chain from the parent session already ends with callerAgentId
-    //    (because it was stored as [...grandAncestors, ..., callerAgentId]).
-    //    We only append targetAgentId to extend the chain correctly.
-    //    If there is no parent session this is a root delegation so we include both.
-    const newChain = parentSessionId
-      ? [...ancestorChain, targetAgentId]
-      : [callerAgentId, targetAgentId];
+    // 4. Register the new chain: ancestorChain already ends with
+    //    callerAgentId in every case now (either from a real parent chain,
+    //    or freshly seeded above), so appending targetAgentId is always
+    //    correct — no more branching on parentSessionId here.
+    const newChain = [...ancestorChain, targetAgentId];
     this.delegationChains.set(childSessionId, newChain);
 
     // 5. Register parent/child session links
