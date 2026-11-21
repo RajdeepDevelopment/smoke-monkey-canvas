@@ -588,7 +588,40 @@ export class CoreDatabase {
     return row?.value ?? null;
   }
 
+  /**
+   * OS/runtime-level variable names that must never be set from a stored
+   * setting, regardless of caller. MCP servers and other child processes are
+   * spawned with a copy of process.env, so writing one of these here would
+   * let a crafted key name (from POST /api/settings/keys, the canvas_set_api_key
+   * agent tool, or any future caller) redirect module resolution, inject a
+   * preload library, or otherwise run attacker-controlled code the next time
+   * a child process is spawned (see #3).
+   */
+  private static readonly DANGEROUS_ENV_KEYS = new Set([
+    'PATH',
+    'NODE_OPTIONS',
+    'NODE_PATH',
+    'LD_PRELOAD',
+    'LD_LIBRARY_PATH',
+    'DYLD_INSERT_LIBRARIES',
+    'DYLD_LIBRARY_PATH',
+    'DYLD_FRAMEWORK_PATH',
+    'HOME',
+    'USERPROFILE',
+    'SHELL',
+    'PYTHONPATH',
+    'PERL5LIB',
+    'RUBYOPT',
+    'BASH_ENV',
+    'ENV',
+    'IFS',
+  ]);
+
   setSetting(key: string, value: string): void {
+    if (CoreDatabase.DANGEROUS_ENV_KEYS.has(key.toUpperCase())) {
+      console.warn(`[CoreDatabase] Refusing to store reserved environment variable name as a setting: ${key}`);
+      return;
+    }
     const stmt = this.db.prepare(`
       INSERT INTO settings (key, value) VALUES (?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value

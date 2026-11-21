@@ -34,6 +34,7 @@ import type { CompanyPreset, CompanyScale } from '../../../web/src/features/libr
 import { ENTERPRISE_AGENT_TEMPLATES, type AgentTemplate } from '../../../web/src/features/agent/agent.templates.js';
 import { STOCK_MCPS } from '../mcp/mcp.stock.manual.js';
 import { SKILL_CATEGORIES } from '../core/database.db.js';
+import { buildKnownCredentialKeys } from '../settings/settings.server.js';
 import { calculateNextRun } from '../../cron.js';
 
 // ── Diagnostic Logging (STDERR ONLY to keep STDOUT 100% pure JSON-RPC) ──────
@@ -2447,29 +2448,25 @@ export class CanvasMcpServer {
             };
           }
 
-          coreDb.setSetting(keyName, keyValue);
+          // Validate BEFORE writing anything. coreDb.setSetting() itself
+          // writes every key it's given into process.env, so checking the
+          // allowlist only afterward (the previous shape of this handler)
+          // never actually gated the process.env write at all — an agent
+          // could set PATH, NODE_OPTIONS, LD_PRELOAD, etc. through here, and
+          // MCP child processes inherit process.env (see #3). Shares the
+          // same list POST /api/settings/keys validates against.
+          const knownEnvKeys = buildKnownCredentialKeys();
+          if (!knownEnvKeys.has(keyName)) {
+            return {
+              content: [{
+                type: 'text',
+                text: `Error: "${keyName}" is not a recognized provider/MCP credential key. Not saved. Recognized keys come from the standard LLM providers and each attached MCP's declared envKeys.`,
+              }],
+              isError: true,
+            };
+          }
 
-          const knownEnvKeys = new Set<string>([
-            'NVIDIA_API_KEY',
-            'ANTHROPIC_API_KEY',
-            'OPENAI_API_KEY',
-            'GEMINI_API_KEY',
-            'GROQ_API_KEY',
-            'OPENROUTER_API_KEY',
-            'MISTRAL_API_KEY',
-            'PERPLEXITY_API_KEY',
-            'TOGETHER_API_KEY',
-            'DEEPSEEK_API_KEY',
-            'GITHUB_TOKEN',
-            'SLACK_BOT_TOKEN',
-          ]);
-          for (const mcp of STOCK_MCPS) {
-            for (const envKey of mcp.envKeys ?? []) knownEnvKeys.add(envKey);
-          }
-          const envPropagated = knownEnvKeys.has(keyName);
-          if (envPropagated) {
-            process.env[keyName] = keyValue;
-          }
+          coreDb.setSetting(keyName, keyValue);
 
           const masked = keyValue.length > 12
             ? `${keyValue.slice(0, 4)}...${keyValue.slice(-4)}`
@@ -2477,7 +2474,7 @@ export class CanvasMcpServer {
           return {
             content: [{
               type: 'text',
-              text: `Saved credential for ${keyName} (${masked}) into database settings${envPropagated ? ' and environment' : ' (unrecognized env key; environment propagation skipped)'} successfully.`,
+              text: `Saved credential for ${keyName} (${masked}) into database settings and environment successfully.`,
             }],
           };
         }

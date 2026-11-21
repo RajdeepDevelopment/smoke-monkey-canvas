@@ -6,6 +6,37 @@ import { spawn, execFile } from 'node:child_process';
 import { CoreDatabase } from '../core/database.db.js';
 import { STOCK_MCPS } from '../mcp/mcp.stock.js';
 
+/**
+ * The set of credential key names this app actually knows about: the
+ * standard LLM provider keys plus every env var any Stock MCP declares.
+ * Shared so every write path (POST /api/settings/keys here, and
+ * canvas_set_api_key in canvas-mcp.server.ts) validates against the same
+ * list instead of each re-deriving or skipping it — see #3.
+ *
+ * Deliberately does NOT include "any key already persisted in the
+ * database" the way GET /keys's display list does: that would be
+ * circular for a write-path check (a key becomes "known" the moment
+ * something writes it).
+ */
+export function buildKnownCredentialKeys(): Set<string> {
+  const knownKeys = new Set<string>([
+    'NVIDIA_API_KEY',
+    'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'GEMINI_API_KEY',
+    'OPENROUTER_API_KEY',
+    'GROQ_API_KEY',
+  ]);
+  for (const mcp of STOCK_MCPS) {
+    if (Array.isArray(mcp.envKeys)) {
+      for (const k of mcp.envKeys) {
+        knownKeys.add(k);
+      }
+    }
+  }
+  return knownKeys;
+}
+
 export function createSettingsRouter(): Router {
   const router = Router();
   const db = CoreDatabase.getInstance();
@@ -21,31 +52,15 @@ export function createSettingsRouter(): Router {
     const allDbSettings = db.getAllSettings();
     const result: Record<string, { masked: string; isSet: boolean }> = {};
 
-    // 1. Standard LLM keys
-    const knownKeys = new Set<string>([
-      'NVIDIA_API_KEY',
-      'OPENAI_API_KEY',
-      'ANTHROPIC_API_KEY',
-      'GEMINI_API_KEY',
-      'OPENROUTER_API_KEY',
-      'GROQ_API_KEY',
-    ]);
+    const knownKeys = buildKnownCredentialKeys();
 
-    // 2. All environment keys required by any Stock MCP (Figma, GitHub, Slack, Notion, etc.)
-    for (const mcp of STOCK_MCPS) {
-      if (Array.isArray(mcp.envKeys)) {
-        for (const k of mcp.envKeys) {
-          knownKeys.add(k);
-        }
-      }
-    }
-
-    // 3. Any key previously persisted in the database settings
+    // Also surface any key already persisted — e.g. one saved before it was
+    // added to the credential list above — purely for display here; this
+    // expanded set is never used to decide what POST /keys may write.
     for (const k of Object.keys(allDbSettings)) {
       knownKeys.add(k);
     }
 
-    // 4. Return masked values and isSet boolean for all known keys
     for (const k of knownKeys) {
       const val = allDbSettings[k] || process.env[k] || '';
       result[k] = {
@@ -60,10 +75,28 @@ export function createSettingsRouter(): Router {
   // POST /api/settings/keys
   router.post('/keys', (req: Request, res: Response) => {
     const body = req.body || {};
+    const knownKeys = buildKnownCredentialKeys();
+    const rejected: string[] = [];
     for (const [key, value] of Object.entries(body)) {
-      if (typeof value === 'string' && value.trim().length > 0) {
-        db.setSetting(key, value.trim());
+      if (typeof value !== 'string' || value.trim().length === 0) continue;
+      // Reject anything outside the known credential allowlist — this route
+      // used to accept and store (and, via setSetting, write into
+      // process.env) any key name at all, which let a crafted request set
+      // process-wide variables like PATH, NODE_OPTIONS, or LD_PRELOAD. MCP
+      // child processes inherit process.env, so a poisoned one could make
+      // the next spawned MCP load attacker-controlled code. See #3.
+      if (!knownKeys.has(key)) {
+        rejected.push(key);
+        continue;
       }
+      db.setSetting(key, value.trim());
+    }
+    if (rejected.length > 0) {
+      res.status(400).json({
+        error: `Unknown credential key(s), not saved: ${rejected.join(', ')}. Only recognized provider/MCP credential keys may be set here.`,
+        rejected,
+      });
+      return;
     }
     res.json({ success: true, message: 'Settings saved successfully' });
   });
