@@ -409,6 +409,21 @@ export const reconcileSystemPromptWithProfile = (
   }
 
   const sections = currentPrompt.trim().split(/\n(?=## )/);
+
+  // A prompt with no `## ` heading at all splits into exactly one element —
+  // the whole prompt. The loop below starts at index 1 specifically to skip
+  // sections[0] (assumed to be the old generated header line, discarded
+  // because a fresh one is built above), but with no heading anywhere,
+  // sections[0] IS the entire hand-written prompt, so the loop never ran
+  // and nothing was ever preserved: the whole prompt was silently replaced
+  // with boilerplate on every profile change (rename, role/description/
+  // specialty edit). There's no reliable way to tell "generated header" from
+  // "user's own unstructured prose" here, so leave it untouched instead of
+  // guessing. See #15.
+  if (sections.length <= 1) {
+    return currentPrompt.trim();
+  }
+
   const preservedSections: string[] = [];
 
   for (let i = 1; i < sections.length; i++) {
