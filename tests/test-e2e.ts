@@ -15,8 +15,16 @@ async function runTest() {
     const html = await resStatic.text();
     if (!html.includes('root')) throw new Error('index.html did not contain root div');
 
+    // Every /api/* route (besides /api/health) now requires a bearer token —
+    // see server/features/core/auth.server.ts. The bootstrap endpoint only
+    // answers loopback callers, which this test is.
+    const { token } = (await (await fetch(`http://localhost:${port}/api/auth/token`)).json()) as {
+      token: string;
+    };
+    const auth = { Authorization: `Bearer ${token}` };
+
     // 2. Test Space Entities GET
-    const resSpace = await fetch(`http://localhost:${port}/api/space`);
+    const resSpace = await fetch(`http://localhost:${port}/api/space`, { headers: auth });
     console.log('2. Space entities status:', resSpace.status);
     const spaceData: any = await resSpace.json();
     console.log('   Current space entities count:', spaceData.length);
@@ -24,7 +32,7 @@ async function runTest() {
     // 3. Test Agent Creation in Space
     const resCreate = await fetch(`http://localhost:${port}/api/agents`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({
         name: 'Firecrawl Job Searcher',
         model: 'nvidia/nemotron-3-super-120b-a12b',
@@ -43,7 +51,7 @@ async function runTest() {
     // 4. Test Stock MCP Attachment
     const resMcp = await fetch(`http://localhost:${port}/api/agents/${newAgent.id}/mcps`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({
         mcp_name: 'firecrawl-mcp',
         label: 'Firecrawl',
@@ -59,7 +67,7 @@ async function runTest() {
     // 5. Test Skill Attachment
     const resSkill = await fetch(`http://localhost:${port}/api/agents/${newAgent.id}/skills`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({
         skill_name: 'FilterJobPostings',
         description: 'Deduplicates and ranks job search results',
@@ -71,13 +79,13 @@ async function runTest() {
     // 6. Test Node Position Movement in Space
     const resMove = await fetch(`http://localhost:${port}/api/space/nodes/${newAgent.id}/position`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({ posX: 520, posY: 340 }),
     });
     console.log('6. Update position status:', resMove.status);
 
     // 7. Verify aggregated Space Entity
-    const resSpaceUpdated = await fetch(`http://localhost:${port}/api/space`);
+    const resSpaceUpdated = await fetch(`http://localhost:${port}/api/space`, { headers: auth });
     const updatedEntities: any = await resSpaceUpdated.json();
     const retrieved = updatedEntities.find((e: any) => e.id === newAgent.id);
     console.log('7. Space entity verified:');
@@ -88,7 +96,7 @@ async function runTest() {
     console.log('   Cron next run at:', retrieved.next_run_at);
 
     // Clean up test agent
-    await fetch(`http://localhost:${port}/api/agents/${newAgent.id}`, { method: 'DELETE' });
+    await fetch(`http://localhost:${port}/api/agents/${newAgent.id}`, { method: 'DELETE', headers: auth });
     console.log('8. Test agent cleaned up.');
 
     console.log('\n🎉 ALL FULL-STACK CANVAS END-TO-END TESTS PASSED!');
