@@ -10,6 +10,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ExploreReport, RunEventRecord } from '../agent/agent.types.js';
+import { isContained } from '../agent/agent.files.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -99,12 +100,31 @@ export async function prepareGitWorkspace(gitUrl?: string | null, localPath?: st
     return localPath || null;
   }
   try {
-    const repoName = gitUrl.replace(/\.git$/, '').split('/').pop() || 'repo';
+    const rawRepoName = gitUrl.replace(/\.git$/, '').split('/').pop() || 'repo';
+    // The URL's last path segment becomes a directory name joined onto
+    // .smoke-repos below. A URL ending in e.g. `/..` makes that segment
+    // literally "..", resolving targetDir to .smoke-repos's PARENT —
+    // process.cwd(), which has its own .git when running from a checkout —
+    // so the "pull latest" branch below would run `git pull` against the
+    // server's own repository. Reject anything that isn't a plain,
+    // single-segment name: no empty/dot/dot-dot, no path separators, no
+    // leading dot (hidden-dir names), no null bytes. See #20.
+    if (!rawRepoName || /^\.{1,2}$/.test(rawRepoName) || /[/\\\0]/.test(rawRepoName) || rawRepoName.startsWith('.')) {
+      console.warn(`[Git] Rejecting unsafe repo name derived from URL "${gitUrl}": "${rawRepoName}"`);
+      return null;
+    }
+    const repoName = rawRepoName;
     const reposDir = path.resolve(process.cwd(), '.smoke-repos');
     if (!fs.existsSync(reposDir)) {
       fs.mkdirSync(reposDir, { recursive: true });
     }
     const targetDir = path.join(reposDir, repoName);
+    // Defense in depth: even with the name validated above, confirm the
+    // resolved path never escapes .smoke-repos before touching it with git.
+    if (!isContained(reposDir, targetDir)) {
+      console.warn(`[Git] Rejecting resolved path outside .smoke-repos for URL "${gitUrl}": "${targetDir}"`);
+      return null;
+    }
     if (fs.existsSync(path.join(targetDir, '.git'))) {
       console.log(`[Git] Pulling latest changes in ${targetDir}...`);
       await execFileAsync('git', ['-C', targetDir, 'pull', '--depth=1']).catch(() => {});
