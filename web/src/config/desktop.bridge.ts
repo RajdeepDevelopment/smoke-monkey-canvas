@@ -56,12 +56,37 @@ function storeAuthToken(token: string): void {
   }
 }
 
+/**
+ * Read one query-style parameter without `URLSearchParams`' form semantics:
+ * that API turns a literal `+` into a space, which corrupts base64 tokens.
+ * Percent-encoded values (including `%2B`) still decode correctly.
+ */
+function readTokenParam(raw: string): string | null {
+  for (const pair of raw.split('&')) {
+    const eq = pair.indexOf('=');
+    if (eq === -1) continue;
+    let key: string;
+    try {
+      key = decodeURIComponent(pair.slice(0, eq));
+    } catch {
+      continue;
+    }
+    if (key !== 'token') continue;
+    try {
+      return decodeURIComponent(pair.slice(eq + 1)) || null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function readAuthTokenFromUrl(): string | null {
   // Prefer the fragment: unlike the query string it is never sent to the
   // server or written to access logs by a proxy.
   const hash = window.location.hash || '';
   if (hash.length > 1) {
-    const hashToken = new URLSearchParams(hash.slice(1)).get('token');
+    const hashToken = readTokenParam(hash.slice(1));
     if (hashToken) {
       stripUrlToken();
       return hashToken;
@@ -73,7 +98,7 @@ function readAuthTokenFromUrl(): string | null {
   } catch {
     return null;
   }
-  const token = url.searchParams.get('token');
+  const token = readTokenParam(url.search.slice(1));
   if (!token) return null;
   url.searchParams.delete('token');
   try {
