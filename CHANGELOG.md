@@ -10,6 +10,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.4.0] — 2026-11-21
+
+A production-readiness pass covering security hardening and a batch of correctness/data-loss fixes. The server now requires authentication and no longer binds to every network interface by default — see **Breaking / behavior changes** below before upgrading an existing deployment.
+
+### Security
+
+- **Authentication required for `/api` and `/ws`.** Every route (other than a new `GET /api/health` liveness probe) now requires a per-install bearer token, generated on first boot and auto-bootstrapped for the local web UI/CLI/desktop. Set `SMOKE_MONKEY_AUTH_TOKEN` to pin an explicit token, or `SMOKE_MONKEY_DISABLE_AUTH=1` only if something else in front of the server already authenticates requests. See `SECURITY.md`.
+- **Default bind changed to `127.0.0.1`**, not every interface. Container/VPS deploy targets set `HOST=0.0.0.0` explicitly, since their platform's proxy needs it.
+- **CORS** now reflects only an allowlisted origin instead of `*`.
+- Fixed a workspace path-containment bypass (`safeResolveWorkspacePath`) that let a sibling directory whose name merely started with the workspace root's name escape the sandbox; added symlink resolution.
+- Fixed `POST /api/settings/keys` and the `canvas_set_api_key` agent tool accepting arbitrary key names and writing them into `process.env` (could set `PATH`, `NODE_OPTIONS`, etc.). `CoreDatabase.setSetting()` now also refuses a fixed list of dangerous OS-level variable names regardless of caller.
+- Fixed Mermaid diagrams rendering with `securityLevel: 'loose'` (skipped its own sanitization) plus unsanitized SVG injection; now `strict` with an added independent DOMPurify pass.
+- Fixed a path-traversal bug in `prepareGitWorkspace`: a `git_url` ending in `/..` could resolve outside `.smoke-repos`.
+- Fixed a shared-global race in the canvas MCP tool bridge where concurrent agents in different spaces could read/write into the wrong space; replaced with per-call `AsyncLocalStorage` scoping.
+- Fixed chat sessions not being scoped to their owning agent (one agent could read/append to/delete another agent's conversation via a known session id).
+
+### Fixed
+
+- Deleting a space with "delete workspace folders" checked could recursively delete a custom `working_dir` outside the app's own workspace root; now only ever deletes app-managed workspaces under `~/.smoke-agents/`. The checkbox also now defaults to unchecked.
+- Deleted chat sessions could resurface with their old messages replayed to the model, due to a stale in-memory cache that was never cleared.
+- `update_agent_profile` overwrote `identity.md` with a blank template on every call, discarding anything the agent had recorded there.
+- Renaming an agent (or any role/description/specialty edit) could replace a hand-written system prompt with boilerplate if it had no `## ` section headings.
+- Default cron jobs silently reverted a user's edits on every server restart or cron sync.
+- Todo history never removed items a later `todo_write` call omitted, leaving phantom rows after a task was renamed or removed; `index.json`'s counters also inflated on every sync instead of being rebuilt.
+- Nested agent delegation used a flat 4-minute timeout regardless of chain depth, and could kill a run the delegation didn't start; the timeout now scales with depth and no longer stops unrelated runs.
+- Manual runs retried up to 10 times even for permanent errors (invalid API key, unknown model); these now fail immediately, while transient errors (network, 429, 5xx) still retry.
+- Accepting an explore/company-build report twice could start two Architect agents building the same company.
+- `smoke-monkey start` never actually opened the browser — a scheduled browser-open was silently cancelled by an immediately-following `process.exit()`. Browser opening across all CLI paths now waits for `/api/health` instead of guessing with a fixed delay.
+- A hooks-order crash in 4 modal components (`agent.modal.tsx`, `policy.modal.tsx`, `settings.modal.tsx`, `tools.modal.tsx`) when closed after being lazily mounted. CI now runs the project's lint config so this class of regression fails the build.
+- The space canvas's change-detection (`agentsEqual`) missed MCP/skill swaps, `latestRun` updates, and profile field changes, silently failing to re-render them.
+
+### Breaking / behavior changes
+
+- Existing deployments that relied on unauthenticated API access, or on reaching the server from another machine without setting `HOST=0.0.0.0`, will need to update their configuration. See `SECURITY.md` for the full list of new environment variables.
+
+---
+
 ## [1.3.1] — 2026-10-04
 
 ### Added
