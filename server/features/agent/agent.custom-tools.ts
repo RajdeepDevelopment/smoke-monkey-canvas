@@ -26,6 +26,13 @@ import {
 } from './agent.todos.js';
 import { CANVAS_TOOL_DEFINITIONS, CanvasMcpServer, runWithScopedSpaceId } from '../mcp-server/canvas-mcp.server.js';
 
+/**
+ * Splits the DB-synced header from the agent's own notes in identity.md
+ * across regenerations by update_agent_profile. See that handler and #14.
+ */
+const IDENTITY_AUTO_SECTION_MARKER =
+  '<!-- Auto-synced from agent profile above this line. Notes below are preserved across profile updates. -->';
+
 function parseTargetList(inputVal?: string | string[]): string[] {
   if (Array.isArray(inputVal)) {
     return inputVal.map((s) => String(s).trim()).filter(Boolean);
@@ -2827,7 +2834,7 @@ const BASE_CUSTOM_AGENT_TOOLS: ToolDefinition[] = [
           const persNames = resolvePersonalities(currentPers).map((p) => p.name);
           const outNames = resolveOutputStyles(currentOut).map((o) => o.name);
 
-          const identityContent = `# Identity & Persona Memory — ${effectiveName}
+          const identityHeader = `# Identity & Persona Memory — ${effectiveName}
 
 Internalized persona traits, tone nuances, role boundaries, communication philosophy, and ethical stance that evolve over time.
 
@@ -2843,6 +2850,33 @@ Internalized persona traits, tone nuances, role boundaries, communication philos
 - **Quality Mandate**: High test coverage, robust error handling, modular architecture, and truthful state updates.
 - **Collaboration Mode**: Active peer and hierarchy member in spatial multi-agent workspace with persistent human memory.
 `;
+          // This header must stay in sync with the DB fields on every
+          // profile update, but the file is also where the agent records its
+          // own evolving identity notes (via update_agent_memory / the
+          // specialization-refinement cron job appending below). An
+          // unconditional overwrite here used to destroy all of that. See #14.
+          //
+          // Preserve anything after IDENTITY_AUTO_SECTION_MARKER across
+          // regenerations. A file with no marker yet (pre-fix, or purely
+          // hand/agent-authored with no template at all) has its entire
+          // existing content kept as the preserved tail rather than guessed
+          // at or discarded — the one-time cost is the new header appearing
+          // above the old one once; every write after that cleanly splits on
+          // the marker and only the true custom tail survives.
+          let preservedTail = '';
+          try {
+            if (existsSync(identityPath)) {
+              const existing = readFileSync(identityPath, 'utf8');
+              const markerIndex = existing.indexOf(IDENTITY_AUTO_SECTION_MARKER);
+              preservedTail =
+                markerIndex === -1
+                  ? existing.trim()
+                  : existing.slice(markerIndex + IDENTITY_AUTO_SECTION_MARKER.length).trim();
+            }
+          } catch {}
+          const identityContent = preservedTail
+            ? `${identityHeader}\n${IDENTITY_AUTO_SECTION_MARKER}\n\n${preservedTail}\n`
+            : `${identityHeader}\n${IDENTITY_AUTO_SECTION_MARKER}\n`;
           writeFileSync(identityPath, identityContent, 'utf8');
         }
         syncAgentDiskManifestFromDb({ agentId: agent.id, ws, db });
