@@ -1,6 +1,6 @@
 import type { SpaceAgentEntity } from '../agent/agent.types.js';
 import type { RoleZone, GroupWorkspaceZone, SpaceWorkflow, SpaceWorkspacePrompt } from './space.types.js';
-import { getWsUrl, getApiBaseUrl } from '../../config/desktop.bridge.ts';
+import { getWsProtocols, getWsUrl, getApiBaseUrl } from '../../config/desktop.bridge.ts';
 
 const API_BASE = {
   toString() {
@@ -225,7 +225,7 @@ export class SpaceService {
     function connect() {
       if (isDisposed) return;
       try {
-        ws = new WebSocket(wsUrl);
+        ws = new WebSocket(wsUrl, getWsProtocols());
 
         ws.onmessage = (event) => {
           try {

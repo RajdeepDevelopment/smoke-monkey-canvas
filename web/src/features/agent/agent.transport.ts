@@ -1,6 +1,6 @@
 import type { ChatRequest, ChatTransport, ChatStreamEvent, ChatPromptResponse } from '@smoke-monkey/ui';
 import { AgentService } from './agent.service.js';
-import { getWsUrl } from '../../config/desktop.bridge.ts';
+import { getWsProtocols, getWsUrl } from '../../config/desktop.bridge.ts';
 
 export class CanvasAgentTransport implements ChatTransport {
   private agentId: string;
@@ -20,7 +20,7 @@ export class CanvasAgentTransport implements ChatTransport {
 
     // 2. Connect to WebSocket stream
     const wsUrl = getWsUrl();
-    const socket = new WebSocket(wsUrl);
+    const socket = new WebSocket(wsUrl, getWsProtocols());
     this.socket = socket;
 
     const eventQueue: ChatStreamEvent[] = [

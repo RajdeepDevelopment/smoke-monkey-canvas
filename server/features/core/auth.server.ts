@@ -17,14 +17,19 @@
  *     a reverse proxy in front of the server can use `Authorization` for its
  *     own scheme (e.g. Caddy basic_auth) without the two fighting over the
  *     same header. `Authorization: Bearer <token>` and `?token=` are still
- *     accepted for CLI/API clients and for the WebSocket upgrade, which cannot
- *     set headers from a browser.
+ *     accepted for CLI/API clients; the browser sends the WebSocket token in
+ *     the `Sec-WebSocket-Protocol` subprotocol instead, because an upgrade
+ *     request cannot carry custom headers and a query param would be written
+ *     to proxy access logs.
  *   - The bootstrap endpoint that hands out the token only answers requests
  *     that arrive from the local machine's own UI, regardless of what host the
  *     server is bound to. This lets the local web UI/CLI/desktop fetch the
  *     token once without any prior credential, while a LAN or internet peer
  *     (even if the operator explicitly opened the server to 0.0.0.0) cannot
- *     use it to self-issue a token.
+ *     use it to self-issue a token. Requests that carry proxy forwarding
+ *     headers are refused even when the socket peer is loopback (a same-host
+ *     proxy connects from 127.0.0.1 on behalf of every visitor); operators can
+ *     opt back in with SMOKE_MONKEY_ASSUME_LOCAL=1.
  *
  * Deliberately out of scope: this is not a multi-user login system. An
  * operator who exposes the server on the public internet (the VPS/Render/
@@ -42,11 +47,33 @@ const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
 /**
+ * Headers that indicate the request passed through a reverse proxy. Their
+ * presence disqualifies the request from local-only token delivery unless the
+ * operator opted in (see isLocalUiRequest).
+ */
+const PROXY_HEADERS = [
+  'forwarded',
+  'via',
+  'x-forwarded-for',
+  'x-forwarded-host',
+  'x-forwarded-proto',
+  'x-real-ip',
+] as const;
+
+/**
  * Header the bundled web client uses to send the bearer token. Kept separate
  * from `Authorization` so proxy-level auth (Caddy basic_auth, etc.) can use
  * that header without breaking API calls.
  */
 export const AUTH_TOKEN_HEADER = 'x-smoke-monkey-token';
+
+/**
+ * WebSocket subprotocol carrying the token (browsers cannot set headers on the
+ * upgrade request). Value: `smoke-monkey-token.<base64url(token)>` — a query
+ * param would end up in proxy access logs. See getWsProtocols() in
+ * web/src/config/desktop.bridge.ts.
+ */
+export const WS_TOKEN_PROTOCOL_PREFIX = 'smoke-monkey-token.';
 
 export function isAuthDisabled(): boolean {
   const v = process.env.SMOKE_MONKEY_DISABLE_AUTH;
@@ -75,10 +102,32 @@ function headerValue(
   return first && first.trim() ? first.trim() : null;
 }
 
+function decodeBase64Url(value: string): string | null {
+  if (!value) return null;
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  try {
+    const decoded = Buffer.from(padded, 'base64').toString('utf8');
+    return decoded || null;
+  } catch {
+    return null;
+  }
+}
+
 function extractToken(req: Request | IncomingMessage): string | null {
   const headers = (req.headers || {}) as Record<string, string | string[] | undefined>;
   const custom = headerValue(headers, AUTH_TOKEN_HEADER);
   if (custom) return custom;
+
+  const protocols = headerValue(headers, 'sec-websocket-protocol');
+  if (protocols) {
+    for (const raw of protocols.split(',')) {
+      const value = raw.trim();
+      if (!value.startsWith(WS_TOKEN_PROTOCOL_PREFIX)) continue;
+      const decoded = decodeBase64Url(value.slice(WS_TOKEN_PROTOCOL_PREFIX.length));
+      if (decoded) return decoded;
+    }
+  }
 
   const authHeader = headerValue(headers, 'authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -137,20 +186,30 @@ function hasTrustedHost(req: Request | IncomingMessage): boolean {
 /**
  * Whether this request came from the machine's own local UI.
  *
- * Normally that means a loopback peer with a loopback Host header.
- * `SMOKE_MONKEY_ASSUME_LOCAL=1` additionally treats any peer as local,
- * for container deployments that publish the port on the host's loopback only
- * (Docker's userland proxy makes the browser's peer address the bridge
- * gateway, not 127.0.0.1). Only enable it when the published port is itself
- * bound to loopback — see docker-compose.yml. Never enable it on a publicly
- * reachable server.
+ * Normally that means a loopback peer with a trusted Host header. Two escape
+ * hatches widen this, both documented in SECURITY.md:
+ *
+ *   - `SMOKE_MONKEY_ASSUME_LOCAL=1` treats any peer as local. It exists for
+ *     container deployments that publish the port on the host's loopback only
+ *     (Docker's userland proxy makes the browser's peer the bridge gateway,
+ *     not 127.0.0.1). Only enable it when the published port is itself bound
+ *     to loopback — see docker-compose.yml. Never enable it on a publicly
+ *     reachable server.
+ *   - Requests carrying proxy headers are refused even when the peer is
+ *     loopback: a same-host reverse proxy (`proxy_pass http://127.0.0.1:3333`)
+ *     connects over loopback for every visitor it forwards, so the peer
+ *     address alone cannot distinguish them. Operators who front the app with
+ *     a proxy and still want the convenience bootstrap must set
+ *     SMOKE_MONKEY_ASSUME_LOCAL=1 explicitly.
  */
 export function isLocalUiRequest(req: Request | IncomingMessage): boolean {
   if (!hasTrustedHost(req)) return false;
-  const addr = req.socket?.remoteAddress || '';
-  if (LOOPBACK_ADDRESSES.has(addr)) return true;
   const v = process.env.SMOKE_MONKEY_ASSUME_LOCAL;
-  return v === '1' || v === 'true';
+  if (v === '1' || v === 'true') return true;
+  const headers = (req.headers || {}) as Record<string, string | string[] | undefined>;
+  if (PROXY_HEADERS.some((name) => headerValue(headers, name))) return false;
+  const addr = req.socket?.remoteAddress || '';
+  return LOOPBACK_ADDRESSES.has(addr);
 }
 
 /**

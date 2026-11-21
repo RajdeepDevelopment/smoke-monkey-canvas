@@ -104,7 +104,7 @@ function buildAllowedOrigins(port: number): Set<string> {
  * unconditionally would hand the bearer token to any unauthenticated visitor
  * of a publicly reachable deployment (the container/PaaS targets), defeating
  * the token entirely. Remote clients that legitimately need the token supply
- * it out-of-band (`?token=` / SMOKE_MONKEY_AUTH_TOKEN) — see SECURITY.md.
+ * it out-of-band (`#token=` link / SMOKE_MONKEY_AUTH_TOKEN) — see SECURITY.md.
  */
 function sendIndexWithToken(res: express.Response, indexPath: string, token: string | null): void {
   try {
@@ -251,7 +251,7 @@ export function startAppServer(opts: AppServerOptions = {}) {
       console.log(`  ⚠ Bound to ${host}, not just loopback — reachable beyond this machine.`);
       console.log(`    /api and /ws still require the bearer token, and the web UI only`);
       console.log(`    receives it on local requests. Remote clients must supply it`);
-      console.log(`    out-of-band (?token= or SMOKE_MONKEY_AUTH_TOKEN). See SECURITY.md.`);
+      console.log(`    out-of-band (#token= link or SMOKE_MONKEY_AUTH_TOKEN). See SECURITY.md.`);
     }
     console.log(`======================================================\n`);
   });

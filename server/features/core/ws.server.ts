@@ -25,8 +25,8 @@ export class CoreWsServer {
 
   /**
    * @param verifyToken Validates the bearer token carried on the upgrade
-   * request (Authorization header or `?token=`, since the browser
-   * WebSocket API cannot set headers). The /ws endpoint streams every run's
+   * request (custom header, `Sec-WebSocket-Protocol`, Authorization, or
+   * `?token=` for CLI clients). The /ws endpoint streams every run's
    * output with no further scoping, so it must not accept unauthenticated
    * connections. Omit only for tests that construct their own server.
    */

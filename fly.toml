@@ -26,7 +26,7 @@ primary_region = "iad"
 
 # The web UI authenticates with a bearer token that the server never sends to
 # remote browsers. Set it as a secret, then open the app once as
-#   https://<app>.fly.dev/?token=<value>
+#   https://<app>.fly.dev/#token=<value>
 #   fly secrets set SMOKE_MONKEY_AUTH_TOKEN=$(openssl rand -hex 32)
 # See SECURITY.md.
 

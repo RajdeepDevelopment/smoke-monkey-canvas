@@ -144,47 +144,80 @@ const MAX_SYMLINK_HOPS = 40;
  * resolves those links — and any existing symlinked parent — while still
  * returning a usable path for genuinely new files.
  *
- * Returns null on a symlink loop or unreadable component.
+ * Link targets are expanded in filesystem order rather than through
+ * `path.resolve`/`path.join`, which collapse `..` lexically. Collapsing before
+ * the kernel does resolves the wrong file when a `..` follows a symlinked
+ * component: with `link` -> `pivot/../victim.txt` and `pivot` -> `/outside/sub`,
+ * the kernel reads `/outside/victim.txt`, not `workspace/victim.txt`.
+ *
+ * Returns null on a symlink loop, an unreadable component, or a `..` left
+ * after a component that does not exist (the kernel would fail there too).
  */
 function resolveRealPathLoose(inputPath: string, hops = 0): string | null {
   if (hops > MAX_SYMLINK_HOPS) return null;
   const absolute = path.resolve(inputPath);
-  const root = path.parse(absolute).root;
-  const parts = absolute.slice(root.length).split(path.sep).filter(Boolean);
-  let current = root;
-  for (let i = 0; i < parts.length; i++) {
-    current = path.join(current, parts[i]);
+  let root = path.parse(absolute).root;
+  const queue = absolute.slice(root.length).split(path.sep).filter(Boolean);
+  const resolved: string[] = [];
+
+  while (queue.length > 0) {
+    const part = queue.shift() as string;
+    if (part === '.') continue;
+    if (part === '..') {
+      // Every symlink before this point has already been expanded, so popping
+      // matches the order in which the kernel applies `..`.
+      resolved.pop();
+      continue;
+    }
+
+    const candidate = path.join(root, ...resolved, part);
     let stat: fs.Stats;
     try {
-      stat = fs.lstatSync(current);
+      stat = fs.lstatSync(candidate);
     } catch {
-      // Missing component (so it can't be a symlink), and the rest can't
-      // exist either. Canonicalize the existing parent (case, etc.), then
-      // append the literal remainder.
-      let realParent = path.dirname(current);
+      // Missing component (so it can't be a symlink). The rest can't exist
+      // either, and a later `..` would only resolve correctly by following a
+      // symlink we can't inspect — reject instead of guessing.
+      if (queue.includes('..')) return null;
+      let realParent = path.join(root, ...resolved);
       try {
         realParent = fs.realpathSync(realParent);
       } catch {
         // keep the walked path
       }
-      return path.join(realParent, path.basename(current), ...parts.slice(i + 1));
+      return path.join(realParent, part, ...queue);
     }
+
     if (stat.isSymbolicLink()) {
+      if (hops >= MAX_SYMLINK_HOPS) return null;
       let linkTarget: string;
       try {
-        linkTarget = fs.readlinkSync(current);
+        linkTarget = fs.readlinkSync(candidate);
       } catch {
         return null;
       }
-      const resolvedTarget = path.resolve(path.dirname(current), linkTarget);
-      return resolveRealPathLoose(path.join(resolvedTarget, ...parts.slice(i + 1)), hops + 1);
+      hops += 1;
+      const isAbsoluteTarget = path.isAbsolute(linkTarget);
+      if (isAbsoluteTarget) {
+        root = path.parse(linkTarget).root;
+        resolved.length = 0;
+      }
+      const targetParts = linkTarget
+        .slice(isAbsoluteTarget ? root.length : 0)
+        .split(path.sep)
+        .filter(Boolean);
+      queue.unshift(...targetParts);
+      continue;
     }
+
+    resolved.push(part);
   }
+
   try {
     // Fully existing path: return the canonical form.
     return fs.realpathSync(absolute);
   } catch {
-    return current;
+    return path.join(root, ...resolved);
   }
 }
 

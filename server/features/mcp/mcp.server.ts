@@ -646,6 +646,22 @@ export function createMcpRouter(): Router {
   }
 
   /**
+   * JSON for embedding inside an inline `<script>`.
+   *
+   * `JSON.stringify` alone is not HTML-safe: a value containing `</script>`
+   * closes the block and lets the rest execute. Escape the characters that can
+   * change HTML parsing, plus the JS line separators. Used for every value in
+   * the OAuth result page's script, including `error_description`, which is
+   * attacker-controlled (the callback route is unauthenticated by design).
+   */
+  function inlineJson(value: unknown): string {
+    return (JSON.stringify(value ?? null) as string).replace(
+      /[<>&\u2028\u2029]/g,
+      (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`,
+    );
+  }
+
+  /**
    * The OAuth callback URI for this server.
    *
    * Deliberately NOT derived from the request's Host header: the browser, the
@@ -789,13 +805,13 @@ export function createMcpRouter(): Router {
       <div class="meta">Credentials are stored on this machine. MCP.ai only tells this app whether the provider account is linked.</div>
       </div>
       <script>
-        const mcpName = ${JSON.stringify(mcpName ?? null)};
-        const providerState = ${JSON.stringify(provider?.state ?? null)};
-        const label = ${JSON.stringify(label)};
+        const mcpName = ${inlineJson(mcpName ?? null)};
+        const providerState = ${inlineJson(provider?.state ?? null)};
+        const label = ${inlineJson(label)};
         const openerMessage = {
-          type: ${JSON.stringify(ok ? 'MCP_OAUTH_SUCCESS' : 'MCP_OAUTH_ERROR')},
+          type: ${inlineJson(ok ? 'MCP_OAUTH_SUCCESS' : 'MCP_OAUTH_ERROR')},
           mcpName,
-          message: ${JSON.stringify(message)},
+          message: ${inlineJson(message)},
           providerState,
         };
         if (window.opener && !window.opener.closed) {
@@ -933,9 +949,9 @@ export function createMcpRouter(): Router {
         <a href="#" id="cancel">cancel</a> to go back.
       </p>
     </div><script>
-      const mcpName = ${JSON.stringify(stock.name)};
-      const oauthApp = ${JSON.stringify(oauthApp)};
-      const fields = ${JSON.stringify(fields)};
+      const mcpName = ${inlineJson(stock.name)};
+      const oauthApp = ${inlineJson(oauthApp)};
+      const fields = ${inlineJson(fields)};
       const form = document.getElementById('form');
       const summary = document.getElementById('summary');
 

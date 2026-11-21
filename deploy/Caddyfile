@@ -17,7 +17,8 @@
 #
 # With basic_auth in place you can either set SMOKE_MONKEY_DISABLE_AUTH=1
 # (basic_auth is now the only login) or keep the token layer and open the app
-# once as https://<SMOKE_DOMAIN>/?token=<SMOKE_MONKEY_AUTH_TOKEN>.
+# once as https://<SMOKE_DOMAIN>/#token=<SMOKE_MONKEY_AUTH_TOKEN>. The fragment
+# is never sent to the server, so the token stays out of access logs.
 
 {$SMOKE_DOMAIN} {
 	encode zstd gzip
@@ -41,6 +42,18 @@
 
 	log {
 		output stdout
-		format console
+		# Access logs record the request URI. A legacy ?token= link or a
+		# WebSocket upgrade still carrying the token would put the installation
+		# token in the log, so strip it — the UI uses #token= and the
+		# Sec-WebSocket-Protocol header instead.
+		format filter {
+			wrap console
+			fields {
+				request>uri query {
+					delete token
+				}
+				request>headers>X-Smoke-Monkey-Token delete
+			}
+		}
 	}
 }

@@ -51,7 +51,7 @@ services:
       # The web UI authenticates with a bearer token that the server never
       # sends to remote browsers. Enter a long random value here (Render
       # prompts for it), then open the app once as
-      #   https://<service>.onrender.com/?token=<value>
+      #   https://<service>.onrender.com/#token=<value>
       # See SECURITY.md.
       - key: SMOKE_MONKEY_AUTH_TOKEN
         sync: false

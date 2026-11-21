@@ -15,10 +15,12 @@ declare global {
  * in memory for the life of the page, resolved once at boot from, in order:
  *   1. the global the server injects into index.html — only for local UI
  *      requests, never for a publicly reachable deployment;
- *   2. a `?token=` query param — how remote/self-hosted deployments hand the
- *      token to a browser once (it is stripped from the URL and persisted);
- *   3. localStorage — so a reload doesn't need the query param again;
- *   4. the loopback-gated bootstrap endpoint (needed for the packaged Tauri
+ *   2. a `#token=` URL fragment — how remote/self-hosted deployments hand the
+ *      token to a browser once (the fragment is never sent to the server, so
+ *      it stays out of proxy access logs; it is stripped and persisted);
+ *   3. a legacy `?token=` query param, same handling;
+ *   4. localStorage — so a reload doesn't need the URL again;
+ *   5. the loopback-gated bootstrap endpoint (needed for the packaged Tauri
  *      build, which loads its bundled assets from the framework's own origin
  *      rather than the server, so never gets the injected global).
  */
@@ -29,6 +31,8 @@ const AUTH_TOKEN_STORAGE_KEY = 'smoke-monkey.auth-token';
  * reverse proxy (e.g. Caddy basic_auth) can use that header for its own auth.
  */
 const AUTH_TOKEN_HEADER = 'X-Smoke-Monkey-Token';
+
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 let cachedAuthToken: string | null = null;
 
@@ -53,6 +57,16 @@ function storeAuthToken(token: string): void {
 }
 
 function readAuthTokenFromUrl(): string | null {
+  // Prefer the fragment: unlike the query string it is never sent to the
+  // server or written to access logs by a proxy.
+  const hash = window.location.hash || '';
+  if (hash.length > 1) {
+    const hashToken = new URLSearchParams(hash.slice(1)).get('token');
+    if (hashToken) {
+      stripUrlToken();
+      return hashToken;
+    }
+  }
   let url: URL;
   try {
     url = new URL(window.location.href);
@@ -68,6 +82,33 @@ function readAuthTokenFromUrl(): string | null {
     // Some runtimes don't support history manipulation; the token still works.
   }
   return token;
+}
+
+function stripUrlToken(): void {
+  try {
+    window.history.replaceState({}, '', window.location.pathname + window.location.search);
+  } catch {
+    // Some runtimes don't support history manipulation; the token still works.
+  }
+}
+
+/**
+ * Credentials may travel over plain HTTP only to the loopback interface.
+ * Anything else must use HTTPS — otherwise an on-path observer can read the
+ * installation token from a LAN/public HTTP deployment.
+ */
+function isCredentialSafeUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value, window.location.origin);
+  } catch {
+    return false;
+  }
+  if (url.protocol === 'https:' || url.protocol === 'wss:') return true;
+  return (
+    (url.protocol === 'http:' || url.protocol === 'ws:') &&
+    LOOPBACK_HOSTNAMES.has(url.hostname.toLowerCase())
+  );
 }
 
 export async function ensureAuthToken(): Promise<string | null> {
@@ -89,6 +130,12 @@ export async function ensureAuthToken(): Promise<string | null> {
   }
   try {
     const base = isTauri() ? `${DESKTOP_API_BASE}/api` : getApiBaseUrl();
+    if (!isCredentialSafeUrl(`${base}/auth/token`)) {
+      console.warn(
+        '[DesktopBridge] Not fetching the auth token over non-HTTPS, non-loopback HTTP. Use HTTPS for remote deployments.',
+      );
+      return null;
+    }
     const res = await fetch(`${base}/auth/token`);
     if (res.ok) {
       const data = (await res.json()) as { token: string | null };
@@ -142,21 +189,41 @@ export function getApiBaseUrl(): string {
 }
 
 export function getWsUrl(): string {
-  // The browser WebSocket constructor can't set headers, so the bearer token
-  // (see auth.server.ts) travels as a query param instead.
-  const tokenSuffix = cachedAuthToken ? `?token=${encodeURIComponent(cachedAuthToken)}` : '';
+  // The token travels in the WebSocket subprotocols (getWsProtocols), not the
+  // URL: browsers can't set headers on the upgrade request, and a `?token=`
+  // param would be written to proxy access logs.
   if (isTauri()) {
-    return `ws://localhost:3333/ws${tokenSuffix}`;
+    return 'ws://localhost:3333/ws';
   }
   if (
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
     window.location.port !== '3333'
   ) {
-    return `ws://localhost:3333/ws${tokenSuffix}`;
+    return 'ws://localhost:3333/ws';
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/ws${tokenSuffix}`;
+  return `${protocol}//${window.location.host}/ws`;
+}
+
+function toBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Subprotocol values for `new WebSocket(getWsUrl(), getWsProtocols())`. The
+ * server reads `smoke-monkey-token.<base64url(token)>` from
+ * Sec-WebSocket-Protocol (see auth.server.ts) and still accepts `?token=` for
+ * CLI clients.
+ */
+export function getWsProtocols(): string[] {
+  if (!cachedAuthToken) return [];
+  // Same transport rule as HTTP: never put the token on a cleartext socket.
+  if (!isCredentialSafeUrl(getWsUrl())) return [];
+  return [`smoke-monkey-token.${toBase64Url(cachedAuthToken)}`];
 }
 
 /**
@@ -336,10 +403,13 @@ export function initDesktopBridge(): void {
     if (isApiRequest && cachedAuthToken && typeof url === 'string' && !url.endsWith('/auth/token')) {
       // The `/api/` substring also appears in unrelated URLs (e.g. a repo
       // called `api` on github.com), so check the origin before attaching a
-      // credential. The bootstrap endpoint stays unauthenticated by design.
+      // credential. Plain HTTP is allowed only for loopback; anything else
+      // must be HTTPS or the token would cross the network in cleartext.
+      // The bootstrap endpoint stays unauthenticated by design.
       let targetsOwnApi = false;
       try {
-        targetsOwnApi = new URL(url, window.location.origin).origin === apiOrigin;
+        const target = new URL(url, window.location.origin);
+        targetsOwnApi = target.origin === apiOrigin && isCredentialSafeUrl(target.href);
       } catch {
         targetsOwnApi = false;
       }

@@ -54,7 +54,7 @@ services:
       NODE_ENV: production
       # Bearer token the web UI must send. The server never hands it to a
       # remote browser, so set a long random value here and open the app once
-      # as https://${SMOKE_DOMAIN}/?token=<value> (the browser keeps it), or
+      # as https://${SMOKE_DOMAIN}/#token=<value> (the browser keeps it), or
       # leave it empty and read the generated token with:
       #   docker compose exec canvas curl -s localhost:3333/api/auth/token
       SMOKE_MONKEY_AUTH_TOKEN: ${SMOKE_MONKEY_AUTH_TOKEN:-}
