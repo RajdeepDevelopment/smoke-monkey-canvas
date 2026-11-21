@@ -703,6 +703,22 @@ export function createExploreRouter(): Router {
       if (!session) return res.status(404).json({ error: 'Session not found' });
       if (!session.explore_report_json) return res.status(400).json({ error: 'No report to accept' });
 
+      // A double-click, or a resubmit after the first request hasn't
+      // visibly completed yet (the real-world trigger — the architect build
+      // this route kicks off isn't instant), used to create a second
+      // Architect agent that built the whole company again: nothing here
+      // checked whether a build was already underway or done, and the
+      // status write happened only after creating the (first) agent. Reject
+      // outright once a build has started, and do it before any of the
+      // agent-creation work below. See #18.
+      if (session.status === 'building' || session.status === 'built') {
+        return res.status(409).json({
+          error: `Explore session is already ${session.status}.`,
+          status: session.status,
+          architectAgentId: session.architect_agent_id || null,
+        });
+      }
+
       const report: ExploreReport = JSON.parse(session.explore_report_json);
 
       const { provider: resolvedProvider, model: resolvedModel } = resolveDefaultProviderAndModel(
@@ -712,6 +728,16 @@ export function createExploreRouter(): Router {
 
       // Create Architect Agent
       const architectAgentId = `architect_${Date.now()}_${randomUUID().slice(0, 6)}`;
+
+      // Flip the status to 'building' before any agent-creation work starts,
+      // not after — the narrowest possible window between the check above
+      // and this write is the only thing a race could still slip through,
+      // and this closes it as tightly as the synchronous DB layer allows.
+      spaceDb.updateExploreSession(sessionId, {
+        status: 'building',
+        architect_agent_id: architectAgentId,
+      });
+
       agentDb.createAgent({
         id: architectAgentId,
         name: `Architect — ${report.company_name}`,
@@ -732,11 +758,7 @@ export function createExploreRouter(): Router {
       // Bind architect agent to space
       spaceDb.setAgentSpace(architectAgentId, session.space_id);
 
-      // Update session status and record architectAgentId
-      spaceDb.updateExploreSession(sessionId, {
-        status: 'building',
-        architect_agent_id: architectAgentId,
-      });
+      // (status + architect_agent_id already written above, before agent creation)
 
       // Attach Canvas MCP strictly scoped to this space
       const mcpId = `mcp_${Date.now()}_${randomUUID().slice(0, 6)}`;
