@@ -19,11 +19,11 @@
  */
 
 import * as readline from 'node:readline';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
-import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { CoreDatabase } from '../core/database.db.js';
 import { SpaceDb } from '../space/space.db.js';
@@ -45,6 +45,21 @@ const logErr = (...args: unknown[]) => {
 
 // ── Command-Line & Environment Configuration ────────────────────────────────
 const argv = process.argv.slice(2);
+/**
+ * Per-call space scope for the bridged custom-tools path (the main HTTP
+ * server calls CanvasMcpServer.getInstance().executeTool() in-process for
+ * every agent, across every space, on one shared long-lived process).
+ * configuredSpaceId below is a plain module-wide value with none of
+ * AsyncLocalStorage's properties: a call that resolved no target space used
+ * to silently inherit whatever space a previous, unrelated call last set via
+ * setConfiguredSpaceId(), and executeTool() awaits network/DB calls partway
+ * through, so two concurrent calls for different spaces could interleave and
+ * overwrite each other's scope mid-call. AsyncLocalStorage's context follows
+ * each call's own async execution chain through every await, isolated from
+ * other concurrent calls, and reverts automatically once that call's run()
+ * callback returns — see executeTool()'s scopedSpaceId parameter. See #13.
+ */
+const callSpaceScope = new AsyncLocalStorage<string>();
 let configuredSpaceId: string | null = process.env.CANVAS_SPACE_ID || process.env.SPACE_ID || null;
 let configuredPort = Number(process.env.PORT || 3333);
 let customDbPath: string | undefined = process.env.SMOKE_CANVAS_DB || undefined;
@@ -65,43 +80,9 @@ export function setConfiguredSpaceId(id: string | null): void {
   configuredSpaceId = id;
 }
 
-/**
- * Per-call space scope, used when many agents across different spaces share
- * one long-lived process (the bridged custom-tools path in
- * agent.custom-tools.ts, where the main HTTP server calls
- * CanvasMcpServer.getInstance().executeTool() in-process for every agent).
- *
- * setConfiguredSpaceId() above is a single module-wide value with none of
- * AsyncLocalStorage's properties: it's never reset, so a call that resolves
- * no target space (no membership, no space_id argument) silently inherits
- * whatever space the previous, unrelated call last set; and executeTool()
- * awaits network/DB calls partway through, so two concurrent calls for
- * different spaces can interleave and overwrite each other's scope mid-call.
- * AsyncLocalStorage's context follows each call's own async execution chain
- * through every await, isolated from other concurrent calls, and reverts
- * automatically (to undefined, not to a leftover value) once that call's
- * run() callback returns. See #13.
- *
- * Not used by the standalone stdio JSON-RPC server (the `for await` loop
- * near the bottom of this file): that path is one process per `--space-id`
- * launch, so the module-wide configuredSpaceId set once at startup already
- * has no cross-space sharing to race.
- */
-const scopedSpaceIdStorage = new AsyncLocalStorage<string | null>();
-
-/**
- * Runs `fn` with `spaceId` as the effective scope for every
- * getConfiguredSpaceId() call made during its execution (including in
- * whatever it awaits), without touching the module-wide configuredSpaceId
- * other callers may depend on. See scopedSpaceIdStorage above.
- */
-export function runWithScopedSpaceId<T>(spaceId: string | null, fn: () => Promise<T>): Promise<T> {
-  return scopedSpaceIdStorage.run(spaceId, fn);
-}
-
 export function getConfiguredSpaceId(): string | null {
-  const scoped = scopedSpaceIdStorage.getStore();
-  if (scoped !== undefined) return scoped;
+  const callScopedId = callSpaceScope.getStore();
+  if (callScopedId !== undefined) return callScopedId;
   return configuredSpaceId || process.env.CANVAS_SPACE_ID || process.env.SPACE_ID || null;
 }
 
@@ -1238,7 +1219,11 @@ export class CanvasMcpServer {
     });
   }
 
-  public async executeTool(name: string, args: Record<string, any>): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+  public async executeTool(name: string, args: Record<string, any>, scopedSpaceId?: string): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+    if (scopedSpaceId !== undefined) {
+      return callSpaceScope.run(scopedSpaceId, () => this.executeTool(name, args));
+    }
+
     try {
       switch (name) {
         // ── Category 1: Spaces & Companies ────────────────────────────────
@@ -1323,9 +1308,10 @@ export class CanvasMcpServer {
         }
 
         case 'canvas_create_space': {
-          if (getConfiguredSpaceId()) {
+          const activeScopeId = getConfiguredSpaceId();
+          if (activeScopeId) {
             return {
-              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${getConfiguredSpaceId()}" cannot create new spaces.` }],
+              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${activeScopeId}" cannot create new spaces.` }],
               isError: true,
             };
           }
@@ -1400,9 +1386,10 @@ export class CanvasMcpServer {
         }
 
         case 'canvas_delete_space': {
-          if (getConfiguredSpaceId()) {
+          const activeScopeId = getConfiguredSpaceId();
+          if (activeScopeId) {
             return {
-              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${getConfiguredSpaceId()}" cannot delete spaces.` }],
+              content: [{ type: 'text', text: `Access denied: Space-scoped agent restricted to space "${activeScopeId}" cannot delete spaces.` }],
               isError: true,
             };
           }

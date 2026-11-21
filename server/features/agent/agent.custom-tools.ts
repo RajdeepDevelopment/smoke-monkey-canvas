@@ -24,7 +24,7 @@ import {
   inferSectionForTodo,
   renderDailyTodoMarkdown,
 } from './agent.todos.js';
-import { CANVAS_TOOL_DEFINITIONS, CanvasMcpServer, runWithScopedSpaceId } from '../mcp-server/canvas-mcp.server.js';
+import { CANVAS_TOOL_DEFINITIONS, CanvasMcpServer } from '../mcp-server/canvas-mcp.server.js';
 
 /**
  * Splits the DB-synced header from the agent's own notes in identity.md
@@ -4750,20 +4750,17 @@ const CANVAS_BRIDGED_CUSTOM_TOOLS: ToolDefinition[] = CANVAS_TOOL_DEFINITIONS.ma
         agentSpace = sdb.getAgentSpaceId(callerId);
       } catch {}
     }
-    const targetSpace: string | null =
-      agentSpace || (args as any)?.space_id || (args as any)?.spaceId || (ctx as any)?.spaceId || (ctx as any)?.owned_space_id || null;
-    // Scoped via AsyncLocalStorage (runWithScopedSpaceId), not a shared
-    // module-wide variable: the old setConfiguredSpaceId(targetSpace) was
-    // never reset, so a call that resolved no target space (no membership,
-    // no space_id argument) silently inherited whatever space a PREVIOUS,
-    // unrelated agent's call had last set — and since executeTool() awaits
-    // network/DB calls partway through, two agents in different spaces
-    // running tools concurrently could overwrite each other's scope mid-call.
-    // Always passing targetSpace here (even when null) means a call with no
-    // resolvable space gets exactly that for ITS OWN execution, isolated
-    // from whatever any other concurrent or prior call set. See #13.
+    // Scoped via AsyncLocalStorage (CanvasMcpServer.executeTool's scopedSpaceId
+    // param), not a shared module-wide variable: the old
+    // setConfiguredSpaceId(targetSpace) was never reset, so a call that
+    // resolved no target space (no membership, no space_id argument) silently
+    // inherited whatever space a PREVIOUS, unrelated agent's call had last
+    // set — and since executeTool() awaits network/DB calls partway through,
+    // two agents in different spaces running tools concurrently could
+    // overwrite each other's scope mid-call. See #13.
+    const targetSpace = agentSpace || (args as any)?.space_id || (args as any)?.spaceId || (ctx as any)?.spaceId || (ctx as any)?.owned_space_id;
     try {
-      const res = await runWithScopedSpaceId(targetSpace, () => server.executeTool(def.name, (args as Record<string, any>) || {}));
+      const res = await server.executeTool(def.name, (args as Record<string, any>) || {}, targetSpace || undefined);
       const textContent = res.content?.map((c: any) => c.text || '').join('\n') || '';
       return {
         success: !res.isError,
