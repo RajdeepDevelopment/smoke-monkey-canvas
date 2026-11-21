@@ -56,6 +56,9 @@
 				request>headers>X-Smoke-Monkey-Token delete
 				request>headers>Sec-Websocket-Protocol delete
 				resp_headers>Sec-Websocket-Protocol delete
+				# A legacy ?token= page load sends the query in Referer for
+				# same-origin assets; redact just the token value.
+				request>headers>Referer regexp `([?&])token=[^&]*` `${1}token=REDACTED`
 			}
 		}
 	}
