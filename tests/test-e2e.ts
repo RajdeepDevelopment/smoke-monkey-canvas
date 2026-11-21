@@ -1,5 +1,10 @@
 import { startAppServer } from '../server/app.server.js';
 
+// This test is its own local launcher (it starts the server in-process and
+// talks to it directly), so there's no reverse-proxy ambiguity for
+// isLocalUiRequest (server/features/core/auth.server.ts) to worry about.
+process.env.SMOKE_MONKEY_ASSUME_LOCAL = '1';
+
 async function runTest() {
   console.log('Testing Smoke Monkey Canvas Full-Stack Server...');
   const port = 3456;

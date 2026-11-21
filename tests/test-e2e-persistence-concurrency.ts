@@ -3,6 +3,11 @@ import { AgentRunner } from '../server/features/agent/agent.runner.js';
 import { AgentDb } from '../server/features/agent/agent.db.js';
 import { WebSocket } from 'ws';
 
+// This test is its own local launcher (it starts the server in-process and
+// talks to it directly), so there's no reverse-proxy ambiguity for
+// isLocalUiRequest (server/features/core/auth.server.ts) to worry about.
+process.env.SMOKE_MONKEY_ASSUME_LOCAL = '1';
+
 async function runTest() {
   console.log('Testing Chat History Persistence, Reconnection & Cron Concurrency...');
   const port = 3457;

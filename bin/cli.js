@@ -350,6 +350,13 @@ const serverProc = spawn(process.execPath, [tsxBin, serverEntry], {
     ...process.env,
     PORT: String(port),
     SMOKE_CANVAS_DB: dbPath,
+    // This CLI is the officially-supported local launcher: it's about to
+    // fork the server process itself, so there's no reverse-proxy ambiguity
+    // for the local-UI bootstrap check (isLocalUiRequest in
+    // server/features/core/auth.server.ts) to worry about. A user who runs
+    // the raw server some other way (not through this CLI, the desktop app,
+    // or the mobile build) must opt in explicitly.
+    SMOKE_MONKEY_ASSUME_LOCAL: '1',
   },
 });
 

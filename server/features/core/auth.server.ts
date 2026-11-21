@@ -22,14 +22,14 @@
  *     request cannot carry custom headers and a query param would be written
  *     to proxy access logs.
  *   - The bootstrap endpoint that hands out the token only answers requests
- *     that arrive from the local machine's own UI, regardless of what host the
- *     server is bound to. This lets the local web UI/CLI/desktop fetch the
- *     token once without any prior credential, while a LAN or internet peer
+ *     from the local machine's own UI (see isLocalUiRequest below), regardless
+ *     of what host the server is bound to. A bare loopback peer is NOT
+ *     sufficient on its own — see that function's doc comment for why — so
+ *     this requires SMOKE_MONKEY_ASSUME_LOCAL=1, set automatically by every
+ *     officially-supported local launcher (bin/cli.js, the mobile build,
+ *     docker-compose.yml) rather than by the end user. A LAN or internet peer
  *     (even if the operator explicitly opened the server to 0.0.0.0) cannot
- *     use it to self-issue a token. Requests that carry proxy forwarding
- *     headers are refused even when the socket peer is loopback (a same-host
- *     proxy connects from 127.0.0.1 on behalf of every visitor); operators can
- *     opt back in with SMOKE_MONKEY_ASSUME_LOCAL=1.
+ *     use this route to self-issue a token.
  *
  * Deliberately out of scope: this is not a multi-user login system. An
  * operator who exposes the server on the public internet (the VPS/Render/
@@ -43,7 +43,6 @@ import type { IncomingMessage } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import type { CoreDatabase } from './database.db.js';
 
-const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
 /**
@@ -186,30 +185,38 @@ function hasTrustedHost(req: Request | IncomingMessage): boolean {
 /**
  * Whether this request came from the machine's own local UI.
  *
- * Normally that means a loopback peer with a trusted Host header. Two escape
- * hatches widen this, both documented in SECURITY.md:
+ * This requires SMOKE_MONKEY_ASSUME_LOCAL=1 unconditionally — a bare loopback
+ * peer is NOT sufficient evidence on its own. A same-host reverse proxy with
+ * no extra configuration (e.g. nginx with only `proxy_pass
+ * http://127.0.0.1:3333;`, nothing else) connects over loopback for every
+ * visitor it forwards, rewrites Host to match our own (nginx's actual
+ * default, easy to miss since nothing breaks without it — this app doesn't
+ * route on Host), and adds none of the PROXY_HEADERS below. At the TCP/HTTP
+ * layer, that is indistinguishable from a genuine local browser hitting the
+ * server directly: there's no header or peer-address signal that only a real
+ * direct connection could produce. Treating "loopback peer, no proxy headers"
+ * as proof of a direct local request was exactly that mistake.
  *
- *   - `SMOKE_MONKEY_ASSUME_LOCAL=1` treats any peer as local. It exists for
- *     container deployments that publish the port on the host's loopback only
- *     (Docker's userland proxy makes the browser's peer the bridge gateway,
- *     not 127.0.0.1). Only enable it when the published port is itself bound
- *     to loopback — see docker-compose.yml. Never enable it on a publicly
- *     reachable server.
- *   - Requests carrying proxy headers are refused even when the peer is
- *     loopback: a same-host reverse proxy (`proxy_pass http://127.0.0.1:3333`)
- *     connects over loopback for every visitor it forwards, so the peer
- *     address alone cannot distinguish them. Operators who front the app with
- *     a proxy and still want the convenience bootstrap must set
- *     SMOKE_MONKEY_ASSUME_LOCAL=1 explicitly.
+ * So the opt-in is unconditional, but it isn't something a human normally
+ * sets: every officially-supported launcher that forks this server process
+ * itself sets it on its own behalf, because *that* is unambiguous — nothing
+ * can sit between a parent process and the child it just spawned. See
+ * bin/cli.js, mobile/modules/server-bundle/canvas-server.js, and
+ * docker-compose.yml (which also documents why the container case needs it
+ * for an unrelated reason: Docker's userland proxy makes the browser's peer
+ * the bridge gateway, not 127.0.0.1). A user who runs the raw server some
+ * other way (not through this CLI, the desktop app, or the mobile build) must
+ * set it explicitly, or use SMOKE_MONKEY_AUTH_TOKEN instead. The
+ * PROXY_HEADERS check still applies even with the opt-in set, as a floor: a
+ * launcher-started server sitting behind yet another proxy should still
+ * refuse those requests.
  */
 export function isLocalUiRequest(req: Request | IncomingMessage): boolean {
   if (!hasTrustedHost(req)) return false;
-  const v = process.env.SMOKE_MONKEY_ASSUME_LOCAL;
-  if (v === '1' || v === 'true') return true;
   const headers = (req.headers || {}) as Record<string, string | string[] | undefined>;
   if (PROXY_HEADERS.some((name) => headerValue(headers, name))) return false;
-  const addr = req.socket?.remoteAddress || '';
-  return LOOPBACK_ADDRESSES.has(addr);
+  const v = process.env.SMOKE_MONKEY_ASSUME_LOCAL;
+  return v === '1' || v === 'true';
 }
 
 /**
