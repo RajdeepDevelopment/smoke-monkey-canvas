@@ -1011,6 +1011,35 @@ export class AgentDb {
     return row ?? null;
   }
 
+  /**
+   * Deletes todo rows for this agent/date/run whose content is not present
+   * in the current full list. The harness's todo_write tool is documented
+   * as a full-list replacement ("Send the ENTIRE list every call - it
+   * REPLACES the previous list"), but the upsert loop that calls this only
+   * ever added/updated rows matching the current payload — nothing deleted
+   * or marked a row stale when a task was removed or renamed, so removed
+   * tasks became permanent phantom rows and renames produced duplicates.
+   * Scoped to run_id (not just agent_id + task_date) so an earlier run's
+   * todos from the same day are never touched by a later run's first
+   * todo_write call. See #9.
+   */
+  reconcileAgentTodosForRun(agentId: string, taskDate: string, runId: string, currentContents: string[]): void {
+    if (currentContents.length === 0) {
+      // An empty list is still a valid full replacement: this run has no
+      // to-dos left for this date.
+      this.coreDb.db
+        .prepare(`DELETE FROM agent_todo_history WHERE agent_id = ? AND task_date = ? AND run_id = ?`)
+        .run(agentId, taskDate, runId);
+      return;
+    }
+    const placeholders = currentContents.map(() => '?').join(',');
+    this.coreDb.db
+      .prepare(
+        `DELETE FROM agent_todo_history WHERE agent_id = ? AND task_date = ? AND run_id = ? AND content NOT IN (${placeholders})`,
+      )
+      .run(agentId, taskDate, runId, ...currentContents);
+  }
+
   upsertAgentTodoItem(record: AgentTodoRecord): AgentTodoRecord {
     const existing = this.findExistingTodo(record.agent_id, record.task_date, record.content);
     const now = new Date().toISOString();
