@@ -16,20 +16,26 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
   onSavePolicies,
   onClose,
 }) => {
-  if (!isOpen || !agent) return null;
-
+  // Hooks must run unconditionally on every render: LazyMount (see
+  // web/src/features/common/lazy-mount.tsx) keeps this component mounted
+  // after its first open, so closing it (isOpen=false/agent=null) re-renders
+  // rather than unmounting. An early return before hooks changed the hook
+  // count between renders and crashed with a "Rendered fewer/more hooks than
+  // expected" error. The guard now runs after every hook below. See #7.
   let currentPolicies: string[] = [];
   try {
-    if (agent.policies) {
+    if (agent?.policies) {
       currentPolicies = JSON.parse(agent.policies);
     }
   } catch {
-    if (agent.policies) currentPolicies = [agent.policies];
+    if (agent?.policies) currentPolicies = [agent.policies];
   }
 
   const [selectedPolicies, setSelectedPolicies] = useState<string[]>(currentPolicies);
   const [customPolicyInput, setCustomPolicyInput] = useState('');
   const [loading, setLoading] = useState(false);
+
+  if (!isOpen || !agent) return null;
 
   const togglePolicy = (ruleText: string) => {
     setSelectedPolicies((prev) =>

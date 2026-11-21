@@ -16,11 +16,15 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
   onSaveDisabledTools,
   onClose,
 }) => {
-  if (!isOpen || !agent) return null;
-
+  // Hooks must run unconditionally on every render: LazyMount (see
+  // web/src/features/common/lazy-mount.tsx) keeps this component mounted
+  // after its first open, so closing it (isOpen=false/agent=null) re-renders
+  // rather than unmounting. An early return before hooks changed the hook
+  // count between renders and crashed with a "Rendered fewer/more hooks than
+  // expected" error. The guard now runs after every hook below. See #7.
   let currentDisabled: string[] = [];
   try {
-    if (agent.disabled_tools) {
+    if (agent?.disabled_tools) {
       currentDisabled = JSON.parse(agent.disabled_tools);
     }
   } catch {
@@ -30,6 +34,8 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
   const [disabledTools, setDisabledTools] = useState<string[]>(currentDisabled);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [loading, setLoading] = useState(false);
+
+  if (!isOpen || !agent) return null;
 
   const categories = ['All', 'Filesystem', 'Terminal', 'Search', 'Git', 'Agent', 'Skills & MCP'];
 

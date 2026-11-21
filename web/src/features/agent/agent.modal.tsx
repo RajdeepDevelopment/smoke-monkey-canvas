@@ -244,8 +244,14 @@ export const AgentModal: React.FC<AgentModalProps> = ({
   onOpenKeys,
   onClose,
 }) => {
-  if (!isOpen) return null;
-
+  // Hooks must run unconditionally on every render: LazyMount (see
+  // web/src/features/common/lazy-mount.tsx) keeps this component mounted
+  // after its first open, so closing it (isOpen=false) re-renders rather
+  // than unmounting. An early return here, before the ~25 hooks below, kept
+  // changing the hook count between renders and crashed with a "Rendered
+  // fewer/more hooks than expected" error. The guard now runs after every
+  // hook (see the matching `if (!isOpen) return null;` further down, right
+  // after the last useEffect). See #7.
   const isMobile = useIsMobile();
   const defaultName = agent?.name || initialData?.name || 'Job & Web Crawler';
   const defaultProvider = agent?.provider || initialData?.provider || 'nvidia';
@@ -383,6 +389,10 @@ export const AgentModal: React.FC<AgentModalProps> = ({
       }, 100);
     }
   }, [isOpen, initialSection]);
+
+  // See the comment on the component's opening line: every hook above this
+  // point runs unconditionally; this is the matching guard.
+  if (!isOpen) return null;
 
   const handleBrowseLocalDirectory = async () => {
     try {
