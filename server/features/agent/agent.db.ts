@@ -639,7 +639,15 @@ export class AgentDb {
           }
         }
 
-        if (changed || (!msg.parts_json && parts.length > 0)) {
+        // msg.parts_json === '[]' must be treated the same as missing: it's a
+        // non-empty, truthy string, so `!msg.parts_json` alone misses it.
+        // Reconstruction above (msg.role === 'assistant' && (!msg.parts_json
+        // || msg.parts_json === '[]') ...) already rebuilds `parts` for both
+        // cases, but this save/return condition previously only covered the
+        // null/undefined case, so a reconstructed-but-unchanged (no running
+        // tool calls to finalize) interrupted run was discarded here and the
+        // stale empty '[]' was returned instead. See #11.
+        if (changed || ((!msg.parts_json || msg.parts_json === '[]') && parts.length > 0)) {
           const partsJson = JSON.stringify(parts);
           this.updateChatMessage(msg.id, { parts_json: partsJson });
           return { ...msg, parts_json: partsJson };
