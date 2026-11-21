@@ -14,12 +14,13 @@ services:
       - "${PORT:-3333}:3333"
     environment:
       - PORT=3333
+      - HOST=0.0.0.0
       - SMOKE_CANVAS_DB=/app/data/canvas.db
       - NODE_ENV=production
     volumes:
       - canvas-data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3333/api/space"]
+      test: ["CMD", "curl", "-f", "http://localhost:3333/api/health"]
       interval: 20s
       timeout: 5s
       retries: 3

@@ -17,10 +17,11 @@ primary_region = "iad"
   interval = "15s"
   method = "GET"
   timeout = "5s"
-  path = "/api/space"
+  path = "/api/health"
 
 [env]
   NODE_ENV = "production"
+  HOST = "0.0.0.0"
   SMOKE_CANVAS_DB = "/app/data/canvas.db"
 
 [mounts]

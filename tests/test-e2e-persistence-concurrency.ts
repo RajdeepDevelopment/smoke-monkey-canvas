@@ -13,10 +13,18 @@ async function runTest() {
   await new Promise((r) => setTimeout(r, 600));
 
   try {
+    // Every /api/* route (besides /api/health) now requires a bearer token —
+    // see server/features/core/auth.server.ts. The bootstrap endpoint only
+    // answers loopback callers, which this test is.
+    const { token } = (await (await fetch(`http://localhost:${port}/api/auth/token`)).json()) as {
+      token: string;
+    };
+    const auth = { Authorization: `Bearer ${token}` };
+
     // 1. Create a test agent
     const resCreate = await fetch(`http://localhost:${port}/api/agents`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({
         name: 'Concurrency Tester',
         model: 'nvidia/nemotron-3-super-120b-a12b',
@@ -32,7 +40,7 @@ async function runTest() {
     // 2. Test Multi-Turn Session Creation & Persistence
     const resSession = await fetch(`http://localhost:${port}/api/agents/${agent.id}/sessions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({ title: 'Multi-turn Test Discussion' }),
     });
     const session: any = await resSession.json();
@@ -76,7 +84,7 @@ async function runTest() {
     console.log('✓ Saved assistant message with rich parts_json (thoughts + tool calls):', asstMsg.id);
 
     // Verify session messages endpoint returns complete parsed parts
-    const resMsgs = await fetch(`http://localhost:${port}/api/agents/${agent.id}/sessions/${session.id}/messages`);
+    const resMsgs = await fetch(`http://localhost:${port}/api/agents/${agent.id}/sessions/${session.id}/messages`, { headers: auth });
     const fetchedMsgs: any = await resMsgs.json();
     if (fetchedMsgs.length !== 2) throw new Error(`Expected 2 messages, got ${fetchedMsgs.length}`);
     const fetchedAsst = fetchedMsgs[1];
@@ -88,7 +96,7 @@ async function runTest() {
     console.log('✓ Multi-turn history persistence verified: thoughts, tool calls, and markdown preserved!');
 
     // 3. Test WebSocket Stream Reconnection & Event Broadcasting
-    const ws = new WebSocket(`ws://localhost:${port}/ws`);
+    const ws = new WebSocket(`ws://localhost:${port}/ws?token=${token}`);
     const wsEvents: any[] = [];
     await new Promise<void>((resolve, reject) => {
       ws.on('open', () => resolve());
@@ -144,7 +152,7 @@ async function runTest() {
     });
 
     // Test GET /api/agents/:id/active-runs
-    const resActive = await fetch(`http://localhost:${port}/api/agents/${agent.id}/active-runs`);
+    const resActive = await fetch(`http://localhost:${port}/api/agents/${agent.id}/active-runs`, { headers: auth });
     const activeData: any = await resActive.json();
     console.log('✓ Query active runs count:', activeData.length);
     if (activeData.length !== 2) {
@@ -170,7 +178,7 @@ async function runTest() {
       run_id: chatRunRecord.id,
     });
 
-    const resInFlight = await fetch(`http://localhost:${port}/api/agents/${agent.id}/sessions/${session.id}/messages`);
+    const resInFlight = await fetch(`http://localhost:${port}/api/agents/${agent.id}/sessions/${session.id}/messages`, { headers: auth });
     const inFlightMsgs: any = await resInFlight.json();
     const lastMsg = inFlightMsgs[inFlightMsgs.length - 1];
     if (lastMsg.content !== 'Hello from chat!') {
@@ -182,12 +190,12 @@ async function runTest() {
     // Stop ONLY the cron run, leaving the chat run alive
     const resStopCron = await fetch(`http://localhost:${port}/api/agents/${agent.id}/stop`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({ runId: cronRunRecord.id }),
     });
     console.log('✓ Stop cron run response status:', resStopCron.status);
 
-    const resActiveAfterStop = await fetch(`http://localhost:${port}/api/agents/${agent.id}/active-runs`);
+    const resActiveAfterStop = await fetch(`http://localhost:${port}/api/agents/${agent.id}/active-runs`, { headers: auth });
     const activeAfterStop: any = await resActiveAfterStop.json();
     if (activeAfterStop.length !== 1 || activeAfterStop[0].runId !== chatRunRecord.id) {
       throw new Error('Stopping cron run should NOT kill concurrent chat run!');
@@ -197,13 +205,13 @@ async function runTest() {
     // Stop chat run
     await fetch(`http://localhost:${port}/api/agents/${agent.id}/stop`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({ runId: chatRunRecord.id }),
     });
 
     ws.close();
     // Clean up test agent and session
-    await fetch(`http://localhost:${port}/api/agents/${agent.id}`, { method: 'DELETE' });
+    await fetch(`http://localhost:${port}/api/agents/${agent.id}`, { method: 'DELETE', headers: auth });
     console.log('✓ Cleaned up test agent.');
 
     console.log('\n🎉 ALL PERSISTENCE, RECONNECTION, AND CONCURRENCY TESTS PASSED!');

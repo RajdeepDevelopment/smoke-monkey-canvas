@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { randomBytes } from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -601,9 +602,35 @@ export class CoreDatabase {
     const rows = stmt.all() as unknown as Array<{ key: string; value: string }>;
     const result: Record<string, string> = {};
     for (const r of rows) {
+      // Internal keys (e.g. the per-install auth token) are never surfaced
+      // through getAllSettings() or getSetting()'s callers that enumerate
+      // "known" keys — see GET /api/settings/keys, which otherwise includes
+      // every persisted key, even masked, in its response.
+      if (r.key.startsWith(CoreDatabase.INTERNAL_KEY_PREFIX)) continue;
       result[r.key] = r.value;
     }
     return result;
+  }
+
+  private static readonly INTERNAL_KEY_PREFIX = '__internal_';
+  private static readonly AUTH_TOKEN_KEY = `${CoreDatabase.INTERNAL_KEY_PREFIX}auth_token`;
+
+  /**
+   * Returns the per-install bearer token used to authenticate /api and /ws
+   * traffic, generating and persisting one on first use. Writes directly to
+   * the settings table (bypassing setSetting()) so the token never touches
+   * process.env and never leaks through getAllSettings()/GET /api/settings/keys.
+   */
+  getOrCreateAuthToken(): string {
+    const existing = this.getSetting(CoreDatabase.AUTH_TOKEN_KEY);
+    if (existing) return existing;
+    const token = randomBytes(32).toString('hex');
+    const stmt = this.db.prepare(`
+      INSERT INTO settings (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `);
+    stmt.run(CoreDatabase.AUTH_TOKEN_KEY, token);
+    return token;
   }
 
   // ── Stock Skills & 10 Categories ───────────────────────────────────────────

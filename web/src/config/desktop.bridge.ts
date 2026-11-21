@@ -4,6 +4,45 @@
  * when running inside Smoke Monkey Canvas Desktop.
  */
 
+declare global {
+  interface Window {
+    __SMOKE_MONKEY_TOKEN__?: string | null;
+  }
+}
+
+/**
+ * Per-install bearer token (see server/features/core/auth.server.ts). Cached
+ * in memory for the life of the page: either read from the global the server
+ * injects into index.html on load, or fetched once from the loopback-gated
+ * bootstrap endpoint (needed for the packaged Tauri build, which loads its
+ * bundled assets from the framework's own origin rather than the server, so
+ * never gets the injected global).
+ */
+let cachedAuthToken: string | null = null;
+
+export function getCachedAuthToken(): string | null {
+  return cachedAuthToken;
+}
+
+export async function ensureAuthToken(): Promise<string | null> {
+  if (cachedAuthToken) return cachedAuthToken;
+  if (typeof window !== 'undefined' && window.__SMOKE_MONKEY_TOKEN__) {
+    cachedAuthToken = window.__SMOKE_MONKEY_TOKEN__;
+    return cachedAuthToken;
+  }
+  try {
+    const base = isTauri() ? `${DESKTOP_API_BASE}/api` : getApiBaseUrl();
+    const res = await fetch(`${base}/auth/token`);
+    if (res.ok) {
+      const data = (await res.json()) as { token: string | null };
+      cachedAuthToken = data.token;
+    }
+  } catch (err) {
+    console.warn('[DesktopBridge] Failed to bootstrap auth token:', err);
+  }
+  return cachedAuthToken;
+}
+
 export function isTauri(): boolean {
   if (typeof window === 'undefined') return false;
   return (
@@ -44,18 +83,21 @@ export function getApiBaseUrl(): string {
 }
 
 export function getWsUrl(): string {
+  // The browser WebSocket constructor can't set headers, so the bearer token
+  // (see auth.server.ts) travels as a query param instead.
+  const tokenSuffix = cachedAuthToken ? `?token=${encodeURIComponent(cachedAuthToken)}` : '';
   if (isTauri()) {
-    return `ws://localhost:3333/ws`;
+    return `ws://localhost:3333/ws${tokenSuffix}`;
   }
   if (
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
     window.location.port !== '3333'
   ) {
-    return `ws://localhost:3333/ws`;
+    return `ws://localhost:3333/ws${tokenSuffix}`;
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/ws`;
+  return `${protocol}//${window.location.host}/ws${tokenSuffix}`;
 }
 
 /**
@@ -192,31 +234,53 @@ export function initExternalLinkHandling(): void {
 }
 
 /**
- * Initialize Desktop Bridge
- * Intercepts relative /api requests inside Tauri webview so all
- * standard fetch() calls seamlessly route to the local Canvas server.
+ * Initialize the API bridge.
+ *
+ * Always patches window.fetch (not just inside Tauri) for two reasons:
+ *   1. Inside Tauri, it rewrites relative /api and /ws requests to the
+ *      bundled backend's own origin (http://localhost:3333), same as before.
+ *   2. In every runtime, it attaches `Authorization: Bearer <token>` to
+ *      requests targeting our own API — see server/features/core/auth.server.ts.
+ *      Without this, every one of the ~30 call sites across agent.service.ts,
+ *      space.service.ts, etc. would need its own change to send the token.
  */
 export function initDesktopBridge(): void {
-  if (typeof window === 'undefined' || !isTauri()) return;
+  if (typeof window === 'undefined') return;
 
   const originalFetch = window.fetch.bind(window);
+  const tauri = isTauri();
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     let url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    let isApiRequest = false;
 
     if (typeof url === 'string') {
       if (url.startsWith('/api') || url.startsWith('/ws')) {
-        url = `${DESKTOP_API_BASE}${url}`;
+        isApiRequest = true;
+        if (tauri) url = `${DESKTOP_API_BASE}${url}`;
       } else if (url.includes('/api/')) {
-        url = url.replace(/^.*\/api\//, `${DESKTOP_API_BASE}/api/`);
+        isApiRequest = true;
+        if (tauri) url = url.replace(/^.*\/api\//, `${DESKTOP_API_BASE}/api/`);
       }
+    }
+
+    // The bootstrap endpoint itself must stay unauthenticated (it's how the
+    // token is obtained in the first place).
+    if (isApiRequest && cachedAuthToken && typeof url === 'string' && !url.endsWith('/auth/token')) {
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      if (!headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${cachedAuthToken}`);
+      }
+      init = { ...init, headers };
     }
 
     return originalFetch(url, init);
   };
 
-  initExternalLinkHandling();
-  console.log('[DesktopBridge] Initialized for Tauri desktop runtime');
+  if (tauri) {
+    initExternalLinkHandling();
+    console.log('[DesktopBridge] Initialized for Tauri desktop runtime');
+  }
 }
 
 /**

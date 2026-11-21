@@ -26,6 +26,7 @@ RUN apk add --no-cache curl
 # Set production environment
 ENV NODE_ENV=production \
     PORT=3333 \
+    HOST=0.0.0.0 \
     SMOKE_CANVAS_DB=/app/data/canvas.db
 
 # Install server production dependencies
@@ -56,7 +57,7 @@ VOLUME ["/app/data"]
 
 # Healthcheck monitoring the canvas API
 HEALTHCHECK --interval=20s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3333/api/space || exit 1
+  CMD curl -f http://localhost:3333/api/health || exit 1
 
 # Start server (skipping browser open inside container)
 CMD ["node", "bin/cli.js", "--no-open"]

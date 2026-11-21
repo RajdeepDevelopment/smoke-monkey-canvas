@@ -3,6 +3,17 @@
 # Automatic TLS via Let's Encrypt: point an A/AAAA record for SMOKE_DOMAIN at
 # this server's public IP and Caddy obtains and renews the certificate itself.
 # WebSocket upgrades for /ws are handled natively by Caddy's reverse_proxy.
+#
+# Canvas itself only checks a per-install bearer token (see SECURITY.md), and
+# that token is handed to anyone who loads the page — it is not a login
+# screen. Once SMOKE_DOMAIN is reachable by anyone, add your own login here,
+# e.g.:
+#
+#   basic_auth {
+#     <username> <bcrypt-hash-from `caddy hash-password`>
+#   }
+#
+# inside the block below, before reverse_proxy.
 
 {$SMOKE_DOMAIN} {
 	encode zstd gzip

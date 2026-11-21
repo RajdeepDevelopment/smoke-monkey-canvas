@@ -32,7 +32,7 @@ services:
     autoDeployTrigger: 'off'
 
     # Must answer 2xx within 5s or Render restarts the instance. Keep this route cheap.
-    healthCheckPath: /api/space
+    healthCheckPath: /api/health
 
     # SQLite lives here. Losing this disk loses agents, chat history and API keys.
     disk:
@@ -43,6 +43,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: HOST
+        value: 0.0.0.0
       - key: SMOKE_CANVAS_DB
         value: /app/data/canvas.db
 
