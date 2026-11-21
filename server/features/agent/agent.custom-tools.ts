@@ -24,7 +24,7 @@ import {
   inferSectionForTodo,
   renderDailyTodoMarkdown,
 } from './agent.todos.js';
-import { CANVAS_TOOL_DEFINITIONS, CanvasMcpServer, setConfiguredSpaceId } from '../mcp-server/canvas-mcp.server.js';
+import { CANVAS_TOOL_DEFINITIONS, CanvasMcpServer } from '../mcp-server/canvas-mcp.server.js';
 
 function parseTargetList(inputVal?: string | string[]): string[] {
   if (Array.isArray(inputVal)) {
@@ -4698,11 +4698,8 @@ const CANVAS_BRIDGED_CUSTOM_TOOLS: ToolDefinition[] = CANVAS_TOOL_DEFINITIONS.ma
       } catch {}
     }
     const targetSpace = agentSpace || (args as any)?.space_id || (args as any)?.spaceId || (ctx as any)?.spaceId || (ctx as any)?.owned_space_id;
-    if (targetSpace) {
-      setConfiguredSpaceId(targetSpace);
-    }
     try {
-      const res = await server.executeTool(def.name, (args as Record<string, any>) || {});
+      const res = await server.executeTool(def.name, (args as Record<string, any>) || {}, targetSpace || undefined);
       const textContent = res.content?.map((c: any) => c.text || '').join('\n') || '';
       return {
         success: !res.isError,
