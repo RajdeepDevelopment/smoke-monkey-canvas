@@ -603,7 +603,22 @@ async function executeSingleDelegatedTask(
 
   // Max retries for transient (technical) failures: 5s → 10s → 20s backoff
   const MAX_DELEGATION_RETRIES = 3;
-  const DELEGATION_TIMEOUT_MS = 240_000; // 4 minute safety timeout per attempt
+
+  // A flat per-attempt timeout doesn't account for nested delegation: if B is
+  // itself waiting on C (its own delegate_task call, which won't resolve
+  // until B's run finishes), A's wait time is really "B's own work" PLUS
+  // "however long B waits on C" — so a shallower (closer to the original
+  // caller) hop genuinely needs MORE slack than a deeper one, not the same
+  // fixed budget. Scale down as the chain gets deeper: a root delegation
+  // (chain length 2: [caller, target]) gets the largest multiplier, each
+  // added level of nesting gets progressively less extra slack, floored at
+  // 1x the base. Configurable via env since "realistic task duration" varies
+  // by deployment. See #16.
+  const BASE_DELEGATION_TIMEOUT_MS = Number(process.env.SMOKE_MONKEY_DELEGATION_TIMEOUT_MS) || 300_000; // 5 min
+  const MAX_SCALED_DELEGATION_DEPTH = 5;
+  const chainDepth = runner.getDelegationChain(delegationSessionId).length || 2;
+  const depthMultiplier = Math.max(1, MAX_SCALED_DELEGATION_DEPTH - chainDepth + 2);
+  const DELEGATION_TIMEOUT_MS = BASE_DELEGATION_TIMEOUT_MS * depthMultiplier;
 
   const delegationTrackId = callerInfo.callerAgentId
     ? runner.registerActiveDelegation(callerInfo.callerAgentId, targetAgentId, taskTitle, delegationSessionId)
@@ -619,7 +634,13 @@ async function executeSingleDelegatedTask(
     while (true) {
       delegationAttempt++;
 
-      // Wait for any existing run on this session to finish first
+      // Wait for any existing run on this session to finish first. This run
+      // wasn't started by this delegation attempt — it could be the target
+      // agent's own nested delegation to someone else, or a user manually
+      // chatting with it — so on timeout, fail the attempt without stopping
+      // it. Forcibly stopping a run this call didn't start (the previous
+      // behavior) could kill legitimate in-progress work, including a human
+      // user's own conversation. See #16.
       let activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
       while (activeSessionRun && activeSessionRun.status === 'running') {
         if (callerInfo.callerRunId && activeSessionRun.runId === callerInfo.callerRunId) break;
@@ -639,12 +660,10 @@ async function executeSingleDelegatedTask(
           );
         });
         if (timedOut) {
-          runner.stopRun(activeSessionRun.runId);
-          if (runner.getActiveRunForSession(delegationSessionId)) {
-            throw new Error(
-              `Delegation session "${delegationSessionId}" is still busy after ${DELEGATION_TIMEOUT_MS / 1000}s; aborting to avoid an infinite wait.`,
-            );
-          }
+          throw new Error(
+            `Delegation session "${delegationSessionId}" is still busy with another run after ${DELEGATION_TIMEOUT_MS / 1000}s; ` +
+              `not aborting it since this delegation didn't start it. Try again once it's free.`,
+          );
         }
         activeSessionRun = runner.getActiveRunForSession(delegationSessionId);
       }
