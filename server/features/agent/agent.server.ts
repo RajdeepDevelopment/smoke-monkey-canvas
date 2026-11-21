@@ -12,6 +12,7 @@ import {
   unwatchAgentWorkspace,
   setupAgentWorkspaceWatcher,
   initAllAgentWatchers,
+  isContained,
 } from './agent.files.js';
 import { AgentDb } from './agent.db.js';
 import { AgentRunner } from './agent.runner.js';
@@ -31,6 +32,7 @@ import {
   syncAgentDiskManifestFromDb,
   readAgentAutomations,
   readAgentMemorySummaries,
+  SMOKE_AGENTS_ROOT,
 } from './agent.manifest.js';
 import {
   buildEffectiveSystemPrompt,
@@ -991,8 +993,22 @@ export function createAgentRouter(): Router {
     if (agent && deleteFiles) {
       try {
         const ws = resolveAgentWorkspace(agent);
-        if (ws && fs.existsSync(ws)) {
+        // resolveAgentWorkspace() returns the agent's explicit working_dir
+        // verbatim when one is set, which could be the user's project, home
+        // directory, or any other path — never something this app created.
+        // Only ever recursively delete a workspace this app itself manages
+        // (under ~/.smoke-agents/), regardless of the deleteFiles flag: a
+        // user-chosen working_dir is never removed this way, full stop. See
+        // #4 — the "delete workspace folders" checkbox used to default to
+        // checked, so deleting a space could silently rm -rf a real project.
+        const managedRoot = path.join(homedir(), SMOKE_AGENTS_ROOT);
+        const isManaged = ws === managedRoot || isContained(managedRoot, path.resolve(ws));
+        if (ws && isManaged && fs.existsSync(ws)) {
           fs.rmSync(ws, { recursive: true, force: true });
+        } else if (ws && !isManaged) {
+          console.warn(
+            `[AgentServer] Refusing to delete workspace for agent ${id}: "${ws}" is a custom working_dir, not an app-managed workspace.`,
+          );
         }
       } catch (err) {
         console.warn(`[AgentServer] Failed to delete workspace folder for agent ${id}:`, err);

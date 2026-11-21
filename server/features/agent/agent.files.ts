@@ -127,7 +127,7 @@ export function getFileMimeType(ext: string): string {
   return MIME_TYPES[cleanExt] || 'application/octet-stream';
 }
 
-function isContained(root: string, target: string): boolean {
+export function isContained(root: string, target: string): boolean {
   if (target === root) return true;
   const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
   return target.startsWith(rootWithSep);

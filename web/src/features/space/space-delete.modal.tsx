@@ -33,7 +33,12 @@ export const SpaceDeleteModal: React.FC<SpaceDeleteModalProps> = ({
   onCancel,
 }) => {
   const [selectedMode, setSelectedMode] = useState<SpaceDeleteMode>('all');
-  const [deleteFiles, setDeleteFiles] = useState(true);
+  // Defaults to off: this recursively deletes a directory on disk. The
+  // server (DELETE /api/agents/:id) only ever acts on app-managed workspaces
+  // under ~/.smoke-agents/ regardless of this flag — an agent's custom
+  // working_dir is never touched — but the checkbox still shouldn't invite
+  // deleting real files by default. See #4.
+  const [deleteFiles, setDeleteFiles] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -312,7 +317,14 @@ export const SpaceDeleteModal: React.FC<SpaceDeleteModalProps> = ({
                         onChange={(e) => setDeleteFiles(e.target.checked)}
                         style={{ accentColor: '#ef4444' }}
                       />
-                      <span>Also delete agent workspace folders & memory files on disk</span>
+                      <span>
+                        Also delete agent workspace folders & memory files on disk
+                        <br />
+                        <span style={{ color: '#8b949e' }}>
+                          Only removes workspaces this app created (under ~/.smoke-agents) — never a
+                          custom working directory you pointed an agent at.
+                        </span>
+                      </span>
                     </label>
                   )}
                 </div>
