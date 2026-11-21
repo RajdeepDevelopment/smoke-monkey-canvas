@@ -417,11 +417,37 @@ export class AgentDb {
   }
 
   // ── Chat Sessions & Multi-Turn Messages ───────────────────────────────────
+  /**
+   * Returns the session only if it exists AND belongs to the given agent.
+   * Session ids are not secrets (they're echoed back to clients, passed in
+   * POST /run bodies, etc.), so without this check, agent B could pass
+   * agent A's session id and read, append to, or delete A's conversation.
+   * Used everywhere a caller supplies a session id for an operation scoped
+   * to one agent. See #8.
+   */
+  getOwnedSession(agentId: string, sessionId: string): ChatSessionRecord | null {
+    const session = this.getSession(sessionId);
+    if (!session || session.agent_id !== agentId) return null;
+    return session;
+  }
+
   getOrCreateSession(agentId: string, sessionId?: string, title?: string): ChatSessionRecord {
     const id = sessionId || `session_${agentId}_default`;
     const stmtGet = this.coreDb.db.prepare(`SELECT * FROM chat_sessions WHERE id = ?`);
     const existing = stmtGet.get(id) as unknown as ChatSessionRecord | undefined;
-    if (existing) return existing;
+    if (existing) {
+      if (existing.agent_id !== agentId) {
+        // The id exists but belongs to a different agent. Silently handing
+        // back someone else's session was the bug; silently creating a
+        // second session under a colliding id isn't possible either (id is
+        // the primary key) and would be confusing if it were. Callers (every
+        // route below, and AgentRunner.runAgent) must handle this rejection
+        // — HTTP routes turn it into 404/400, never into "use agent A's data
+        // anyway". See #8.
+        throw new Error(`Session ${id} does not belong to agent ${agentId}`);
+      }
+      return existing;
+    }
 
     const now = new Date().toISOString();
     const sessionTitle = title || 'General Discussion';

@@ -1574,8 +1574,14 @@ export function createAgentRouter(): Router {
     const body = req.body || {};
     const sessionId = body.id || `session_${id}_${Date.now()}`;
     const title = body.title || 'New Chat';
-    const session = db.getOrCreateSession(id, sessionId, title);
-    res.status(201).json(session);
+    try {
+      // If the caller-supplied id already belongs to another agent,
+      // getOrCreateSession() throws rather than handing it back. See #8.
+      const session = db.getOrCreateSession(id, sessionId, title);
+      res.status(201).json(session);
+    } catch (err: unknown) {
+      res.status(409).json({ error: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   router.get('/:id/active-runs', (req: Request, res: Response) => {
@@ -1585,7 +1591,14 @@ export function createAgentRouter(): Router {
   });
 
   router.get('/:id/sessions/:sessionId/messages', (req: Request, res: Response) => {
+    const id = getParam(req.params.id);
     const sessionId = getParam(req.params.sessionId);
+    // Without this, agent B could request agent A's session id here and
+    // read A's conversation. See #8.
+    if (!db.getOwnedSession(id, sessionId)) {
+      res.status(404).json({ error: 'Session not found for this agent' });
+      return;
+    }
     const messages = db.getSessionMessages(sessionId);
     const activeRun = runner.getActiveRunForSession(sessionId);
     if (activeRun && messages.length > 0) {
@@ -1601,6 +1614,11 @@ export function createAgentRouter(): Router {
   router.delete('/:id/sessions/:sessionId', (req: Request, res: Response) => {
     const id = getParam(req.params.id);
     const sessionId = getParam(req.params.sessionId);
+    // Without this, agent B could delete agent A's session by id. See #8.
+    if (!db.getOwnedSession(id, sessionId)) {
+      res.status(404).json({ error: 'Session not found for this agent' });
+      return;
+    }
     runner.clearAgentMemory(id, sessionId);
     db.deleteSession(sessionId);
     res.json({ success: true, id: sessionId });
