@@ -85,6 +85,40 @@ function sleepWithAbort(ms: number, isAborted: () => boolean): Promise<void> {
   });
 }
 
+/**
+ * Matches smoke-monkey-harness's own RETRYABLE_LLM_ERROR pattern
+ * (services/llm-client.js) so this outer retry loop and the harness's
+ * internal one agree on what counts as transient.
+ */
+const RETRYABLE_RUN_ERROR =
+  /timeout|etimedout|econnreset|econnrefused|socket hang up|rate.?limit|too many requests|bad gateway|service unavailable|internal server error|overloaded|server error|\b5\d\d\b/i;
+
+/** Matches the harness's own fatalAuth check — never worth retrying. */
+const FATAL_AUTH_ERROR = /unauthorized|invalid api key|forbidden|\b401\b|\b403\b/i;
+
+/**
+ * Whether a run failure is worth retrying.
+ *
+ * Before e7cb805, any error failed a manual run immediately — no retries at
+ * all. The retry loop added there retries on ANY exception, including
+ * permanent ones (an invalid API key, an unknown/misconfigured model name):
+ * those don't become valid by waiting and trying again, so a user watched up
+ * to 10 retries (~7 minutes, each one a real model call) before seeing a
+ * failure that was knowable on attempt 1. See #17.
+ *
+ * Classify instead: retry only errors that plausibly resolve on their own
+ * (network blips, rate limiting, upstream 5xx) — anything else, including an
+ * error we don't recognize at all, fails fast rather than being retried on
+ * the assumption it might clear up.
+ */
+function isTransientRunError(err: Error & { status?: number }): boolean {
+  const status = Number(err.status ?? (err as any).response?.status ?? 0);
+  const msg = err.message || '';
+  if (FATAL_AUTH_ERROR.test(msg) || status === 401 || status === 403) return false;
+  if ([408, 429, 500, 502, 503, 504].includes(status)) return true;
+  return RETRYABLE_RUN_ERROR.test(msg);
+}
+
 export class AgentRunner {
   private static instance: AgentRunner | null = null;
   private db: AgentDb;
@@ -1704,6 +1738,18 @@ export class AgentRunner {
         // A delegated task that explicitly closed as failed/blocked is a
         // business outcome, not a transient error — do not re-run it.
         if (isDelegationFailure) break;
+
+        // A permanent error (invalid API key, unknown model, etc.) won't
+        // resolve itself by retrying — fail now instead of burning through
+        // up to maxRetries real model-call attempts first. Errors with no
+        // recognizable transient signature are treated as permanent too
+        // (fail fast by default, not retry-by-default). Doesn't apply when
+        // there's no exception at all (e.g. a cron job that simply didn't
+        // call mark_cron_job_success) — that retry reason is unrelated to
+        // error classification. See #17.
+        if (lastAttemptError && !isTransientRunError(lastAttemptError)) {
+          break;
+        }
 
         // If retries not exhausted, prepare next retry prompt
         if (attempt <= maxRetries) {
