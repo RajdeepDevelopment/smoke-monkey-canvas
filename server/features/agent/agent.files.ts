@@ -127,13 +127,60 @@ export function getFileMimeType(ext: string): string {
   return MIME_TYPES[cleanExt] || 'application/octet-stream';
 }
 
+function isContained(root: string, target: string): boolean {
+  if (target === root) return true;
+  const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+  return target.startsWith(rootWithSep);
+}
+
 export function safeResolveWorkspacePath(workspaceRoot: string, relativePath: string): string | null {
   if (!workspaceRoot) return null;
   const normalizedRoot = path.resolve(workspaceRoot);
   const targetPath = path.resolve(normalizedRoot, relativePath || '.');
 
-  // Guard against path traversal outside workspace
-  if (!targetPath.startsWith(normalizedRoot)) {
+  // Guard against path traversal outside workspace. A separator-bounded
+  // comparison (not a bare startsWith) so a sibling directory whose name is
+  // merely prefixed by the root's name (e.g. /tmp/agent-1234-backup vs
+  // /tmp/agent-1234) is correctly rejected.
+  if (!isContained(normalizedRoot, targetPath)) {
+    return null;
+  }
+
+  // Resolve symlinks before the final containment check so a symlink inside
+  // the workspace that points outside of it (or a workspace root that is
+  // itself reached via a symlink) can't be used to escape. Fall back to the
+  // lexical path when a segment doesn't exist yet (e.g. a new file about to
+  // be written) — realpath requires the full path to exist.
+  let realRoot: string;
+  try {
+    realRoot = fs.realpathSync(normalizedRoot);
+  } catch {
+    return null; // workspace root must exist
+  }
+
+  let realTarget: string;
+  try {
+    realTarget = fs.realpathSync(targetPath);
+  } catch {
+    // Target doesn't exist yet (e.g. a new write). Resolve the nearest
+    // existing ancestor and rebuild the path from there so we still catch a
+    // symlinked parent directory pointing outside the workspace.
+    let dir = path.dirname(targetPath);
+    const remainder: string[] = [path.basename(targetPath)];
+    while (true) {
+      try {
+        const realDir = fs.realpathSync(dir);
+        realTarget = path.join(realDir, ...remainder);
+        break;
+      } catch {
+        if (dir === path.dirname(dir)) return null; // reached filesystem root
+        remainder.unshift(path.basename(dir));
+        dir = path.dirname(dir);
+      }
+    }
+  }
+
+  if (!isContained(realRoot, realTarget)) {
     return null;
   }
   return targetPath;
