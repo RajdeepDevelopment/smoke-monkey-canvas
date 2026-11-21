@@ -409,6 +409,15 @@ export class CoreDatabase {
     } catch {
       // already exists
     }
+    try {
+      // Marks a system-seeded default cron job the user has since edited via
+      // the API, so ensureDefaultAgentCronJobs() can skip overwriting it on
+      // the next sync (server start, or any cron create/update/delete for
+      // the same agent). See #10.
+      this.db.exec("ALTER TABLE agent_cron_jobs ADD COLUMN user_modified INTEGER NOT NULL DEFAULT 0");
+    } catch {
+      // already exists
+    }
   }
 
   private backfillAgentExploreColumns(): void {

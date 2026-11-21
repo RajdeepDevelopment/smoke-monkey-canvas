@@ -1520,6 +1520,17 @@ export function createAgentRouter(): Router {
       }
     }
 
+    // A genuine user edit via this route, however small, means
+    // ensureDefaultAgentCronJobs() must never silently revert it again — the
+    // syncAllAgentSchedules() call right below this would otherwise do
+    // exactly that for one of the three system-seeded default jobs, before
+    // this response even returns. Not set for the sync logic's own internal
+    // updateAgentCronJob() calls (agent.memory-compactor.ts), only here and
+    // anywhere else a human-initiated change is applied. See #10.
+    if (Object.keys(updates).length > 0 && existing.created_by === 'system') {
+      updates.user_modified = 1;
+    }
+
     const updated = db.updateAgentCronJob(jobId, updates);
     try {
       AgentCronScheduler.getInstance().syncAllAgentSchedules();

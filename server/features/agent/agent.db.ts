@@ -914,6 +914,10 @@ export class AgentDb {
       sets.push('last_error = ?');
       values.push(updates.last_error);
     }
+    if (updates.user_modified !== undefined) {
+      sets.push('user_modified = ?');
+      values.push(updates.user_modified ? 1 : 0);
+    }
 
     if (sets.length === 0) return existing;
 
