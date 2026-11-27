@@ -1290,9 +1290,7 @@ const SpaceProjectDockComponent: React.FC<SpaceProjectDockProps> = ({
       <input
         ref={dirInputRef}
         type="file"
-        // @ts-expect-error webkitdirectory attribute
-        webkitdirectory=""
-        directory=""
+        {...({ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
         style={{ display: 'none' }}
         onChange={handleDirInputChange}
       />

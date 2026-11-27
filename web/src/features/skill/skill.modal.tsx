@@ -344,9 +344,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, agentId, onAttac
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Folder with SKILL.md & scripts</div>
                   <input
                     type="file"
-                    // @ts-expect-error webkitdirectory attribute
-                    webkitdirectory=""
-                    directory=""
+                    {...({ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
                     style={{ display: 'none' }}
                     onChange={handleFolderUpload}
                   />
