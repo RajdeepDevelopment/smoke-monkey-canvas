@@ -1,6 +1,6 @@
 {
   "name": "@smoke-monkey/canvas-desktop",
-  "version": "1.3.2",
+  "version": "1.4.1",
   "private": true,
   "description": "Smoke Monkey Canvas Desktop — Cross-platform desktop workspace for visual multi-agent spatial development (macOS, Windows, Linux)",
   "type": "module",
