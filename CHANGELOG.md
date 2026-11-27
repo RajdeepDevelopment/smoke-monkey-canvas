@@ -10,6 +10,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.4.1] — 2026-11-27
+
+### Fixed
+
+- **NPX / npm package startup crash (`ERR_MODULE_NOT_FOUND`)**: Removed `web/src/` from `.npmignore` and `src/` from `web/.npmignore` so `web/src/features/library/data/companies.data.ts`, `library.types.ts`, and `agent.templates.ts` (imported at runtime by `server/features/mcp-server/canvas-mcp.server.ts`) are shipped in the published npm tarball as declared in `package.json`. Previously, fresh `npx @smoke-monkey/canvas start` installs crashed immediately on boot before listening on port `3333`.
+
+---
+
 ## [1.4.0] — 2026-11-21
 
 A production-readiness pass covering security hardening and a batch of correctness/data-loss fixes. The server now requires authentication and no longer binds to every network interface by default — see **Breaking / behavior changes** below before upgrading an existing deployment.

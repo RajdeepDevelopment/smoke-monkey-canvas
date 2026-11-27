@@ -26,8 +26,7 @@ data/
 storage/
 .smoke-monkey/
 
-# Web source files (web/dist is shipped, web/src is not needed in package)
-web/src/
+# Web build/config exclusions (web/dist and web/src are both shipped; canvas-mcp.server.ts imports web/src)
 web/node_modules/
 web/index.html
 web/vite.config.ts

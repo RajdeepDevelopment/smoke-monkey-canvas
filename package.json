@@ -1,6 +1,6 @@
 {
   "name": "@smoke-monkey/canvas",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Visual multi-agent spatial workspace for Smoke Monkey Harness",
   "type": "module",
   "main": "./server/app.server.ts",
